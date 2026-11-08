@@ -78,6 +78,55 @@ struct TrayLifecycleTests {
         tray.hide()
     }
 
+    private func filePasteboard(_ paths: [String]) -> NSPasteboard {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("TrayLifecycleTests.\(UUID())"))
+        pasteboard.clearContents()
+        pasteboard.writeObjects(paths.map { URL(filePath: $0) as NSURL })
+        return pasteboard
+    }
+
+    @Test func filesDroppedOnTheIconGoIntoTheTrayWithoutBringingItOut() {
+        let (settings, name) = store()
+        defer { settings.removePersistentDomain(forName: name) }
+        settings.set(true, forKey: SettingsKeys.trayEnabled)
+        let tray = TrayController(settings: settings)
+        let files = filePasteboard(["/tmp/one.txt", "/tmp/two.txt"])
+        defer { files.releaseGlobally() }
+        #expect(tray.iconDragEntered(files))
+        #expect(tray.dropOnIcon(files))
+        #expect(tray.items.count == 2)
+        #expect(!tray.isShown, "A drop on the icon adds the files; it doesn't bring the Tray out")
+
+        let text = NSPasteboard(name: NSPasteboard.Name("TrayLifecycleTests.\(UUID())"))
+        defer { text.releaseGlobally() }
+        text.clearContents()
+        text.setString("not a file", forType: .string)
+        #expect(!tray.iconAccepts(text), "Only files go into the Tray")
+        tray.setEnabled(false)
+        #expect(!tray.iconAccepts(files), "A Tray that's off takes nothing")
+    }
+
+    @Test func holdingFilesOverTheIconBringsTheTrayOut() async throws {
+        let (settings, name) = store()
+        defer { settings.removePersistentDomain(forName: name) }
+        settings.set(true, forKey: SettingsKeys.trayEnabled)
+        let tray = TrayController(settings: settings)
+        defer { tray.hide() }
+        let files = filePasteboard(["/tmp/held.txt"])
+        defer { files.releaseGlobally() }
+        let delay = TrayRules.springDelay(system: UserDefaults.standard.object(forKey: "com.apple.springing.delay") as? Double)
+
+        #expect(tray.iconDragEntered(files))
+        tray.iconDragExited()
+        try await Task.sleep(for: delay + .milliseconds(300))
+        #expect(!tray.isShown, "Passing over the icon brings nothing out")
+
+        #expect(tray.iconDragEntered(files))
+        try await Task.sleep(for: delay + .milliseconds(300))
+        #expect(tray.isShown, "Held there, the Tray comes out")
+        #expect(tray.items.isEmpty, "Coming out adds nothing until the files are dropped")
+    }
+
     @Test func firstOutsideClickRecoversAMissedDragEnd() throws {
         let (settings, name) = store()
         defer { settings.removePersistentDomain(forName: name) }

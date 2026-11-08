@@ -370,17 +370,18 @@ struct TraySettingsView: View {
             Section {
                 Toggle(isOn: $trayIcon) {
                     Text("Show Tray icon in the menu bar")
-                    Text("Click it to show or hide the Tray. Control-click it for Stow’s menu.")
+                    Text("Click it to show or hide the Tray, or drop files on it to add them. Control-click it for Stow’s menu.")
                 }
-                // Dragging files anywhere else leaves the Tray alone (#180); say where to take them.
+                // Holding files over the icon brings the Tray out (#180): without it, this has nothing to do.
                 Toggle(isOn: $trayWhileDragging) {
                     Text("Show Tray when files are dragged to it")
                     if trayIcon {
-                        Text("Drag files up to the Tray icon in the menu bar.")
+                        Text("Hold files over the Tray icon in the menu bar for a moment.")
                     } else {
-                        Text("Drag files to the right edge of the screen.")
+                        Text("Needs the Tray icon in the menu bar.")
                     }
                 }
+                .disabled(!trayIcon)
                 // Fixed, so it's shown rather than edited: Window › Show Tray uses it.
                 LabeledContent {
                     Text(verbatim: "⌥⌘T")
@@ -392,9 +393,9 @@ struct TraySettingsView: View {
                 Text("Showing and Hiding")
             } footer: {
                 VStack(alignment: .leading, spacing: Space.m) {
-                    // With neither icon nor drag reveal, the shortcut is the only way out: say so.
-                    if !trayIcon && !trayWhileDragging {
-                        Text("With the icon and dragging both off, show the Tray with ⌥⌘T.")
+                    // Without the icon, the shortcut is the only way out: say so.
+                    if !trayIcon {
+                        Text("Without the icon, show the Tray with ⌥⌘T.")
                     }
                     // Keep Tray Open has no setting of its own (#282): say what happens, and where the pin is.
                     Text("The Tray hides when you click elsewhere or switch apps. Its pin keeps it open until you close it.")
