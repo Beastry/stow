@@ -7,9 +7,11 @@ implementation under review: exact-byte preview/extraction, encrypted/split, Del
 and corruption/cancellation tests are separate from standalone Zstd/TAR.ZST support. See the
 [decoder handoff](Handoff/zstd-7z-decoder-316.md) for the 512 MiB per-window bound and release limits.
 
-The original 2026-11-06 exFAT acceptance is environment-blocked
-(#317), not a confirmed product failure. Older implementation checkmarks remain scoped to their
-stated evidence.
+Physical FSKit exFAT verification (#317) now confirms an extraction-publication defect:
+`renamex_np(RENAME_EXCL)` returns `ENOTSUP`. The misleading zero-capacity diagnosis was fixed
+by #341; safe publication and the remaining physical matrix stay open. See the
+[physical-volume evidence](Handoff/exfat-physical-verification-2026-11-07.md). The earlier
+image-mount limitation in #319 is historical. Older checkmarks remain scoped to stated evidence.
 
 Goal: everything ArcZip does, done at least as well, plus what it doesn't do. Stow is open source
 and free — there is no Free/Pro split, so every row below ships to everyone.

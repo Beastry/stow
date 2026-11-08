@@ -53,10 +53,14 @@ solid/multi-file and cancellation checks. The old safe-failure tests are not dec
 The alternate fixture-producing fork remains unbundled. Signed release acceptance remains
 with the release collaborator; no visual or VoiceOver review is claimed.
 
-**#317: repair decision remains pending evidence.** A healthy disposable exFAT image was made,
+**#317 historical image-mount evidence (superseded by physical verification).** A healthy disposable exFAT image was made,
 but the host cannot load/mount its exFAT filesystem. No product failure or successful exFAT
 extraction is claimed. See the [driver evidence and follow-up recipe](exfat-verification-2026-11-06.md).
-All task-created virtual attachments were detached; no physical disk was changed.
+All task-created virtual attachments were detached; no physical disk was changed during that
+original image experiment. The [2026-11-07 physical verification](exfat-physical-verification-2026-11-07.md)
+subsequently confirmed FSKit exFAT publication failure at `renamex_np(RENAME_EXCL)` (`ENOTSUP`).
+#341 fixes its misleading capacity diagnosis; publication and remaining physical acceptance
+remain open in #317.
 
 ## Review and acceptance limits
 

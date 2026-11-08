@@ -21,7 +21,7 @@ Functional implementation for the first wave is in this change, pending merge/re
 | P1 | [#314](https://github.com/Beastry/stow/issues/314): per-purpose format/level defaults | Implemented across Pack, drafts and Quick Compress; job changes do not overwrite defaults |
 | P1 | [#315](https://github.com/Beastry/stow/issues/315): export existing temporary Tray results | Implemented with destination-side staging, no-clobber numbering and source retention |
 | P2 implementation review | [#316](https://github.com/Beastry/stow/issues/316): Zstd-coded 7Z | Minimal official-source decoder registration implemented with exact-byte/sandboxed acceptance, bounded per-window allocation and complete source packaging; see [handoff](Handoff/zstd-7z-decoder-316.md). Historical stock-engine gap remains recorded in #319; signed release acceptance is pending |
-| P1 investigation | [#317](https://github.com/Beastry/stow/issues/317): exFAT extraction | Healthy disposable image created; host driver could not mount it. [Evidence](Handoff/exfat-verification-2026-11-06.md). No Stow defect or acceptance claimed |
+| P1 confirmed defect | [#317](https://github.com/Beastry/stow/issues/317): exFAT extraction | Physical FSKit exFAT publication fails at `renamex_np(RENAME_EXCL)` with `ENOTSUP`; misleading capacity diagnosis fixed by #341. Safe publication and remaining physical matrix stay open. [Current evidence](Handoff/exfat-physical-verification-2026-11-07.md); earlier image-mount limitation is historical |
 
 Approved P2 backlog: count-based splitting, hover media playback, staged password-library
 improvements, multi-password archives, optional common batch-output folder, archive comments,

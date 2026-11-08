@@ -95,7 +95,10 @@ with their normal signed artifacts. No native ArcZip or VoiceOver testing is cla
   added bytes. Unchanged retained items do not require a new Zstd encoder; newly encoded items
   follow the existing engine edit plan. No blanket guarantee for every third-party coder graph
   or experimental future properties is claimed.
-- Final `xcodebuild ... test`: **770 tests / 115 suites, 0 failed, 0 skipped**, 116.694 seconds.
+- Before main integration, `xcodebuild ... test`: **770 tests / 115 suites, 0 failed, 0 skipped**, 116.694 seconds.
+  After cleanly merging `origin/main` at `7b5eea3` (#341), the final merged run passed
+  **771 tests / 115 suites, 0 failed, 0 skipped**, 100.594 seconds. `xcodegen generate`
+  left all tracked plists unchanged.
   Existing standalone Zstandard streams and normal archive/mutation suites passed.
 - Localization: **0 of 1,291** strings missing Simplified Chinese; no new product strings.
 - Both actual engine slices ran under native arm64 and Rosetta x86_64: eight exact-byte cases
