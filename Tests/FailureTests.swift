@@ -64,6 +64,14 @@ struct FailureTests {
         }
     }
 
+    @Test func capacityFallsBackWhenImportantUsageIsUnavailableOrZero() {
+        #expect(Failure.reportedCapacity(important: 0, regular: 100) == 100)
+        #expect(Failure.reportedCapacity(important: nil, regular: 100) == 100)
+        #expect(Failure.reportedCapacity(important: 50, regular: 100) == 50)
+        #expect(Failure.reportedCapacity(important: 0, regular: nil) == 0)
+        #expect(Failure.reportedCapacity(important: nil, regular: nil) == nil)
+    }
+
     @Test func noWriteAccessFromCodesAndTheFolder() throws {
         let cocoa = Failure(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError), .extract, name: "A.zip",
                             destination: URL(filePath: "/Users/Shared"))
