@@ -127,6 +127,52 @@ struct ExclusivePublicationTests {
         }
     }
 
+    @Test func explicitHelperPayloadIsNeverFilteredByPrefix() throws {
+        try fixture { source, target in
+            try FileManager.default.createDirectory(at: source, withIntermediateDirectories: false)
+            let bytes = Data("explicit arbitrary helper".utf8)
+            try bytes.write(to: source.appendingPathComponent("._payload"))
+            let receipt = try ExclusivePublication.publishSynchronously(source: source, to: target, options: .init(forceCopy: true))
+            #expect(try Data(contentsOf: target.appendingPathComponent("._payload")) == bytes)
+            try receipt.rollbackSynchronously()
+        }
+    }
+
+    @Test func semanticCompanionRequiresAppleDoubleAndCorroboratedPairedAttributes() throws {
+        try fixture { source, target in
+            let fork = Data("resource fork payload".utf8)
+            try Data("file".utf8).write(to: source)
+            #expect(fork.withUnsafeBytes { setxattr(source.path, "com.apple.ResourceFork", $0.baseAddress, fork.count, 0, 0) } == 0)
+            let companion = source.deletingLastPathComponent().appendingPathComponent("._source")
+            #expect(copyfile(source.path, companion.path, nil, copyfile_flags_t(COPYFILE_PACK | COPYFILE_METADATA)) == 0)
+            let helper = try Data(contentsOf: companion)
+            let parent = open(source.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY)
+            defer { close(parent) }
+            #expect(try ExclusivePublication.isSemanticCompanion("._source", parent: parent, requireExFAT: false))
+            try Data("arbitrary helper".utf8).write(to: companion)
+            #expect(try !ExclusivePublication.isSemanticCompanion("._source", parent: parent, requireExFAT: false))
+            try helper.write(to: companion)
+            try FileManager.default.removeItem(at: source)
+            #expect(try !ExclusivePublication.isSemanticCompanion("._source", parent: parent, requireExFAT: false))
+            _ = target
+        }
+    }
+
+    @Test func synchronousCancellationAcceptsLocalMutableState() throws {
+        try fixture { source, target in
+            try Data(repeating: 1, count: 2_000_000).write(to: source)
+            var checks = 0
+            #expect(throws: CancellationError.self) {
+                _ = try ExclusivePublication.publishSynchronously(source: source, to: target, options: .init(forceCopy: true), checkCancellation: {
+                    checks += 1
+                    if checks == 4 { throw CancellationError() }
+                })
+            }
+            #expect(checks == 4)
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+        }
+    }
+
     @Test func fallbackPreservesModeTimestampAndExtendedAttribute() throws {
         try fixture { source, target in
             try Data("metadata".utf8).write(to: source)
