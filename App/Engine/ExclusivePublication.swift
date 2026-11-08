@@ -38,6 +38,11 @@ nonisolated enum ExclusivePublication {
         func owns(_ value: stat) -> Bool {
             device == value.st_dev && inode == value.st_ino && mode & S_IFMT == value.st_mode & S_IFMT
         }
+        func matchesExceptChangeTime(_ value: stat) -> Bool {
+            let current = Fingerprint(value)
+            return device == current.device && inode == current.inode && mode == current.mode && size == current.size
+                && modifiedSeconds == current.modifiedSeconds && modifiedNanoseconds == current.modifiedNanoseconds
+        }
     }
 
     fileprivate final class Node: @unchecked Sendable {
@@ -97,6 +102,7 @@ nonisolated enum ExclusivePublication {
                     var current = stat()
                     guard fstatat(parentFD, node.name, &current, AT_SYMLINK_NOFOLLOW) == 0,
                           node.fingerprint == Fingerprint(current),
+                          ExclusivePublication.matchesManifest(node, parent: parentFD),
                           renameatx_np(parentFD, node.name, sourceParent, source.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
                         throw Failure.rollbackIncomplete([target])
                     }
@@ -167,12 +173,25 @@ nonisolated enum ExclusivePublication {
         guard sourceParent >= 0 else { throw system("open source parent", source) }
         defer { close(sourceParent) }
         if !options.forceCopy {
+            var incoming = stat()
+            guard fstatat(sourceParent, source.lastPathComponent, &incoming, AT_SYMLINK_NOFOLLOW) == 0 else {
+                throw system("stat source manifest", source)
+            }
+            let manifest: Node?
+            if incoming.st_mode & S_IFMT == S_IFDIR {
+                manifest = try captureManifest(name: source.lastPathComponent, parent: sourceParent, target: target,
+                                               options: options, checkCancellation: checkCancellation)
+            } else { manifest = nil }
             if renameatx_np(sourceParent, source.lastPathComponent, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 {
                 var status = stat()
                 guard fstatat(parent, target.lastPathComponent, &status, AT_SYMLINK_NOFOLLOW) == 0 else {
                     throw Failure.rollbackIncomplete([target])
                 }
+                guard (manifest?.fingerprint ?? Fingerprint(incoming)).matchesExceptChangeTime(status) else {
+                    throw Failure.rollbackIncomplete([target])
+                }
                 let node = Node(name: target.lastPathComponent, url: target, fd: -1, status: status)
+                node.children = manifest?.children ?? []
                 transferred = true
                 return try Receipt(source: source, target: target, parentFD: parent, node: node, copied: false)
             }
@@ -198,6 +217,70 @@ nonisolated enum ExclusivePublication {
         }
         transferred = true
         return try Receipt(source: source, target: target, parentFD: parent, node: root!, copied: true)
+    }
+
+    /// Snapshot while staging is still private. A top-level directory stamp alone cannot detect
+    /// writes to existing descendants; those changes must never be moved into disposable staging.
+    private static func captureManifest(name: String, parent: Int32, target: URL, options: Options,
+                                        checkCancellation: () throws -> Void, depth: Int = 0) throws -> Node {
+        try options.checkCancellation(); try checkCancellation()
+        guard depth <= 128 else { throw Failure.unsupportedSource(path: target.path) }
+        var initial = stat()
+        guard fstatat(parent, name, &initial, AT_SYMLINK_NOFOLLOW) == 0 else { throw system("stat source manifest", target) }
+        let node = Node(name: name, url: target, fd: -1, status: initial)
+        if initial.st_mode & S_IFMT == S_IFDIR {
+            let directory = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard directory >= 0 else { throw system("open source manifest", target) }
+            defer { close(directory) }
+            var opened = stat()
+            guard fstat(directory, &opened) == 0, node.fingerprint == Fingerprint(opened),
+                  let names = directoryNames(directory) else { throw Failure.unsupportedSource(path: target.path) }
+            for child in names.sorted() {
+                node.children.append(try captureManifest(name: child, parent: directory,
+                    target: target.appendingPathComponent(child), options: options,
+                    checkCancellation: checkCancellation, depth: depth + 1))
+            }
+            var finished = stat()
+            guard fstat(directory, &finished) == 0, node.fingerprint == Fingerprint(finished) else {
+                throw Failure.unsupportedSource(path: target.path)
+            }
+        }
+        return node
+    }
+
+    /// Rollback ignores cancellation. Any unreadable, missing, added or changed descendant
+    /// refuses the whole rename so later staging disposal cannot erase somebody else's change.
+    private static func matchesManifest(_ node: Node, parent: Int32, depth: Int = 0) -> Bool {
+        guard depth <= 128 else { return false }
+        var initial = stat()
+        guard fstatat(parent, node.name, &initial, AT_SYMLINK_NOFOLLOW) == 0,
+              node.fingerprint == Fingerprint(initial) else { return false }
+        guard initial.st_mode & S_IFMT == S_IFDIR else { return true }
+        let directory = openat(parent, node.name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard directory >= 0 else { return false }
+        defer { close(directory) }
+        var opened = stat()
+        guard fstat(directory, &opened) == 0, node.fingerprint == Fingerprint(opened),
+              let names = directoryNames(directory), Set(names) == Set(node.children.map(\.name)) else { return false }
+        for child in node.children where !matchesManifest(child, parent: directory, depth: depth + 1) { return false }
+        var finished = stat()
+        return fstat(directory, &finished) == 0 && node.fingerprint == Fingerprint(finished)
+    }
+
+    private static func directoryNames(_ descriptor: Int32) -> [String]? {
+        let duplicate = dup(descriptor)
+        guard duplicate >= 0 else { return nil }
+        guard let directory = fdopendir(duplicate) else { close(duplicate); return nil }
+        defer { closedir(directory) }
+        var result: [String] = []
+        while true {
+            errno = 0
+            guard let entry = readdir(directory) else { return errno == 0 ? result : nil }
+            let name = withUnsafePointer(to: &entry.pointee.d_name) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXNAMLEN) + 1) { String(cString: $0) }
+            }
+            if name != "." && name != ".." { result.append(name) }
+        }
     }
 
     private static func copy(name: String, sourceParent: Int32, targetName: String, destinationParent: Int32,

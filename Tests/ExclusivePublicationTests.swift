@@ -12,6 +12,62 @@ struct ExclusivePublicationTests {
         try body(root.appendingPathComponent("source"), root.appendingPathComponent("target"))
     }
 
+    @Test func nativeDirectoryRollbackRestoresUnchangedTree() throws {
+        try fixture { source, target in
+            let nested = source.appendingPathComponent("nested")
+            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+            try Data("unchanged".utf8).write(to: nested.appendingPathComponent("file"))
+            try FileManager.default.createSymbolicLink(atPath: nested.appendingPathComponent("link").path, withDestinationPath: "file")
+            let receipt = try ExclusivePublication.publishSynchronously(source: source, to: target)
+            #expect(!receipt.usedCopyFallback)
+            try receipt.rollbackSynchronously()
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            #expect(try String(contentsOf: nested.appendingPathComponent("file"), encoding: .utf8) == "unchanged")
+            #expect(try FileManager.default.destinationOfSymbolicLink(atPath: nested.appendingPathComponent("link").path) == "file")
+        }
+    }
+
+    @Test func nativeDirectoryRollbackRetainsModifiedNestedFile() throws {
+        try fixture { source, target in
+            let nested = source.appendingPathComponent("nested")
+            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+            try Data("original".utf8).write(to: nested.appendingPathComponent("file"))
+            let receipt = try ExclusivePublication.publishSynchronously(source: source, to: target)
+            let published = target.appendingPathComponent("nested/file")
+            let handle = try FileHandle(forWritingTo: published)
+            try handle.write(contentsOf: Data("modified".utf8)); try handle.close()
+            do { try receipt.rollbackSynchronously(); Issue.record("Expected retained modified tree") }
+            catch ExclusivePublication.Failure.rollbackIncomplete(let paths) { #expect(paths.contains(target)) }
+            #expect(!FileManager.default.fileExists(atPath: source.path))
+            #expect(try String(contentsOf: published, encoding: .utf8) == "modified")
+        }
+    }
+
+    @Test func nativeDirectoryRollbackRetainsAddedNestedChild() throws {
+        try fixture { source, target in
+            try FileManager.default.createDirectory(at: source.appendingPathComponent("nested"), withIntermediateDirectories: true)
+            let receipt = try ExclusivePublication.publishSynchronously(source: source, to: target)
+            let added = target.appendingPathComponent("nested/foreign")
+            try Data("foreign".utf8).write(to: added)
+            do { try receipt.rollbackSynchronously(); Issue.record("Expected retained added child") }
+            catch ExclusivePublication.Failure.rollbackIncomplete(let paths) { #expect(paths.contains(target)) }
+            #expect(!FileManager.default.fileExists(atPath: source.path))
+            #expect(try String(contentsOf: added, encoding: .utf8) == "foreign")
+        }
+    }
+
+    @Test func nativeDirectoryRollbackRetainsTreeWithRemovedNestedChild() throws {
+        try fixture { source, target in
+            try FileManager.default.createDirectory(at: source.appendingPathComponent("nested"), withIntermediateDirectories: true)
+            try Data("original".utf8).write(to: source.appendingPathComponent("nested/file"))
+            let receipt = try ExclusivePublication.publishSynchronously(source: source, to: target)
+            try FileManager.default.removeItem(at: target.appendingPathComponent("nested/file"))
+            #expect(throws: ExclusivePublication.Failure.self) { try receipt.rollbackSynchronously() }
+            #expect(FileManager.default.fileExists(atPath: target.path))
+            #expect(!FileManager.default.fileExists(atPath: source.path))
+        }
+    }
+
     @Test func fallbackCopiesBytesAndPreservesSourceThenRollsBack() throws {
         try fixture { source, target in
             let bytes = Data(repeating: 73, count: 2_500_000)
