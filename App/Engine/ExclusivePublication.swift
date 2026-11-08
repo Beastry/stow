@@ -180,6 +180,9 @@ nonisolated enum ExclusivePublication {
             if code == EEXIST || code == ENOTEMPTY { throw Failure.collision }
             guard code == ENOTSUP || code == EXDEV else { throw system("exclusive rename", target, code) }
         }
+        guard supportsCompatibilityCopy(parent) else {
+            throw system("unsupported compatibility metadata filesystem", target, ENOTSUP)
+        }
         var root: Node?
         do {
             try copy(name: source.lastPathComponent, sourceParent: sourceParent, targetName: target.lastPathComponent,
@@ -322,6 +325,17 @@ nonisolated enum ExclusivePublication {
         guard fstat(input, &finished) == 0, Fingerprint(opened) == Fingerprint(finished) else {
             throw Failure.unsupportedSource(path: target.path)
         }
+    }
+
+    private static func supportsCompatibilityCopy(_ fd: Int32) -> Bool {
+        var info = statfs()
+        guard fstatfs(fd, &info) == 0 else { return false }
+        let type = withUnsafePointer(to: &info.f_fstypename) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0).lowercased() }
+        }
+        // APFS/HFS keep xattrs on the owned inode. exFAT needs the explicit companion path
+        // protocol below. Other filesystems retain the previous safe unsupported refusal.
+        return type == "apfs" || type == "hfs" || type == "exfat"
     }
 
     private static func isExFAT(_ fd: Int32) -> Bool {
