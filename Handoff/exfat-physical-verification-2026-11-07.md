@@ -1,6 +1,6 @@
 # Physical exFAT verification — 2026-11-07
 
-Status: **reproduced a placement failure; acceptance remains open**. Codex owns the functional investigation; Claude Code retains visual and motion ownership. No visual review is claimed.
+Historical investigation: **placement failure reproduced; subsequently repaired and accepted**. See the [current repair and physical acceptance](exfat-publication-repair-2026-11-07.md); the remaining-work section below records the pre-repair state. Codex owns the functional investigation; Claude Code retains visual and motion ownership. No visual review is claimed.
 
 ## Volume and isolation
 

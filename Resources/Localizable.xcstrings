@@ -1,6 +1,36 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "A file with that name appeared at the destination. Try again to choose another name.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标位置出现了同名文件。请重试并选择其他名称。"
+          }
+        }
+      }
+    },
+    "“%@” could not be copied safely. It may have changed, or this disk may not support its file type or metadata.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法安全复制“%@”。文件可能已被更改，或此磁盘不支持它的文件类型或元数据。"
+          }
+        }
+      }
+    },
+    "Cleanup could not finish. Review these locations before trying again: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清理未能完成。请先检查以下位置，再重试：%@"
+          }
+        }
+      }
+    },
     "If you don’t pack it, this new archive is discarded. The files you added aren’t changed.": {
       "localizations": {
         "zh-Hans": {
@@ -7755,22 +7785,12 @@
         }
       }
     },
-    "Stop — nothing is left half-extracted": {
+    "Stop and clean up unfinished files": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "停止，不留下未完成的解压缩文件"
-          }
-        }
-      }
-    },
-    "Stop — nothing is left half-written": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "停止，不留下未完成的文件"
+            "value": "停止并清理未完成的文件"
           }
         }
       }

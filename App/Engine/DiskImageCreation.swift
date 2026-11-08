@@ -111,7 +111,7 @@ enum DiskImageCreation {
             verified = true
         }
         let size = (try? image.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-        let placed = try ArchiveCreation.place([(image, ".dmg")], named: name, format: .dmg, in: destination,
+        let placed = try await ArchiveCreation.place([(image, ".dmg")], named: name, format: .dmg, in: destination,
                                                conflict: conflict)
         onProgress(1)
         return ArchiveCreation.Result(placed: placed,

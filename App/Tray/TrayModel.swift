@@ -36,13 +36,17 @@ nonisolated enum TrayTemporaryGroups {
     }
 }
 
-/// Collect publishes one complete directory. Failed copies stay private and are removed;
-/// an exclusive rename never replaces a destination created while the inputs were copying.
+/// Collect stages a complete directory before publication. Unsupported volumes use an exclusive
+/// copy, visible while writing; cancellation/error removes only unchanged output owned by this copy.
 nonisolated enum TrayCollection {
     struct RetainedCopies: Error {
         let folder: URL
         let copyError: any Error
         let cleanupError: any Error
+
+        var locations: [URL] {
+            [folder] + PublicationRecovery.paths(in: copyError, otherwise: [])
+        }
     }
 
     struct RecursiveDestination: LocalizedError {
@@ -52,7 +56,8 @@ nonisolated enum TrayCollection {
     }
 
     static func copy(_ urls: [URL], named name: String, into parent: URL,
-                     fileManager: FileManager = .default) throws -> URL {
+                     fileManager: FileManager = .default,
+                     publicationOptions: ExclusivePublication.Options = .init()) throws -> URL {
         let resolvedParent = parent.resolvingSymlinksInPath().standardizedFileURL.path
         for url in urls {
             let source = url.resolvingSymlinksInPath().standardizedFileURL
@@ -69,21 +74,23 @@ nonisolated enum TrayCollection {
                 let child = TrayRules.freeName(url.lastPathComponent, in: staging, fileManager: fileManager)
                 try fileManager.copyItem(at: url, to: staging.appending(path: child))
             }
-            guard renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
-                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-            }
+            let receipt = try ExclusivePublication.publishSynchronously(source: staging, to: destination,
+                                                                          options: publicationOptions)
+            receipt.commit()
+            if receipt.usedCopyFallback { try? fileManager.removeItem(at: staging) }
             return destination
         } catch {
             let copyError = error
             do { try fileManager.removeItem(at: staging) }
             catch { throw RetainedCopies(folder: staging, copyError: copyError, cleanupError: error) }
+            if copyError is ExclusivePublication.Failure { throw PublicationRecovery.engineError(copyError) }
             throw copyError
         }
     }
 }
 
 /// Exports one owned result without moving its only copy. Copy into the destination volume,
-/// then publish with an exclusive rename so another writer can never be overwritten.
+/// then publish without replacing a destination created by another writer.
 nonisolated enum TrayExport {
     static let destinationKey = "tray.lastExportDestination"
 
@@ -100,7 +107,8 @@ nonisolated enum TrayExport {
     }
 
     static func copy(_ source: URL, into parent: URL, ownedRoot: URL = TrayTemporaryGroups.root(), fileManager: FileManager = .default,
-                     checkCancellation: () throws -> Void = {}) throws -> URL {
+                     checkCancellation: () throws -> Void = {},
+                     publicationOptions: ExclusivePublication.Options = .init()) throws -> URL {
         guard isOwnedResult(source, root: ownedRoot) else { throw CocoaError(.fileReadNoPermission) }
         let rootPath = ownedRoot.resolvingSymlinksInPath().standardizedFileURL.path
         let parentPath = parent.resolvingSymlinksInPath().standardizedFileURL.path
@@ -121,15 +129,15 @@ nonisolated enum TrayExport {
                     : base.pathExtension.isEmpty ? "\(base) \(attempt)"
                     : "\(base.deletingPathExtension) \(attempt).\(base.pathExtension)"
                 let target = parent.appending(path: name)
-                if renamex_np(staged.path, target.path, UInt32(RENAME_EXCL)) == 0 {
-                    // The result is committed. Cleanup of an empty private directory must not
-                    // turn success into a retry that would create a second exported copy.
+                do {
+                    let receipt = try ExclusivePublication.publishSynchronously(source: staged, to: target,
+                        options: publicationOptions, checkCancellation: checkCancellation)
+                    receipt.commit()
+                    // Publication is complete; do not report it as failed and invite a duplicate.
                     try? fileManager.removeItem(at: staging)
                     return target
-                }
-                let code = errno
-                guard code == EEXIST || code == ENOTEMPTY else {
-                    throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
+                } catch ExclusivePublication.Failure.collision {
+                    continue
                 }
             }
             throw CocoaError(.fileWriteFileExists)
@@ -137,6 +145,7 @@ nonisolated enum TrayExport {
             let copyError = error
             do { try fileManager.removeItem(at: staging) }
             catch { throw TrayCollection.RetainedCopies(folder: staging, copyError: copyError, cleanupError: error) }
+            if copyError is ExclusivePublication.Failure { throw PublicationRecovery.engineError(copyError) }
             throw copyError
         }
     }

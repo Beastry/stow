@@ -19,7 +19,7 @@ struct ActivityCapsule: View {
     let glass: Namespace.ID
     /// Nil when the job can't be stopped (sample runs).
     var stop: (() -> Void)?
-    var stopHelp = String(localized: "Stop — nothing is left half-written")
+    var stopHelp = String(localized: "Stop and clean up unfinished files")
     /// Nil when nothing was put on disk.
     var showInFinder: (() -> Void)?
     /// Runs a failure's next step.

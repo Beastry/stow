@@ -25,31 +25,36 @@ enum Placement {
         var merged = 0
         var replaced = 0
         var skipped = 0
+        var usedCopyFallback = false
     }
 
     /// Stow's behaviour before there were choices: never touch what's there, number the new one.
     static let keepBoth: Resolver = { _ in .keepBoth }
 
     static func place(_ items: [(URL, String)], in destination: URL,
-                      resolve: @escaping Resolver = keepBoth) async throws(EngineError) -> Result {
-        let run = Run(resolve: resolve)
+                      resolve: @escaping Resolver = keepBoth,
+                      publicationOptions: ExclusivePublication.Options = .init()) async throws(EngineError) -> Result {
+        let run = Run(resolve: resolve, publicationOptions: publicationOptions)
         do {
             for (item, name) in items {
                 if let url = try await place(item, named: name, in: destination, run) {
                     run.result.placed.append(url)
                 }
             }
+            if Task.isCancelled { throw EngineError(.cancelled) }
         } catch {
-            run.undo()
-            throw error
+            let retained = PublicationRecovery.paths(in: error, otherwise: []) + (await run.undo())
+            if !retained.isEmpty { throw PublicationRecovery.retained(retained) }
+            throw PublicationRecovery.engineError(error)
         }
         run.result.added = run.movedIn
+        run.commit()
         return run.result
     }
 
-    private static func place(_ item: URL, named name: String, in folder: URL, _ run: Run) async throws(EngineError) -> URL? {
+    private static func place(_ item: URL, named name: String, in folder: URL, _ run: Run) async throws -> URL? {
         let target = folder.appending(path: name)
-        if try run.move(item, to: target) { return target }
+        if try await run.move(item, to: target) { return target }
 
         let conflict = Conflict(name: name, existing: target, incoming: item,
                                 canMerge: isPlainFolder(item) && isPlainFolder(target))
@@ -60,8 +65,11 @@ enum Placement {
         switch resolution {
         case .merge:
             run.result.merged += 1
-            let children = (try? FileManager.default.contentsOfDirectory(
-                at: item, includingPropertiesForKeys: nil, options: [])) ?? []
+            let children: [URL]
+            do {
+                children = try FileManager.default.contentsOfDirectory(
+                    at: item, includingPropertiesForKeys: nil, options: [])
+            } catch { throw EngineError(error) }
             for child in children.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
                 _ = try await place(child, named: child.lastPathComponent, in: target, run)
             }
@@ -69,11 +77,11 @@ enum Placement {
         case .keepBoth:
             for attempt in 2...10_000 {
                 let numbered = folder.appending(path: Extraction.numbered(name, attempt))
-                if try run.move(item, to: numbered) { return numbered }
+                if try await run.move(item, to: numbered) { return numbered }
             }
             throw EngineError(.failed, String(localized: "Couldn’t find a free name for “\(name)”."))
         case .replace:
-            try run.replace(target, with: item)
+            try await run.replace(target, with: item)
             run.result.replaced += 1
             return target
         case .skip:
@@ -90,60 +98,74 @@ enum Placement {
 
     private final class Run {
         enum Step {
-            case moved(from: URL, to: URL)
+            case published(ExclusivePublication.Receipt, URL)
             case trashed(original: URL, inTrash: URL)
-            case swapped(URL, URL)
         }
 
         let resolve: Resolver
+        let publicationOptions: ExclusivePublication.Options
         var result = Result()
         private var steps: [Step] = []
 
-        init(resolve: @escaping Resolver) { self.resolve = resolve }
-
-        /// One atomic no-clobber rename. False when the name is taken.
-        func move(_ item: URL, to target: URL) throws(EngineError) -> Bool {
-            if renamex_np(item.path, target.path, UInt32(RENAME_EXCL)) == 0 {
-                steps.append(.moved(from: item, to: target))
-                return true
-            }
-            let code = errno
-            if code == EEXIST { return false }
-            throw EngineError(.failed, String(localized: "Couldn’t move “\(target.lastPathComponent)” into place: \(String(cString: strerror(code)))."))
+        init(resolve: @escaping Resolver, publicationOptions: ExclusivePublication.Options) {
+            self.resolve = resolve
+            self.publicationOptions = publicationOptions
         }
 
-        /// The existing item goes to the Trash so a wrong choice can be undone in Finder. Volumes
-        /// without a Trash swap the two atomically; the old one leaves with the staging folder.
-        func replace(_ target: URL, with item: URL) throws(EngineError) {
+        /// Prefer atomic publication; unsupported volumes use cancellable exclusive copying.
+        func move(_ item: URL, to target: URL) async throws -> Bool {
+            do {
+                let receipt = try await ExclusivePublication.publish(source: item, to: target, options: publicationOptions)
+                steps.append(.published(receipt, target))
+                result.usedCopyFallback = result.usedCopyFallback || receipt.usedCopyFallback
+                return true
+            } catch ExclusivePublication.Failure.collision {
+                return false
+            }
+        }
+
+        /// Keep the original in Trash, outside disposable staging, until publication is committed.
+        /// If Trash is unavailable, fail without changing the original.
+        func replace(_ target: URL, with item: URL) async throws {
             var trashed: NSURL?
             if (try? FileManager.default.trashItem(at: target, resultingItemURL: &trashed)) != nil, let trashed {
                 steps.append(.trashed(original: target, inTrash: trashed as URL))
-                guard try move(item, to: target) else {
+                guard try await move(item, to: target) else {
                     throw EngineError(.failed, String(localized: "“\(target.lastPathComponent)” reappeared while it was being replaced."))
                 }
                 return
             }
-            guard renamex_np(item.path, target.path, UInt32(RENAME_SWAP)) == 0 else {
-                throw EngineError(.failed, String(localized: "Couldn’t replace “\(target.lastPathComponent)”: \(String(cString: strerror(errno)))."))
-            }
-            steps.append(.swapped(item, target))
+            throw EngineError(.failed, String(localized: "Couldn’t move the old “\(target.lastPathComponent)” to the Trash."))
         }
 
         var movedIn: [URL] {
             steps.compactMap { step in
-                if case .moved(_, let to) = step { to } else { nil }
+                if case .published(_, let to) = step { to } else { nil }
             }
         }
 
-        func undo() {
+        func commit() {
+            for step in steps {
+                if case .published(let receipt, _) = step { receipt.commit() }
+            }
+            steps.removeAll()
+        }
+
+        /// Rollback ignores the cancelled operation's task flag and preserves changed outputs.
+        func undo() async -> [URL] {
+            var retained: [URL] = []
             for step in steps.reversed() {
                 switch step {
-                case .moved(let from, let to): _ = renamex_np(to.path, from.path, UInt32(RENAME_EXCL))
-                case .trashed(let original, let inTrash): _ = renamex_np(inTrash.path, original.path, UInt32(RENAME_EXCL))
-                case .swapped(let a, let b): _ = renamex_np(a.path, b.path, UInt32(RENAME_SWAP))
+                case .published(let receipt, let target):
+                    do { try await receipt.rollback() }
+                    catch { retained += PublicationRecovery.paths(in: error, otherwise: [target]) }
+                case .trashed(let original, let inTrash):
+                    do { try await PublicationRecovery.restore(inTrash, to: original) }
+                    catch { retained += [inTrash, original] }
                 }
             }
             steps.removeAll()
+            return retained
         }
     }
 }

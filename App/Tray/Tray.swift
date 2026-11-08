@@ -860,7 +860,7 @@ final class TrayController {
             _ = try TrayCollection.copy(urls, named: name, into: folder)
         } catch let retained as TrayCollection.RetainedCopies {
             failure = Failure(String(localized: "Couldn’t collect the files."),
-                              advice: String(localized: "Partial copies remain in “\(retained.folder.path)”. Remove that folder before trying again."),
+                              advice: PublicationRecovery.retained(retained.locations).message,
                               code: ErrorCode(.copy, .unknown))
             failure?.diagnostic = String(describing: retained.copyError) + "\nCleanup: " + String(describing: retained.cleanupError)
             return
@@ -974,7 +974,7 @@ final class TrayController {
             // The private copy was discarded; rows, selection and the original remain.
         } catch let retained as TrayCollection.RetainedCopies {
             failure = Failure(String(localized: "Couldn’t save the Tray result."),
-                              advice: String(localized: "Partial copies remain in “\(retained.folder.path)”. Remove that folder before trying again."),
+                              advice: PublicationRecovery.retained(retained.locations).message,
                               code: ErrorCode(.copy, .unknown))
             failure?.diagnostic = String(describing: retained.copyError) + "\nCleanup: " + String(describing: retained.cleanupError)
         } catch {
