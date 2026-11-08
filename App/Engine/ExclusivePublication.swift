@@ -89,7 +89,7 @@ nonisolated enum ExclusivePublication {
                     throw Failure.rollbackIncomplete([target])
                 }
                 if !usedCopyFallback {
-                    let sourceParent = open(source.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                    let sourceParent = open(source.deletingLastPathComponent().path, O_SEARCH | O_NOFOLLOW | O_CLOEXEC)
                     guard sourceParent >= 0 else { throw Failure.rollbackIncomplete([target]) }
                     defer { close(sourceParent) }
                     var current = stat()
@@ -161,7 +161,7 @@ nonisolated enum ExclusivePublication {
         guard parent >= 0 else { throw system("open destination", target) }
         var transferred = false
         defer { if !transferred { close(parent) } }
-        let sourceParent = open(source.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        let sourceParent = open(source.deletingLastPathComponent().path, O_SEARCH | O_NOFOLLOW | O_CLOEXEC)
         guard sourceParent >= 0 else { throw system("open source parent", source) }
         defer { close(sourceParent) }
         if !options.forceCopy {
