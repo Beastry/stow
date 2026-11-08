@@ -119,7 +119,7 @@ jobs:
           ALLOWED_SKIPS: "0"
           # Includes exclusive publication, caller recovery, Tray export and codec probes.
           # Raise it when test methods are added; a lower total means suites went missing.
-          MIN_TESTS: "796"
+          MIN_TESTS: "800"
         run: scripts/ci-assert-tests.sh build/Stow.xcresult
 
       - name: Every string has a Simplified Chinese translation
