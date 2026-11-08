@@ -158,6 +158,35 @@ struct ExclusivePublicationTests {
         }
     }
 
+    @Test func semanticCompanionRejectsExtraUnmatchedAttributesAndUnknownPayload() throws {
+        try fixture { source, _ in
+            try Data("source".utf8).write(to: source)
+            let value = Array("extra attribute".utf8)
+            #expect(value.withUnsafeBytes { setxattr(source.path, "com.stow.extra", $0.baseAddress, value.count, 0, 0) } == 0)
+            let companion = source.deletingLastPathComponent().appendingPathComponent("._source")
+            #expect(copyfile(source.path, companion.path, nil, copyfile_flags_t(COPYFILE_PACK | COPYFILE_METADATA)) == 0)
+            let packed = try Data(contentsOf: companion)
+            let parent = open(source.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY)
+            defer { close(parent) }
+            #expect(try ExclusivePublication.isSemanticCompanion("._source", parent: parent, requireExFAT: false))
+            #expect(removexattr(source.path, "com.stow.extra", 0) == 0)
+            #expect(try !ExclusivePublication.isSemanticCompanion("._source", parent: parent, requireExFAT: false))
+
+            var unknownEntry = packed
+            unknownEntry[29] = 10 // Unknown AppleDouble entry instead of Finder info.
+            #expect(ExclusivePublication.strictCompanionAttributes(in: unknownEntry) == nil)
+            var unknownPayload = packed
+            unknownPayload.append(0x77)
+            #expect(ExclusivePublication.strictCompanionAttributes(in: unknownPayload) == nil)
+            if let marker = packed.range(of: Data([0x41, 0x54, 0x54, 0x52])) {
+                var partialTable = packed
+                partialTable[marker.lowerBound + 34] = 0x7f
+                partialTable[marker.lowerBound + 35] = 0xff
+                #expect(ExclusivePublication.strictCompanionAttributes(in: partialTable) == nil)
+            } else { Issue.record("Packed fixture has no attribute table") }
+        }
+    }
+
     @Test func synchronousCancellationAcceptsLocalMutableState() throws {
         try fixture { source, target in
             try Data(repeating: 1, count: 2_000_000).write(to: source)

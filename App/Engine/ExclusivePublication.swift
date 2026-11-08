@@ -66,10 +66,12 @@ nonisolated enum ExclusivePublication {
         private let node: Node
         private let lock = NSLock()
         private var consumed = false
-        fileprivate init(source: URL, target: URL, parentFD: Int32, node: Node, copied: Bool) {
+        fileprivate init(source: URL, target: URL, parentFD: Int32, node: Node, copied: Bool) throws {
             self.source = source; self.target = target
             var parentStatus = stat()
-            precondition(fstat(parentFD, &parentStatus) == 0)
+            guard fstat(parentFD, &parentStatus) == 0 else {
+                close(parentFD); throw Failure.rollbackIncomplete([target])
+            }
             parentIdentity = Fingerprint(parentStatus)
             close(parentFD)
             self.node = node; usedCopyFallback = copied
@@ -168,11 +170,11 @@ nonisolated enum ExclusivePublication {
             if renameatx_np(sourceParent, source.lastPathComponent, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 {
                 var status = stat()
                 guard fstatat(parent, target.lastPathComponent, &status, AT_SYMLINK_NOFOLLOW) == 0 else {
-                    throw system("stat published item", target)
+                    throw Failure.rollbackIncomplete([target])
                 }
                 let node = Node(name: target.lastPathComponent, url: target, fd: -1, status: status)
                 transferred = true
-                return Receipt(source: source, target: target, parentFD: parent, node: node, copied: false)
+                return try Receipt(source: source, target: target, parentFD: parent, node: node, copied: false)
             }
             let code = errno
             if code == EEXIST || code == ENOTEMPTY { throw Failure.collision }
@@ -192,7 +194,7 @@ nonisolated enum ExclusivePublication {
             throw error
         }
         transferred = true
-        return Receipt(source: source, target: target, parentFD: parent, node: root!, copied: true)
+        return try Receipt(source: source, target: target, parentFD: parent, node: root!, copied: true)
     }
 
     private static func copy(name: String, sourceParent: Int32, targetName: String, destinationParent: Int32,
@@ -222,11 +224,11 @@ nonisolated enum ExclusivePublication {
             }
             var companionStatus = stat()
             guard fstat(companionFD, &companionStatus) == 0 else {
-                close(companionFD); throw system("stat metadata companion", companionURL)
+                close(companionFD); throw Failure.rollbackIncomplete([companionURL])
             }
             close(companionFD)
             guard fstatat(destinationParent, companionName, &companionStatus, AT_SYMLINK_NOFOLLOW) == 0 else {
-                throw system("stat metadata reservation", companionURL)
+                throw Failure.rollbackIncomplete([companionURL])
             }
             let reservation = Node(name: companionName, url: companionURL, fd: -1, status: companionStatus)
             companion = reservation
@@ -242,10 +244,11 @@ nonisolated enum ExclusivePublication {
             output = openat(destinationParent, targetName, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         }
         guard output >= 0 else {
+            if kind == S_IFDIR { throw Failure.rollbackIncomplete([target]) }
             if errno == EEXIST { throw Failure.collision }; throw system("create output", target)
         }
         var initial = stat()
-        guard fstat(output, &initial) == 0 else { close(output); throw system("stat output", target) }
+        guard fstat(output, &initial) == 0 else { close(output); throw Failure.rollbackIncomplete([target]) }
         let node = Node(name: targetName, url: target, fd: output, status: initial)
         node.companion = companion
         created(node)
@@ -347,13 +350,13 @@ nonisolated enum ExclusivePublication {
               status.st_size >= 26, status.st_size <= 64 * 1024 * 1024 else { return false }
         var data = Data(count: Int(status.st_size))
         let count = data.withUnsafeMutableBytes { read(side, $0.baseAddress, $0.count) }
-        guard count == data.count, let attributes = AppleDouble.attributes(in: data), !attributes.isEmpty else { return false }
+        guard count == data.count, let attributes = strictCompanionAttributes(in: data), !attributes.isEmpty else { return false }
         let namesCount = flistxattr(input, nil, 0, 0)
         guard namesCount > 0, namesCount <= 1024 * 1024 else { return false }
         var names = [CChar](repeating: 0, count: namesCount)
         guard flistxattr(input, &names, namesCount, 0) == namesCount else { return false }
         var start = 0
-        var matched = 0
+        var matched: Set<String> = []
         for end in names.indices where names[end] == 0 {
             let key = String(decoding: names[start..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
             start = end + 1
@@ -373,9 +376,88 @@ nonisolated enum ExclusivePublication {
             } else {
                 guard size == expected.count, actual.prefix(size) == expected else { return false }
             }
-            matched += 1
+            matched.insert(key)
         }
-        return matched > 0
+        guard !matched.isEmpty else { return false }
+        for (key, value) in attributes where !matched.contains(key) {
+            guard key == "com.apple.ResourceFork", value == emptyNativeResourceFork else { return false }
+        }
+        return true
+    }
+
+    /// Apple's native empty resource fork is a fixed 286-byte sentinel, not live fork data.
+    /// Recognize the entire sentinel; never treat an arbitrary unmatched fork as padding.
+    private static let emptyNativeResourceFork: Data = {
+        var bytes = [UInt8](repeating: 0, count: 286)
+        bytes[2] = 1; bytes[6] = 1; bytes[15] = 30
+        let message = Array("This resource fork intentionally left blank   ".utf8)
+        bytes.replaceSubrange(16..<(16 + message.count), with: message)
+        bytes[258] = 1; bytes[262] = 1; bytes[271] = 30
+        bytes[281] = 28; bytes[283] = 30; bytes[284] = 255; bytes[285] = 255
+        return Data(bytes)
+    }()
+
+    /// Stricter than the archive import decoder: unknown entries, partial attribute tables,
+    /// duplicate names and nonzero unaccounted payload prevent semantic companion elision.
+    static func strictCompanionAttributes(in data: Data) -> [String: Data]? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 26 else { return nil }
+        func u16(_ offset: Int) -> Int { Int(bytes[offset]) << 8 | Int(bytes[offset + 1]) }
+        func u32(_ offset: Int) -> Int { bytes[offset..<(offset + 4)].reduce(0) { $0 << 8 | Int($1) } }
+        guard u32(0) == 0x00051607, u32(4) == 0x00020000 else { return nil }
+        let filler = Array(bytes[8..<24])
+        guard filler.allSatisfy({ $0 == 0 }) || filler == Array("Mac OS X        ".utf8) else { return nil }
+        let count = u16(24)
+        guard count > 0, count <= 2, 26 + count * 12 <= bytes.count else { return nil }
+        var covered = [Bool](repeating: false, count: bytes.count)
+        for index in 0..<(26 + count * 12) { covered[index] = true }
+        var entryIDs: Set<Int> = []
+        var payloadRanges: [Range<Int>] = []
+        for index in 0..<count {
+            let entry = 26 + index * 12
+            let id = u32(entry), offset = u32(entry + 4), length = u32(entry + 8)
+            let end = offset + length
+            guard (id == 9 || id == 2), entryIDs.insert(id).inserted,
+                  offset >= 26 + count * 12, end <= bytes.count,
+                  !payloadRanges.contains(where: { $0.overlaps(offset..<end) }) else { return nil }
+            payloadRanges.append(offset..<end)
+            if id == 2 {
+                for position in offset..<end { covered[position] = true }
+                continue
+            }
+            guard length >= 32 else { return nil }
+            for position in offset..<(offset + 32) { covered[position] = true }
+            let start = offset + 34
+            if end <= start || bytes[start..<end].allSatisfy({ $0 == 0 }) { continue }
+            guard start + 36 <= end, u32(start) == 0x41545452,
+                  u32(start + 4) == 0, u32(start + 8) == end,
+                  bytes[(start + 20)..<(start + 34)].allSatisfy({ $0 == 0 }) else { return nil }
+            let dataStart = u32(start + 12), dataLength = u32(start + 16)
+            guard dataStart >= start + 36, dataStart + dataLength <= end else { return nil }
+            for position in start..<(start + 36) { covered[position] = true }
+            var cursor = start + 36
+            var names: Set<String> = []
+            var valueRanges: [Range<Int>] = []
+            for _ in 0..<u16(start + 34) {
+                guard cursor + 11 <= dataStart else { return nil }
+                let valueOffset = u32(cursor), valueLength = u32(cursor + 4), nameLength = Int(bytes[cursor + 10])
+                let nameEnd = cursor + 11 + nameLength
+                guard u16(cursor + 8) == 0, nameLength > 1, nameEnd <= dataStart,
+                      bytes[nameEnd - 1] == 0,
+                      !bytes[(cursor + 11)..<(nameEnd - 1)].contains(0),
+                      let name = String(bytes: bytes[(cursor + 11)..<(nameEnd - 1)], encoding: .utf8),
+                      names.insert(name).inserted,
+                      valueOffset >= dataStart, valueOffset + valueLength <= dataStart + dataLength,
+                      !valueRanges.contains(where: { $0.overlaps(valueOffset..<(valueOffset + valueLength)) }) else { return nil }
+                valueRanges.append(valueOffset..<(valueOffset + valueLength))
+                for position in cursor..<nameEnd { covered[position] = true }
+                for position in valueOffset..<(valueOffset + valueLength) { covered[position] = true }
+                cursor = (nameEnd + 3) & ~3
+            }
+            guard cursor <= dataStart else { return nil }
+        }
+        guard bytes.indices.allSatisfy({ covered[$0] || bytes[$0] == 0 }) else { return nil }
+        return AppleDouble.attributes(in: data)
     }
 
     /// copyfile can report success when a destination ignores an attribute. Verify every source
