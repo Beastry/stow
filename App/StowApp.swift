@@ -38,6 +38,16 @@ final class AppState {
         var model: BrowserModel
         var scopedURL: URL?
         var grant: SourceReadAccess.Grant?
+
+        /// Nothing still runs on it. A failed accepted operation remains reachable on reopening,
+        /// including its retry state.
+        var isReleasable: Bool {
+            if model.isTransferring { return false }
+            switch model.activity?.phase {
+            case .running, .failed: return false
+            default: return true
+            }
+        }
     }
     private var finishingBrowsers: [FinishingArchive] = []
     var hasLifetimeWork: Bool {
@@ -514,23 +524,31 @@ final class AppState {
 
     func releaseFinishedWork() {
         for session in additionalSessions { session.releaseFinishedWork() }
-        additionalSessions.removeAll {
-            let finished = $0.mainWindowDismissed && !$0.usesBrowserWindow && !$0.glance.isShown && !$0.hasLifetimeWork
-            if finished {
+        // Write these lists only when something leaves them. ApplicationLifecycle observes both and
+        // calls this on every evaluation; even an empty removeAll counts as a change, so it would
+        // evaluate again at once, forever, and rebuild the menu bar each time (File › Open Recent
+        // couldn't stay open).
+        if additionalSessions.contains(where: \.isFinishedSession) {
+            additionalSessions.removeAll {
+                guard $0.isFinishedSession else { return false }
                 $0.archiveWindow?.contentViewController = nil
                 $0.archiveWindowController = nil
+                return true
             }
-            return finished
         }
-        finishingBrowsers.removeAll {
-            if $0.model.isTransferring { return false }
-            if case .running = $0.model.activity?.phase { return false }
-            // A failed accepted operation remains reachable on reopening, including its retry state.
-            if case .failed = $0.model.activity?.phase { return false }
-            $0.scopedURL?.stopAccessingSecurityScopedResource()
-            $0.grant?.release()
-            return true
+        if finishingBrowsers.contains(where: \.isReleasable) {
+            finishingBrowsers.removeAll {
+                guard $0.isReleasable else { return false }
+                $0.scopedURL?.stopAccessingSecurityScopedResource()
+                $0.grant?.release()
+                return true
+            }
         }
+    }
+
+    /// A secondary archive session whose window is gone and that has nothing left to finish.
+    private var isFinishedSession: Bool {
+        mainWindowDismissed && !usesBrowserWindow && !glance.isShown && !hasLifetimeWork
     }
 
     private func clearArchive() {

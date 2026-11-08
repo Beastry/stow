@@ -208,7 +208,7 @@ nonisolated enum TrayBorder: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Where the Tray lives: what it comes out of, and where a drag of files finds it.
+/// Where the Tray lives: what it comes out of. A drag of files finds it at its menu-bar icon.
 nonisolated enum TrayHome: Equatable, Sendable {
     /// Under its menu-bar icon.
     case menuBar
@@ -222,41 +222,19 @@ nonisolated enum TrayHome: Equatable, Sendable {
 nonisolated enum TrayRules {
     // MARK: Drags (#180)
 
-    /// How far out from its home a drag of files reaches the Tray. Dragging files anywhere else
-    /// is just a drag. ArcZip's Box opens about this far under the menu bar, over its own width
-    /// (measured with ArcZip 1.1.5, 2026-10-26).
-    static let approachReach: CGFloat = 160
-
-    /// The area in front of the Tray's home: a drag of files that comes into it brings the Tray out.
-    /// `tray` is the panel's frame (without its shadow); `screen` and `visible` are its screen's
-    /// full and visible frames, in screen coordinates (y up).
-    static func approachZone(home: TrayHome, tray: CGRect, screen: CGRect, visible: CGRect) -> CGRect {
-        switch home {
-        case .menuBar:
-            // As wide as the Tray, from the icon at the top of the screen down past the menu bar.
-            let bottom = visible.maxY - approachReach
-            return CGRect(x: tray.minX, y: bottom, width: tray.width, height: screen.maxY - bottom)
-        case .screenEdge:
-            // As tall as the Tray, from the screen's edge in.
-            let leading = visible.maxX - approachReach
-            return CGRect(x: leading, y: tray.minY, width: screen.maxX - leading, height: tray.height)
-        case .placed:
-            return tray
-        }
+    /// How long files are held over the menu-bar icon before the Tray comes out: the system's
+    /// spring-loading delay (System Settings › Accessibility › Pointer Control, as Finder uses for
+    /// folders), 0.5 s when it isn't set, kept to a range that can't feel stuck or jumpy.
+    /// Passing over the icon, or anywhere else, brings nothing out: ArcZip's Box opens over its
+    /// own width ~160 pt down (ArcZip 1.1.5, 2026-10-26), and on a laptop screen an area like that,
+    /// or Stow's earlier hint at the screen's edge, caught drags only passing by.
+    static func springDelay(system: Double?) -> Duration {
+        let seconds = min(max(system ?? 0.5, 0.2), 1.5)
+        return .milliseconds(Int((seconds * 1000).rounded()))
     }
 
-    /// Where the drag hint sits (its centre) for a Tray at `tray`: tucked inside the Tray's trailing
-    /// edge, halfway down, when it lives at the screen's edge; in its middle where people put it.
-    /// Both are where the Tray grows from and inside the approach zone, so reaching the hint
-    /// always brings the Tray out over it.
-    static func hintCenter(home: TrayHome, tray: CGRect, hintSize: CGFloat) -> CGPoint {
-        switch home {
-        case .screenEdge: CGPoint(x: tray.maxX - hintSize / 2, y: tray.midY)
-        case .placed: CGPoint(x: tray.midX, y: tray.midY)
-        // Never shown: the menu-bar icon is the hint there.
-        case .menuBar: CGPoint(x: tray.midX, y: tray.maxY - hintSize / 2)
-        }
-    }
+    /// How long the menu-bar icon shows a full tray after files are dropped on it.
+    static let dropConfirmation: Duration = .seconds(1)
 
     /// How long a Tray that a drag brought out waits after the drag ends before it goes back, if
     /// nothing was dropped on it: long enough to see a drop land, short enough not to linger.

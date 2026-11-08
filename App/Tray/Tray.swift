@@ -81,8 +81,10 @@ final class TrayController {
     /// once the drag ends. A drop, the pointer on it or opening it by hand clears this.
     @ObservationIgnored private var revealedByDrag = false
     @ObservationIgnored private var tuckTask: Task<Void, Never>?
-    /// Shows where the Tray comes out while files are dragged, when that isn't the menu-bar icon.
-    @ObservationIgnored private var hint: TrayHint?
+    /// Brings the Tray out once files have been held over its menu-bar icon for a moment.
+    @ObservationIgnored private var springTask: Task<Void, Never>?
+    /// The icon shows a full tray for a moment after files are dropped on it.
+    @ObservationIgnored private var confirmTask: Task<Void, Never>?
     @ObservationIgnored private let dismissal = TrayDismissalMonitor()
     /// Timer/state tests inject false so real desktop clicks cannot dismiss their fixture panel.
     @ObservationIgnored private let monitorsSystemEvents: Bool
@@ -137,11 +139,12 @@ final class TrayController {
         if isPinned != wanted.pinned { isPinned = wanted.pinned }
         if !wanted.enabled {
             hide()
-            showHint(false)
+            showReceiving(false)
             reconcileOutsidePress()
         }
         if wanted.enabled && wanted.icon { installStatusItem() } else { removeStatusItem() }
-        if wanted.enabled && wanted.drags { startWatchingDrags() } else { stopWatchingDrags() }
+        // The icon is the only place a drag brings the Tray out: without it, drags leave it alone.
+        if wanted.enabled && wanted.icon && wanted.drags { startWatchingDrags() } else { stopWatchingDrags() }
         panel?.border = wanted.border
     }
     @ObservationIgnored private var isApplying = false
@@ -157,6 +160,12 @@ final class TrayController {
         let target = StatusTarget(tray: self)
         item.button?.target = target
         statusTarget = target
+        // Files dropped on the icon go into the Tray. The status bar window passes drags to its
+        // delegate; clicks still go to the button.
+        let dropTarget = StatusDropTarget(tray: self)
+        item.button?.window?.registerForDraggedTypes([.fileURL])
+        item.button?.window?.delegate = dropTarget
+        statusDropTarget = dropTarget
         statusItem = item
     }
 
@@ -196,29 +205,33 @@ final class TrayController {
     }
 
     @ObservationIgnored private var statusTarget: StatusTarget?
+    @ObservationIgnored private var statusDropTarget: StatusDropTarget?
     @ObservationIgnored private var defaultsObserver: (any NSObjectProtocol)?
 
     private func removeStatusItem() {
+        iconDragExited()
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
         statusItem = nil
         statusTarget = nil
+        statusDropTarget = nil
     }
 
     var hasMenuBarIcon: Bool { statusItem != nil }
 
-    /// The menu-bar icon; while files are dragged it shows the tray taking something in.
-    private static func statusImage(receiving: Bool) -> NSImage? {
-        NSImage(systemSymbolName: receiving ? "tray.and.arrow.down" : "tray",
+    /// The menu-bar icon; while files are dragged it shows the tray taking something in, and
+    /// for a moment after a drop on it, a full tray.
+    private static func statusImage(receiving: Bool, received: Bool = false) -> NSImage? {
+        NSImage(systemSymbolName: received ? "tray.full" : receiving ? "tray.and.arrow.down" : "tray",
                 accessibilityDescription: String(localized: "Tray"))
     }
 
     // MARK: - Drags (#180)
 
-    /// Dragging files only brings the Tray out once the drag comes to where it lives: under its
-    /// menu-bar icon, at the screen's edge, or where people put it (`TrayRules.approachZone`).
-    /// Until then the icon, or a small hint at that edge, shows where to go. Mouse-drag monitors
-    /// need no Accessibility permission; the drag pasteboard's change count tells a new drag from
-    /// an old one.
+    /// While files are dragged in another app, the menu-bar icon shows the tray taking something
+    /// in, so people know where to go. Passing by brings nothing out: dropping on the icon adds
+    /// the files, and holding them over it brings the Tray out (`iconDragEntered`). Mouse-drag
+    /// monitors need no Accessibility permission; the drag pasteboard's change count tells a new
+    /// drag from an old one.
     private func startWatchingDrags() {
         guard dragMonitor == nil else { return }
         dragMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) { [weak self] _ in
@@ -249,15 +262,12 @@ final class TrayController {
             }
             beginFileDrag()
         }
-        guard isDragging, !isShown, approachZone().contains(NSEvent.mouseLocation) else { return }
-        showHint(false)
-        show(fromDrag: true)
     }
 
     func beginFileDrag() {
         guard isEnabled else { return }
         isDragging = true
-        if !isShown { showHint(true) }
+        if !isShown { showReceiving(true) }
     }
 
     private func mouseUp() {
@@ -268,7 +278,7 @@ final class TrayController {
         let ended = isDragging
         isDragging = false
         guard ended else { return }
-        showHint(false)
+        showReceiving(false)
         // Let go over the Tray: people brought the files to it, and a drop of promised files can
         // take a while to arrive. It stays like any Tray.
         if overTray { revealedByDrag = false }
@@ -286,21 +296,58 @@ final class TrayController {
         }
     }
 
-    /// The menu-bar icon shows the tray taking something in; without one, a small hint comes out
-    /// where the Tray will.
-    private func showHint(_ visible: Bool) {
-        let home = home
-        if let button = statusItem?.button {
-            button.image = Self.statusImage(receiving: visible && home == .menuBar)
+    /// The menu-bar icon shows the tray taking something in while files are dragged.
+    private func showReceiving(_ receiving: Bool) {
+        statusItem?.button?.image = Self.statusImage(receiving: receiving, received: confirmTask != nil)
+    }
+
+    // MARK: - Drops on the icon
+
+    /// Files dragged onto the menu-bar icon: it takes them unless they come from the Tray itself.
+    /// Held there for the system's spring-loading delay (as Finder opens a folder), the Tray comes
+    /// out so they can go somewhere in it; dropped, they go into the Tray.
+    func iconAccepts(_ pasteboard: NSPasteboard) -> Bool {
+        isEnabled && !dragStarted
+            && pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+    }
+
+    func iconDragEntered(_ pasteboard: NSPasteboard) -> Bool {
+        guard iconAccepts(pasteboard) else { return false }
+        statusItem?.button?.highlight(true)
+        springTask?.cancel()
+        guard !isShown, SettingsKeys.flag(SettingsKeys.trayShowWhileDragging, in: settings) else { return true }
+        let delay = TrayRules.springDelay(system: UserDefaults.standard.object(forKey: "com.apple.springing.delay") as? Double)
+        springTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled, !self.isShown else { return }
+            self.springTask = nil
+            self.show(fromDrag: true)
         }
-        guard visible, home != .menuBar else {
-            hint?.dismiss()
-            return
+        return true
+    }
+
+    func iconDragExited() {
+        springTask?.cancel()
+        springTask = nil
+        statusItem?.button?.highlight(false)
+    }
+
+    func dropOnIcon(_ pasteboard: NSPasteboard) -> Bool {
+        iconDragExited()
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard iconAccepts(pasteboard), !urls.isEmpty else { return false }
+        add(urls)
+        confirmTask?.cancel()
+        confirmTask = Task { [weak self] in
+            try? await Task.sleep(for: TrayRules.dropConfirmation)
+            guard let self, !Task.isCancelled else { return }
+            self.confirmTask = nil
+            self.showReceiving(self.isDragging)
         }
-        let hint = hint ?? TrayHint()
-        self.hint = hint
-        hint.present(at: TrayRules.hintCenter(home: home, tray: contentFrameShown(), hintSize: TrayHint.size),
-                     border: SettingsKeys.trayBorder())
+        // The drag is over; its mouse-up may not reach the drag watcher over Stow's own window.
+        endFileDrag(overTray: true)
+        showReceiving(false)
+        return true
     }
 
     /// Where the Tray lives right now.
@@ -314,11 +361,10 @@ final class TrayController {
         frame().insetBy(dx: TrayView.shadowMargin, dy: TrayView.shadowMargin)
     }
 
-    private func approachZone() -> CGRect {
-        let tray = contentFrameShown()
-        let screen = NSScreen.screens.first { $0.frame.intersects(tray) } ?? NSScreen.main
-        guard let screen else { return tray }
-        return TrayRules.approachZone(home: home, tray: tray, screen: screen.frame, visible: screen.visibleFrame)
+    /// The menu-bar icon's frame on screen, while it's showing.
+    private func iconFrame() -> CGRect? {
+        guard let button = statusItem?.button, let window = button.window, window.screen != nil else { return nil }
+        return window.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
     // MARK: - Showing
@@ -411,8 +457,7 @@ final class TrayController {
     }
 
     private func contentFrame() -> CGRect {
-        if let button = statusItem?.button, let window = button.window, let screen = window.screen {
-            let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
+        if let anchor = iconFrame(), let screen = statusItem?.button?.window?.screen {
             let visible = screen.visibleFrame
             let x = min(max(anchor.midX - size.width / 2, visible.minX + 8), visible.maxX - size.width - 8)
             return CGRect(x: x, y: visible.maxY - size.height - 8, width: size.width, height: size.height)
@@ -442,7 +487,7 @@ final class TrayController {
         dragStarted = false
         isDropTargeted = false
         press = nil
-        showHint(false)
+        showReceiving(false)
         retainAfterInteraction()
     }
 
@@ -1075,6 +1120,24 @@ final class TrayController {
 private struct TrayEventBox: @unchecked Sendable { let event: NSEvent? }
 
 /// Holds the status item's action (NSStatusBarButton needs an Objective-C target).
+/// Takes files dropped on the menu-bar icon, as its window's delegate (#180).
+private final class StatusDropTarget: NSObject, NSWindowDelegate, NSDraggingDestination {
+    weak var tray: TrayController?
+    init(tray: TrayController) { self.tray = tray }
+
+    func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        tray?.iconDragEntered(sender.draggingPasteboard) == true ? .copy : []
+    }
+    func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        tray?.iconAccepts(sender.draggingPasteboard) == true ? .copy : []
+    }
+    func draggingExited(_ sender: (any NSDraggingInfo)?) { tray?.iconDragExited() }
+    func draggingEnded(_ sender: any NSDraggingInfo) { tray?.iconDragExited() }
+    func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        tray?.dropOnIcon(sender.draggingPasteboard) ?? false
+    }
+}
+
 private final class StatusTarget: NSObject, NSMenuItemValidation {
     enum Command { case openStow, createArchive, settings, quit }
     var pendingCommand: Command?

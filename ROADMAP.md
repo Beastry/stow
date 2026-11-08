@@ -103,7 +103,7 @@ checks remain recorded in [PARITY.md](PARITY.md) and *Tests not yet conducted* b
   acceptance remain open. English/Chinese light/dark snapshots are not that acceptance.
 
 ### G. Tray in the menu bar (ArcZip "File Box")
-- Menu-bar icon; Tray appears when dragged files reach it (#180). The local 2026-11-04
+- Menu-bar icon; files dropped on it go into the Tray, and held over it bring the Tray out (#180). The local 2026-11-04
   implementation replaces idle hiding with outside-click/application-switch dismissal
   when unpinned; Keep Tray Open prevents it. Related surfaces and active drags are protected.
   See the [behavior, validation and ownership brief](Handoff/tray-keep-open-2026-11-04.md);
