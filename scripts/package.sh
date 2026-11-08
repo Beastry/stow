@@ -86,7 +86,7 @@ if [[ -n "${PREBUILT_APP:-}" ]]; then
   log "Packaging prebuilt $PREBUILT_APP"
   ditto "$PREBUILT_APP" "$APP"
 else
-  [[ -x Vendor/7zip/7zz ]] || zsh scripts/fetch-7zip.sh
+  zsh scripts/fetch-7zip.sh
   command -v xcodegen >/dev/null || die "xcodegen is missing (brew install xcodegen)"
   xcodegen generate --quiet
   archive="$OUT_DIR/Stow.xcarchive"

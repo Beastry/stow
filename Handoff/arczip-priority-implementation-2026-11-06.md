@@ -44,16 +44,14 @@ on 2026-11-07; the validation limits below remain explicit.
 
 ## Compatibility conclusions
 
-**#316: support should be added in a dedicated change.** Independently generated ordinary,
-Delta-filtered, encrypted, split and encrypted-split Zstd-in-7Z fixtures round-trip correctly in
-their producing implementations. The stock bundled 7-Zip 26.04 lists them but cannot decode
-their contents (`Unsupported Method`). The fixture README records producer versions and payload
-hash. The sandboxed probe also reproduced a separate diagnostic bug: complete split archives
-misreported this codec failure as missing volumes. This change preserves the original unsupported-
-method diagnostic instead. The compatibility tests explicitly exercise known safe failure; passing them must never
-be reported as decoder support. A future decoder needs positive exact-byte tests, broader solid/
-multi-file/corruption coverage, sandbox/cancellation review and release/Universal 2 validation.
-The fixture producer is not a new application dependency or bundled engine.
+**#316: dedicated decoder implementation is under review.** The original stock-engine
+safe-failure finding below is superseded by the [bounded decoder implementation and acceptance
+handoff](zstd-7z-decoder-316.md). A minimal patch to official 26.04 source registers its existing
+Zstd decoder for 7Z without adding an encoder; existing standalone `.zst` behavior is unchanged.
+Acceptance now requires exact bytes, checksums, preview, selected/all extraction, split/encrypted,
+solid/multi-file and cancellation checks. The old safe-failure tests are not decoder acceptance.
+The alternate fixture-producing fork remains unbundled. Signed release acceptance remains
+with the release collaborator; no visual or VoiceOver review is claimed.
 
 **#317: repair decision remains pending evidence.** A healthy disposable exFAT image was made,
 but the host cannot load/mount its exFAT filesystem. No product failure or successful exFAT

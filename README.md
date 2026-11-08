@@ -81,8 +81,8 @@ Test fixtures are rebuilt with `scripts/make-fixtures.sh` (disk images) and
 
 ## Archive engine
 
-All archive parsing happens in `StowEngine.xpc`, a sandboxed XPC service that runs the official
-`7zz` binary (LGPL — see `THIRD_PARTY_NOTICES.md`) as a child process inheriting its sandbox.
+All archive parsing happens in `StowEngine.xpc`, a sandboxed XPC service that runs an official-source
+`7zz` build with a small Stow decoder-registration patch (LGPL — see `THIRD_PARTY_NOTICES.md`) as a child process inheriting its sandbox.
 
 - **Contract** (`Shared/EngineContract.swift`): versioned; requests and replies are JSON. No paths
   cross the boundary — Stow sends the archive as an open, read-only `FileHandle` (7zz reads it as
@@ -252,7 +252,7 @@ start Sparkle, so they never touch the network or show an update prompt.
 
 Stow is free software, licensed under the [GNU General Public License v3.0](LICENSE). Bundled
 third-party components keep their own licenses — see `THIRD_PARTY_NOTICES.md` (7-Zip is LGPL and
-ships as a separate, unmodified executable).
+ships as a separate executable with its complete modified source).
 
 ### Optional sample and creation workflows
 

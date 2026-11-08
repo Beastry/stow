@@ -2,8 +2,12 @@
 
 **2026-11-06 follow-up:** the user approved the [ArcZip 1.1.5–1.2.2 assessment](Handoff/arczip-update-gap-assessment-2026-11-06.md).
 The [roadmap follow-up](ROADMAP.md#approved-arczip-follow-up--2026-11-06) tracks the first functional
-wave and evidence limits. Basic Zstd/TAR.ZST support below does **not** imply Zstd-in-7Z decoding:
-the latter has a reproduced unsupported-method gap (#316). exFAT acceptance is environment-blocked
+wave and evidence limits. Zstd-in-7Z decoding (#316) now has a dedicated minimal official-source decoder-registration
+implementation under review: exact-byte preview/extraction, encrypted/split, Delta, solid/multi-file
+and corruption/cancellation tests are separate from standalone Zstd/TAR.ZST support. See the
+[decoder handoff](Handoff/zstd-7z-decoder-316.md) for the 512 MiB per-window bound and release limits.
+
+The original 2026-11-06 exFAT acceptance is environment-blocked
 (#317), not a confirmed product failure. Older implementation checkmarks remain scoped to their
 stated evidence.
 

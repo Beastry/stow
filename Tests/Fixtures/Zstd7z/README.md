@@ -21,8 +21,47 @@ No user data or real password is included.
   `-m0=ZSTD -pfixture-only -mhe=on -v100b`.
 
 Each producing implementation extracted its output and matched the payload exactly.
-Stow's stock 7-Zip 26.04 lists all five cases with the correct password but cannot
-read/test/extract their payload (`Unsupported Method`, status 2). Tests explicitly
-pin that known safe failure; they do not claim decoder parity. The alternate engine
-is not bundled with Stow. Future decoder work should replace those failure
-expectations with payload equality and additional solid/multi-file/corrupt fixtures.
+At the 2026-11-06 stock-engine baseline, official 7-Zip 26.04 listed all five cases with the
+correct password but could not read/test/extract their payload (`Unsupported Method`, status 2).
+PR #319 originally pinned that safe failure; its passing tests did not establish decoder parity.
+The decoder acceptance below supersedes those expectations. The alternate fixture-producing
+engine is not bundled with Stow.
+
+## Decoder acceptance added for #316 — 2026-11-07
+
+The known-gap text above records the stock 26.04 baseline. Stow now builds official 26.04
+source with a small decoder-only registration patch; the test suite replaces safe-failure
+expectations with exact-byte verification, preview and selected/all extraction acceptance.
+No 7-Zip-zstd fork binary or Python package is shipped.
+
+`scripts/make-zstd7z-fixtures.py` (Python 3.14+ `compression.zstd`, py7zr 1.1.4) rebuilds
+these additional synthetic cases from the existing `plain.7z` seed:
+
+- `solid-multifile.7z`: one Zstd folder, `payload.txt`, `nested/bytes.bin` (nine repetitions
+  of bytes 0…255, 2,304 bytes), and empty `empty.txt`.
+- `nonsolid-multifile.7z`: payload and binary in separate folders/blocks via py7zr append.
+  Both multi-file archives were independently extracted by py7zr and compared exactly.
+- `properties-current.7z` and `properties-legacy3.7z`: same compressed frame with current
+  zero flags byte or legacy three-byte version/level metadata. Original seed has five bytes.
+- `properties-unknown-flags.7z`, `properties-unknown-length.7z`: unsupported flags/length,
+  intentionally rejected before decoding. Header CRCs are recalculated.
+- `over-window.7z`: frame window descriptor changed to 1 GiB, valid/recomputed 7Z header.
+  Rejected before window allocation by the registered decoder's 512 MiB per-window policy.
+- `crc-mismatch.7z`: correct data frame, deliberately incorrect 7Z entry checksum.
+- `truncated-stream.7z`: compressed frame shortened, with packed size and header CRC updated.
+- `frame-checksum.7z` / `frame-checksum-mismatch.7z`: reference Zstd frame with checksum,
+  and its corrupted final checksum byte; 7Z entry bytes/CRC remain unchanged.
+- `cancellation.7z`: **2 GiB** of synthetic zeroes compressed to approximately 64 KiB. Used
+  only for cancellation after engine progress starts; never fully extracted by the tests.
+  The generator reads a temporary sparse file, and removes it afterwards.
+
+Negative tests verify failure and no destination publication, never decoder acceptance.
+No real credentials or user files are included. See the [implementation/evidence handoff](../../../Handoff/zstd-7z-decoder-316.md) for
+resource bounds, source/license distribution and remaining release acceptance limits.
+
+`SHA256SUMS` records every committed archive/volume's SHA-256 (verify from this directory
+with `shasum -a 256 -c SHA256SUMS`). Regeneration may change producer timestamps in container
+headers, so review/update the manifest after deliberately rebuilding fixtures. Payload byte
+expectations stay fixed. Header rewrites recalculate the start-header CRC, next-header CRC,
+packed sizes and offsets; negative failures target the intended coder/data rather than an
+accidentally damaged outer header. The CRC-mismatch case changes the declared data CRC only.

@@ -1,0 +1,106 @@
+--- a/C/ZstdDec.h
++++ b/C/ZstdDec.h
+@@ -85,6 +85,8 @@
+ typedef struct CZstdDecState
+ {
+   enum_ZstdStatus status; // out
++  // Stow: optional per-decoder window bound, zero preserves upstream behavior.
++  UInt64 windowSizeLimit;
+   Byte disableHash;
+   // Byte mustBeFinished;
+   Byte outSize_Defined;
+--- a/C/ZstdDec.c
++++ b/C/ZstdDec.c
+@@ -3841,6 +3841,9 @@
+               winSize               // it's more strict check to be compatible with original-zstd
+             > ((UInt64)1 << MAX_WINDOW_SIZE_LOG))
+           return SZ_ERROR_UNSUPPORTED; // SZ_ERROR_MEM
++        // Stow: reject oversized 7Z windows before any window allocation.
++        if (p->windowSizeLimit && winSize > p->windowSizeLimit)
++          return SZ_ERROR_UNSUPPORTED;
+         cycSize = (size_t)winSize_Allocate;
+         if (cycSize != winSize_Allocate)
+           return SZ_ERROR_MEM;
+--- a/CPP/7zip/Compress/ZstdDecoder.h
++++ b/CPP/7zip/Compress/ZstdDecoder.h
+@@ -68,6 +68,7 @@
+   CZstdDecState _state;
+ 
+ private:
++  const bool _stow7z; // Stow: only the registered 7Z coder uses bounded decoding.
+   UInt32 _inBufSize;
+   UInt32 _inBufSize_Allocated;
+   Byte *_inBuf;
+@@ -89,7 +90,7 @@
+ 
+   HRESULT GetFinishResult();
+ 
+-  CDecoder();
++  CDecoder(bool stow7z = false);
+   ~CDecoder();
+ };
+ 
+--- a/CPP/7zip/Compress/ZstdDecoder.cpp
++++ b/CPP/7zip/Compress/ZstdDecoder.cpp
+@@ -22,10 +22,11 @@
+     - Also it can be optimal to flush data after each block decoding.
+ */
+ 
+-CDecoder::CDecoder():
++CDecoder::CDecoder(bool stow7z):
+     _outStepMask(k_Zstd_BlockSizeMax - 1) // must be = (1 << x) - 1
+     , _dec(NULL)
+     , _inProcessed(0)
++    , _stow7z(stow7z)
+     , _inBufSize(1u << 19) // larger value will reduce the number of memcpy() calls in CZstdDec code
+     , _inBuf(NULL)
+     , FinishMode(false)
+@@ -58,9 +59,12 @@
+   return S_OK;
+ }
+ 
+-Z7_COM7F_IMF(CDecoder::SetDecoderProperties2(const Byte * /* prop */, UInt32 /* size */))
+-{
+-  // if (size != 3 && size != 5) return E_NOTIMPL;
++Z7_COM7F_IMF(CDecoder::SetDecoderProperties2(const Byte *prop, UInt32 size))
++{
++  // Stow: 7-Zip-zstd's current flags byte and legacy version/level properties.
++  // Unknown flags/lengths must not silently opt into a future coding format.
++  if (_stow7z && !(size == 3 || size == 5 || (size == 1 && prop[0] == 0)))
++    return E_NOTIMPL;
+   return S_OK;
+ }
+ 
+@@ -101,6 +105,8 @@
+   _inProcessed = 0;
+   _afterDecoding_tempPos = 0;
+   ZstdDecState_Clear(&_state);
++  // Stow: 512 MiB per 7Z Zstd window; standalone .zst retains upstream behavior.
++  _state.windowSizeLimit = _stow7z ? ((UInt64)1 << 29) : 0;
+   ZstdDecInfo_CLEAR(&ResInfo)
+   // _state.outStep = _outStepMask + 1; // must be = (1 << x)
+   _state.disableHash = DisableHash;
+@@ -435,3 +441,11 @@
+ #endif
+ 
+ }}
++
++// Stow modification, 2026-11-07: expose upstream's decoder to the 7Z coder graph.
++// No encoder factory: normal archive creation/mutation gains no Zstd encoder.
++#include "../Common/RegisterCodec.h"
++namespace NCompress { namespace NZstd {
++REGISTER_CODEC_CREATE(CreateStowZstdDecoder, CDecoder(true))
++REGISTER_CODEC_2(StowZstd, CreateStowZstdDecoder, NULL, 0x04F71101, "ZSTD")
++}}
+--- a/C/7zVersion.h
++++ b/C/7zVersion.h
+@@ -2,7 +2,8 @@
+ #define MY_VER_MINOR 4
+ #define MY_VER_BUILD 0
+ #define MY_VERSION_NUMBERS "26.04"
+-#define MY_VERSION MY_VERSION_NUMBERS
++// Stow modification, 2026-11-07: identify this modified build in diagnostics.
++#define MY_VERSION MY_VERSION_NUMBERS "-stow-zstd1"
+ 
+ #ifdef MY_CPU_NAME
+   #define MY_VERSION_CPU MY_VERSION " (" MY_CPU_NAME ")"

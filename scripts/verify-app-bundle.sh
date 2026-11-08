@@ -60,6 +60,25 @@ for p in "$app/Contents/XPCServices/StowEngine.xpc" \
   [[ -e $p ]] || fail "missing ${p#"$app"/}"
 done
 
+# Every engine copy must carry the modified executable's license and corresponding source.
+while IFS= read -r -d '' engine; do
+  for resource in 7-Zip-License.txt 7-Zip-Stow-Source.tar.xz; do
+    [[ -s "$engine/Contents/Resources/$resource" ]] \
+      || fail "missing $resource in ${engine#"$app"/}"
+  done
+  source_archive="$engine/Contents/Resources/7-Zip-Stow-Source.tar.xz"
+  if [[ -s $source_archive ]]; then
+    members=$(tar -tJf "$source_archive") || fail "unreadable 7-Zip corresponding source"
+    for member in ./C/ZstdDec.c ./C/ZstdDec.h ./C/7zVersion.h \
+                  ./CPP/7zip/Compress/ZstdDecoder.cpp ./CPP/7zip/Compress/ZstdDecoder.h \
+                  ./CPP/7zip/Bundles/Alone2/makefile.gcc ./C/var_mac_arm64.mak \
+                  ./C/var_mac_x64.mak ./DOC/License.txt ./DOC/copying.txt ./build-stow-7zip.sh \
+                  ./STOW-MODIFICATIONS.txt ./zstd-7z-decoder.patch; do
+      grep -Fxq "$member" <<< "$members" || fail "corresponding source omits $member"
+    done
+  fi
+done < <(find "$app/Contents" -type d -name StowEngine.xpc -print0)
+
 # --- Sparkle configuration (#35) -----------------------------------------------------------------
 if python3 - "$app" <<'PY'
 import base64, plistlib, subprocess, sys

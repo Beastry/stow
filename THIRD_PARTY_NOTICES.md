@@ -1,29 +1,32 @@
 # Third-party notices
 
-## 7-Zip 26.04 (`7zz`, macOS console build)
+## 7-Zip 26.04 + Stow decoder registration (`7zz`, separate executable)
 
-Stow's archive engine (`Stow.app/Contents/XPCServices/StowEngine.xpc`) runs the official 7-Zip
-console program as a separate, unmodified executable. It is not linked into Stow.
+Stow's sandboxed archive engine runs a Universal 2 build of the official 7-Zip 26.04
+source with the small, marked patch in `scripts/patches/7zip/zstd-7z-decoder.patch`.
+It is a modified executable, not the official prebuilt binary, and is not linked into Stow.
+The patch registers the existing upstream Zstd decoder for 7Z method `04F71101`, accepts
+known coder-property layouts, and bounds only that decoder's window to 512 MiB. It adds no
+Zstd 7Z encoder and leaves standalone `.zst` decoding unchanged.
 
-- Copyright © 1999–2026 Igor Pavlov
-- Licenses: GNU LGPL 2.1 or later (most code), GNU LGPL with the unRAR license restriction (RAR
-  decompression), BSD 3-clause and BSD 2-clause (some code)
-- Release: 26.04 (2026-10-05), `7z2604-mac.tar.xz`,
-  SHA-256 `bee04358cbcbc7106273cee0e8d72916db2696c48067a3538c34d8cd6fd16578`
-- Binary: <https://github.com/ip7z/7zip/releases/tag/26.04>
-- Source code: <https://www.7-zip.org/download.html> (`7z2604-src.tar.xz`), also at
-  <https://github.com/ip7z/7zip>
+- Copyright © 1999–2026 Igor Pavlov; Stow modifications © 2026 Stow contributors
+- Licenses: GNU LGPL 2.1 or later (most code), GNU LGPL with the unRAR restriction (RAR
+  decompression), BSD 3-clause and BSD 2-clause (some code), public domain (marked files)
+- Official source release: [26.04](https://github.com/ip7z/7zip/releases/tag/26.04),
+  `7z2604-src.tar.xz`, SHA-256
+  `9691944c0fe0d01bb49373a704fb983fd33bc98b1738695179dfbf99ac1734f6`
+- Build recipe: `scripts/fetch-7zip.sh`; compiler/SDK updates can change binary bytes.
+  The source checksum and patch/recipe hash are pinned; CI/local caches include both.
 
-The full license text ships inside the app at
-`Contents/XPCServices/StowEngine.xpc/Contents/Resources/7-Zip-License.txt`, copied from the
-release's `License.txt`. Because 7-Zip is a standalone executable, you can replace it with your own
-build of the same or a modified version (re-sign the app afterwards), as the LGPL allows.
+Each bundled `StowEngine.xpc/Contents/Resources/` contains `7-Zip-License.txt` and
+`7-Zip-Stow-Source.tar.xz`: complete corresponding modified source, upstream makefiles,
+Stow patch and build recipe, excluding generated objects. This includes the engine nested in
+Quick Look. You can rebuild/replace this separate executable and re-sign the app as LGPL allows.
+The source archive's `STOW-MODIFICATIONS.txt` identifies the changes. No fork library or
+external codec plugin is loaded at runtime.
 
-`scripts/fetch-7zip.sh` downloads exactly this release and refuses it if the checksum differs.
-When updating, change the version, file name and checksum there and here together.
-
-The unRAR restriction: the RAR decompression code may not be used to develop a RAR (WinRAR)
-compatible archiver. Stow only extracts RAR archives; it never creates them.
+The unRAR restriction prohibits using RAR decompression code to develop a RAR-compatible
+archiver. Stow only extracts RAR archives; it never creates them.
 
 ## Zstandard 1.5.7 (`libzstd`, linked)
 

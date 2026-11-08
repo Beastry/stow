@@ -20,7 +20,7 @@ Functional implementation for the first wave is in this change, pending merge/re
 | P1 | [#313](https://github.com/Beastry/stow/issues/313): complete, success-aware split cleanup | Implemented for authoritative numbered ZIP/7Z sets; unknown multipart families remain untouched |
 | P1 | [#314](https://github.com/Beastry/stow/issues/314): per-purpose format/level defaults | Implemented across Pack, drafts and Quick Compress; job changes do not overwrite defaults |
 | P1 | [#315](https://github.com/Beastry/stow/issues/315): export existing temporary Tray results | Implemented with destination-side staging, no-clobber numbering and source retention |
-| P1 investigation | [#316](https://github.com/Beastry/stow/issues/316): Zstd-coded 7Z | Decoder gap reproduced; dedicated decoder support is recommended as follow-up, not included in this functional wave |
+| P2 implementation review | [#316](https://github.com/Beastry/stow/issues/316): Zstd-coded 7Z | Minimal official-source decoder registration implemented with exact-byte/sandboxed acceptance, bounded per-window allocation and complete source packaging; see [handoff](Handoff/zstd-7z-decoder-316.md). Historical stock-engine gap remains recorded in #319; signed release acceptance is pending |
 | P1 investigation | [#317](https://github.com/Beastry/stow/issues/317): exFAT extraction | Healthy disposable image created; host driver could not mount it. [Evidence](Handoff/exfat-verification-2026-11-06.md). No Stow defect or acceptance claimed |
 
 Approved P2 backlog: count-based splitting, hover media playback, staged password-library
