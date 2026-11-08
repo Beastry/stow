@@ -52,6 +52,7 @@ struct InstallEngineTests {
                                                        ask: questions.answer(.proceed), onProgress: { _ in })
         #expect(installed.verdict == .adHoc)
         #expect(!installed.replaced)
+        #expect(installed.isComplete)
         #expect(questions.asked == ["signature adHoc"])
         // The seal survived engine → pipe → staging → rename.
         #expect(CodeSignature.assess(applications.appending(path: "Tool.app")) == .adHoc)
@@ -65,6 +66,7 @@ struct InstallEngineTests {
                                                       into: applications, removeQuarantine: false,
                                                       ask: questions.answer(.proceed), onProgress: { _ in })
         #expect(replaced.replaced)
+        #expect(replaced.isComplete)
         #expect(questions.asked.last == "replace 1.0 → 2.0")
         #expect(Installer.version(of: applications.appending(path: "Tool.app")) == "2.0")
         #expect(TemporaryFolder.contents(of: applications).filter { !$0.contains("/") } == ["Tool.app"])
@@ -100,13 +102,48 @@ struct InstallEngineTests {
                                                      ask: questions.answer(.proceed), onProgress: { _ in })
         #expect(first.installed.map(\.lastPathComponent) == ["Sample.ttf"])
         #expect(first.unusable == ["Sample.woff2"])
+        #expect(!first.isComplete, "Unusable fonts must keep the source archive")
         #expect(questions.asked.isEmpty)
 
         let second = try await Installer.installFonts(opened.files, from: opened, into: fonts,
                                                       ask: questions.answer(.alternate), onProgress: { _ in })
         #expect(questions.asked == ["fonts Sample.ttf"])
         #expect(second.installed.isEmpty && second.skipped == ["Sample.ttf"])
+        #expect(!second.isComplete, "Skipped conflicts must keep the source archive")
         #expect(TemporaryFolder.contents(of: fonts) == ["Sample.ttf"])
+
+        let usable = try #require(opened.entry(at: "Sample.ttf"))
+        let complete = try await Installer.installFonts([usable], from: opened, into: fonts,
+                                                        ask: questions.answer(.proceed), onProgress: { _ in })
+        #expect(complete.isComplete, "A complete requested installation still permits aftercare")
+    }
+
+    @Test func anAppWithSafetyFilteredPayloadKeepsItsSourceArchive() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let archiveURL = folder.url.appending(path: "Filtered.zip")
+        try ZipFixture(entries: [
+            .file("Filtered.app/Contents/Info.plist", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <plist version="1.0"><dict>
+                <key>CFBundleIdentifier</key><string>app.stow.tests.filtered</string>
+                <key>CFBundleExecutable</key><string>Filtered</string>
+                <key>CFBundlePackageType</key><string>APPL</string>
+                </dict></plist>
+                """),
+            .init(name: "Filtered.app/Contents/MacOS/Filtered", data: Data(contentsOf: URL(filePath: "/usr/bin/true")), mode: 0o100755),
+            .symlink("Filtered.app/Contents/escape", to: "../../../../outside")
+        ]).write(to: archiveURL)
+        let original = try Data(contentsOf: archiveURL)
+        let archive = Archive(listing: try await ArchiveEngine.shared.list(archiveURL), url: archiveURL)
+        let entry = try #require(archive.entry(at: "Filtered.app"))
+        let destination = folder.url.appending(path: "Applications")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        let outcome = try await Installer.installApp(entry, from: archive, into: destination,
+                                                     removeQuarantine: false, ask: { _ in .proceed }, onProgress: { _ in })
+        #expect(!outcome.isComplete, "Installing the remaining bundle cannot authorize removing the unfiltered source")
+        #expect(!Extraction.exists(outcome.app.appending(path: "Contents/escape")))
+        #expect(try Data(contentsOf: archiveURL) == original)
     }
 
     @Test func extractAllIntoANamedFolderWithEachConflictChoice() async throws {

@@ -1370,7 +1370,8 @@ final class BrowserModel {
             return Finished(placed: [outcome.app],
                             title: outcome.replaced ? String(localized: "Updated in \(folder)") : String(localized: "Installed in \(folder)"),
                             findings: findings,
-                            aftercare: (Preferences.current.afterInstall, Preferences.Key.afterInstall, String(localized: "“\(Installer.displayName(entry.name))” is installed.")))
+                            aftercare: outcome.isComplete
+                                ? (Preferences.current.afterInstall, Preferences.Key.afterInstall, String(localized: "“\(Installer.displayName(entry.name))” is installed.")) : nil)
         }
     }
 
@@ -1391,7 +1392,8 @@ final class BrowserModel {
             if !outcome.skipped.isEmpty { title += String(localized: " · \(outcome.skipped.count) already there") }
             if !outcome.unusable.isEmpty { title += String(localized: " · \(outcome.unusable.count) not installable") }
             return Finished(placed: outcome.installed, title: title,
-                            aftercare: (Preferences.current.afterInstall, Preferences.Key.afterInstall, String(localized: "The fonts are installed.")))
+                            aftercare: outcome.isComplete
+                                ? (Preferences.current.afterInstall, Preferences.Key.afterInstall, String(localized: "The fonts are installed.")) : nil)
         }
     }
 

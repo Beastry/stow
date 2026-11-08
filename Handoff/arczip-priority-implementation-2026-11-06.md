@@ -27,6 +27,21 @@ retains the lower-priority backlog; there was no existing organization Project t
   as active work. Temporary originals remain until normal startup cleanup because a preview or
   existing consumer may still reference them.
 
+## Review follow-up — 2026-11-07
+
+The integration review found that installation still requested source aftercare when fonts were
+skipped or unusable, or when an app payload had been safety-filtered. App and font outcomes now
+carry completeness from the same extraction/placement policy, and Browser only requests source
+cleanup for complete installation. Engine-backed regressions cover unusable and skipped fonts,
+a complete font replacement, normal app installation/replacement, and an installed app whose
+outside-pointing link was removed. Original archives remain available after incomplete outcomes.
+This adds no visual/motion changes or new product strings.
+
+The branch also integrates current main and the reviewed CPU input from #333; localization
+conflicts preserve both features. Merge #333 before this PR so its standalone review is retained.
+Updated build/test/CI results are recorded in the PR. The user authorized processing these drafts
+on 2026-11-07; the validation limits below remain explicit.
+
 ## Compatibility conclusions
 
 **#316: support should be added in a dedicated change.** Independently generated ordinary,
