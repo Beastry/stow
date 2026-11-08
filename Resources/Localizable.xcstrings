@@ -2345,22 +2345,22 @@
         }
       }
     },
-    "Drag files up to the Tray icon in the menu bar.": {
+    "Hold files over the Tray icon in the menu bar for a moment.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将文件向上拖移到菜单栏中的托盘图标。"
+            "value": "将文件拖到菜单栏中的托盘图标上并稍作停留。"
           }
         }
       }
     },
-    "Drag files to the right edge of the screen.": {
+    "Needs the Tray icon in the menu bar.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将文件拖移到屏幕右边缘。"
+            "value": "需要菜单栏中的托盘图标。"
           }
         }
       }
@@ -12870,12 +12870,12 @@
         }
       }
     },
-    "Click it to show or hide the Tray. Control-click it for Stow’s menu.": {
+    "Click it to show or hide the Tray, or drop files on it to add them. Control-click it for Stow’s menu.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "点按图标可显示或隐藏托盘；按住 Control 键点按可打开 Stow 菜单。"
+            "value": "点按图标可显示或隐藏托盘，将文件拖放到图标上可将其加入托盘；按住 Control 键点按可打开 Stow 菜单。"
           }
         }
       }
@@ -12940,12 +12940,12 @@
         }
       }
     },
-    "With the icon and dragging both off, show the Tray with ⌥⌘T.": {
+    "Without the icon, show the Tray with ⌥⌘T.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "图标和拖移显示都关闭时，可用 ⌥⌘T 显示托盘。"
+            "value": "没有图标时，可用 ⌥⌘T 显示托盘。"
           }
         }
       }

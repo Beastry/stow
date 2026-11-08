@@ -12,92 +12,11 @@ struct TrayTests {
 
     // MARK: Drags (#180)
 
-    /// A 1440 × 900 screen with a 25 pt menu bar and a 70 pt Dock.
-    private let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
-    private let visible = CGRect(x: 0, y: 70, width: 1440, height: 805)
-
-    @Test func dragReachesTheTrayOnlyUnderItsMenuBarIcon() {
-        // Under an icon at x = 1150: 300 wide, 8 below the menu bar.
-        let tray = CGRect(x: 1000, y: 427, width: 300, height: 440)
-        let zone = TrayRules.approachZone(home: .menuBar, tray: tray, screen: screen, visible: visible)
-        #expect(zone.contains(CGPoint(x: 1150, y: 890)), "on the icon itself")
-        #expect(zone.contains(CGPoint(x: 1010, y: 860)), "just under the menu bar, near the Tray's side")
-        #expect(zone.contains(CGPoint(x: 1150, y: 720)), "155 pt below the menu bar")
-        #expect(!zone.contains(CGPoint(x: 1150, y: 700)), "175 pt below: still just a drag")
-        #expect(!zone.contains(CGPoint(x: 980, y: 860)), "beside the Tray's width")
-        #expect(!zone.contains(CGPoint(x: 720, y: 450)), "the middle of the screen, where drags start")
-        // With an icon the Tray comes out under it, so the right edge is just another place.
-        #expect(!zone.contains(CGPoint(x: 1435, y: 450)), "the screen's right edge, far from the icon")
-    }
-
-    @Test func dragReachesTheTrayAtTheScreenEdgeWithoutAnIcon() {
-        // At the right edge, 16 in, halfway up the visible screen.
-        let tray = CGRect(x: 1124, y: 252, width: 300, height: 440)
-        let zone = TrayRules.approachZone(home: .screenEdge, tray: tray, screen: screen, visible: visible)
-        #expect(zone.contains(CGPoint(x: 1439, y: 470)), "against the edge")
-        #expect(zone.contains(CGPoint(x: 1290, y: 470)), "150 pt in")
-        #expect(!zone.contains(CGPoint(x: 1270, y: 470)), "170 pt in: still just a drag")
-        #expect(!zone.contains(CGPoint(x: 1430, y: 720)), "above the Tray's height")
-        #expect(!zone.contains(CGPoint(x: 1430, y: 200)), "below it")
-    }
-
-    @Test func dragReachesAPlacedTrayOverItsOwnFrame() {
-        let tray = CGRect(x: 300, y: 200, width: 300, height: 440)
-        #expect(TrayRules.approachZone(home: .placed, tray: tray, screen: screen, visible: visible) == tray)
-    }
-
-    @Test(arguments: [TrayHome.menuBar, .screenEdge, .placed])
-    func draggingToAnotherDisplayDoesNotRevealATrayOnTheSourceDisplay(home: TrayHome) {
-        // Native #187 reproduction: Finder stays on the primary display while the cursor
-        // crosses into the right edge of a portrait display to its left.
-        let primary = CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        let primaryVisible = CGRect(x: 0, y: 0, width: 1920, height: 1050)
-        let otherDisplayEdge = CGPoint(x: -10, y: 580)
-        let tray: CGRect = switch home {
-        case .menuBar: CGRect(x: 1153, y: 602, width: 300, height: 440)
-        case .screenEdge: CGRect(x: 1604, y: 305, width: 300, height: 440)
-        case .placed: CGRect(x: 400, y: 300, width: 300, height: 440)
-        }
-        let zone = TrayRules.approachZone(home: home, tray: tray, screen: primary, visible: primaryVisible)
-        #expect(!zone.contains(otherDisplayEdge), "Crossing displays must not open a remote drop target.")
-        let homePoint: CGPoint = switch home {
-        case .menuBar: CGPoint(x: tray.midX, y: 1020)
-        case .screenEdge: CGPoint(x: 1910, y: tray.midY)
-        case .placed: CGPoint(x: tray.midX, y: tray.midY)
-        }
-        #expect(zone.contains(homePoint), "The actual Tray home must remain reachable.")
-    }
-
-    @Test(arguments: [TrayHome.menuBar, .screenEdge, .placed])
-    func dragApproachUsesTheSecondaryDisplaysCoordinates(home: TrayHome) {
-        let secondary = CGRect(x: -1080, y: -510, width: 1080, height: 1920)
-        let secondaryVisible = CGRect(x: -1080, y: -510, width: 1080, height: 1890)
-        let tray: CGRect = switch home {
-        case .menuBar: CGRect(x: -790, y: 932, width: 300, height: 440)
-        case .screenEdge: CGRect(x: -316, y: 215, width: 300, height: 440)
-        case .placed: CGRect(x: -900, y: -350, width: 300, height: 440)
-        }
-        let zone = TrayRules.approachZone(home: home, tray: tray, screen: secondary, visible: secondaryVisible)
-        #expect(secondary.contains(zone), "The approach zone must stay on the Tray's display.")
-        let homePoint: CGPoint = switch home {
-        case .menuBar: CGPoint(x: tray.midX, y: 1350)
-        case .screenEdge: CGPoint(x: -10, y: tray.midY)
-        case .placed: CGPoint(x: tray.midX, y: tray.midY)
-        }
-        #expect(zone.contains(homePoint))
-        #expect(!zone.contains(CGPoint(x: 1910, y: 525)), "The primary display's edge is unrelated.")
-    }
-
-    @Test func reachingTheHintAlwaysBringsTheTrayOutOverIt() {
-        let edgeTray = CGRect(x: 1124, y: 252, width: 300, height: 440)
-        let placedTray = CGRect(x: 300, y: 200, width: 300, height: 440)
-        for (home, tray) in [(TrayHome.screenEdge, edgeTray), (.placed, placedTray)] {
-            let center = TrayRules.hintCenter(home: home, tray: tray, hintSize: 44)
-            let hint = CGRect(x: center.x - 22, y: center.y - 22, width: 44, height: 44)
-            let zone = TrayRules.approachZone(home: home, tray: tray, screen: screen, visible: visible)
-            #expect(zone.contains(hint), "\(home): the hint is inside the approach zone")
-            #expect(tray.contains(hint), "\(home): the Tray covers the hint once it's out")
-        }
+    @Test func holdingFilesOverTheIconFollowsTheSystemSpringLoadingDelay() {
+        #expect(TrayRules.springDelay(system: nil) == .milliseconds(500), "unset: Finder's default")
+        #expect(TrayRules.springDelay(system: 0.8) == .milliseconds(800))
+        #expect(TrayRules.springDelay(system: 0) == .milliseconds(200), "never at once, so passing by opens nothing")
+        #expect(TrayRules.springDelay(system: 5) == .milliseconds(1500), "never so long it feels stuck")
     }
 
     @Test func aTrayADragBroughtOutGoesBackOnlyIfNothingCame() {
