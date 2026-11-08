@@ -382,9 +382,9 @@ struct PackSheet: View {
         guard options.format.isCompressed else { return String(localized: "A TAR collects files without compressing them.") }
         if options.format == .tarZst, options.level == .store {
             // zstd has no stored mode (Zstd.level(for:)), so say what Store means here.
-            return String(localized: "Zstandard always compresses; Store uses its fastest level. Remembered for \(options.audience.phrase).")
+            return String(localized: "Zstandard always compresses; Store uses its fastest level.")
         }
-        return String(localized: "\(options.level.detail) Remembered for \(options.audience.phrase).")
+        return options.level.detail
     }
 
     /// One fact in More Options' closed heading. `planned` is something that will happen after
@@ -454,8 +454,7 @@ struct PackSheet: View {
 
     // MARK: Changed from the purpose
 
-    /// What Reset would bring back. Compression is remembered as it's chosen, so it's never
-    /// "changed"; parts, Verify and the DMG layout come from Settings and the last pack.
+    /// What Reset would bring back from Settings. Changes in this job remain local.
     private var purposeDefaults: PackOptions {
         var defaults = options
         defaults.resetToPurposeDefaults()
@@ -803,10 +802,7 @@ struct PackSheet: View {
     }
 
     private var levelBinding: Binding<CompressionLevel> {
-        Binding(get: { options.level }, set: { level in
-            options.level = level
-            PackPreferences.setLevel(level, for: options.audience)
-        })
+        Binding(get: { options.level }, set: { options.level = $0 })
     }
 
     // MARK: Direct configuration
@@ -936,11 +932,7 @@ struct PackSheet: View {
             return
         }
         name = request.suggestedName
-        options.setAudience(PackPreferences.audience)
-        if let format = request.initialFormat { options.setCustomFormat(format) }
-        options.level = PackPreferences.level(for: options.audience)
-        options.verify = PackPreferences.verify
-        options.split = options.format.supportsSplit ? SettingsKeys.splitSize() : .none
+        options = PackPreferences.options(initialFormat: request.initialFormat)
         // Settings › Passwords: visible by default also lets Chinese and Japanese input methods work.
         revealsPassword = SettingsKeys.flag(SettingsKeys.showPassword)
         // Design review: -StowPackDetails YES opens both disclosures.
@@ -971,8 +963,7 @@ struct PackSheet: View {
     }
 
     private func setAudience(_ audience: Audience) {
-        options.setAudience(audience)
-        options.level = PackPreferences.level(for: audience)
+        PackPreferences.applyDefaults(to: &options, for: audience)
     }
 
     /// The Custom… item's tag: no real size is negative.
@@ -995,8 +986,6 @@ struct PackSheet: View {
         options.threads = cpuLimit.overrideValue(available: availableCores)
         let format = options.format
         let fileName = archiveName + "." + format.fileExtension
-        PackPreferences.audience = options.audience
-        PackPreferences.verify = options.verify
         guard !request.isSample else {
             app.packing.simulate(name: fileName)
             dismiss()

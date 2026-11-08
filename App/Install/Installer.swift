@@ -32,6 +32,8 @@ enum Installer {
         let replaced: Bool
         /// Nil when removal wasn't asked for.
         let quarantineRemoved: Bool?
+        /// Source cleanup requires all requested payload to survive auditing and placement.
+        let isComplete: Bool
     }
 
     struct FontOutcome {
@@ -40,6 +42,7 @@ enum Installer {
         var skipped: [String] = []
         /// Not fonts macOS can use (e.g. web fonts).
         var unusable: [String] = []
+        var isComplete = false
     }
 
     // MARK: - Apps
@@ -69,7 +72,8 @@ enum Installer {
                 let placement = try await Placement.place([(bundle, entry.name)], in: folder)
                 if !removeQuarantine, let source = archive.source?.url { Quarantine.inherit(from: source, to: placement.placed[0]) }
                 return AppOutcome(app: placement.placed[0], verdict: verdict, replaced: false,
-                                  quarantineRemoved: removeQuarantine ? Quarantine.remove(under: placement.placed[0]) : nil)
+                                  quarantineRemoved: removeQuarantine ? Quarantine.remove(under: placement.placed[0]) : nil,
+                                  isComplete: Extraction.Result(placed: placement.placed, report: staged.report, placement: placement).isComplete)
             }
         }
         let placement = try await Placement.place([(bundle, entry.name)], in: folder) { _ in .replace }
@@ -77,7 +81,8 @@ enum Installer {
         // After the move: renaming into place drops a flag set in staging.
         if !removeQuarantine, let source = archive.source?.url { Quarantine.inherit(from: source, to: app) }
         return AppOutcome(app: app, verdict: verdict, replaced: replacing,
-                          quarantineRemoved: removeQuarantine ? Quarantine.remove(under: app) : nil)
+                          quarantineRemoved: removeQuarantine ? Quarantine.remove(under: app) : nil,
+                          isComplete: Extraction.Result(placed: placement.placed, report: staged.report, placement: placement).isComplete)
     }
 
     @concurrent
@@ -131,6 +136,8 @@ enum Installer {
         outcome.installed = placement.placed
         outcome.replaced = placement.replaced
         outcome.skipped = resolution == .skip ? taken : []
+        outcome.isComplete = !outcome.installed.isEmpty && outcome.unusable.isEmpty
+            && Extraction.Result(placed: placement.placed, report: staged.report, placement: placement).isComplete
         return outcome
     }
 
