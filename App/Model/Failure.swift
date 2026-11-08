@@ -291,9 +291,17 @@ struct Failure: Equatable, Sendable {
     static func availableCapacity(_ url: URL) -> Int64? {
         let existing = sequence(first: url) { $0.path == "/" ? nil : $0.deletingLastPathComponent() }
             .first { FileManager.default.fileExists(atPath: $0.path) }
-        guard let values = try? existing?.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
-              let capacity = values.volumeAvailableCapacityForImportantUsage else { return nil }
-        return capacity
+        guard let values = try? existing?.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey,
+                                                                     .volumeAvailableCapacityKey]) else { return nil }
+        return reportedCapacity(important: values.volumeAvailableCapacityForImportantUsage,
+                                regular: values.volumeAvailableCapacity.map(Int64.init))
+    }
+
+    // Some volumes report zero for the important-usage key even when ordinary free space is
+    // available. Prefer the ordinary value in that case, rather than inventing a full disk.
+    static func reportedCapacity(important: Int64?, regular: Int64?) -> Int64? {
+        if let important, important > 0 { return important }
+        return regular ?? important
     }
 
     private static func volumeName(_ url: URL) -> String? {
