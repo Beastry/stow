@@ -1,12 +1,13 @@
 import Foundation
 import Synchronization
 
-/// Creates an archive without anything half-written ever appearing where people look:
+/// Creates and verifies archives in private staging before publishing them:
 ///
 /// 1. Stow streams the files to the engine, already renamed and filtered for the audience.
 /// 2. The engine compresses (and optionally tests) them inside its own container.
 /// 3. It streams the archive back into a staging folder from `.itemReplacementDirectory` on the
-///    destination's volume, and each file moves into place with one no-clobber rename.
+///    destination's volume. Publication prefers an exclusive rename; unsupported volumes use
+///    an exclusive, cancellable copy, whose partial output is visible while it is written.
 enum ArchiveCreation {
     /// What to do when the archive's name is already taken.
     enum Conflict: Sendable {
@@ -56,7 +57,7 @@ enum ArchiveCreation {
         guard !parts.isEmpty, parts.allSatisfy({ FileManager.default.fileExists(atPath: $0.0.path) }) else {
             throw EngineError(.failed, String(localized: "The new archive didn’t arrive."))
         }
-        let placed = try place(parts, named: name, format: request.format, in: destination, conflict: conflict)
+        let placed = try await place(parts, named: name, format: request.format, in: destination, conflict: conflict)
         onProgress(1)
         return Result(placed: placed, report: creation.report)
     }
@@ -76,45 +77,60 @@ enum ArchiveCreation {
     }
 
     /// Moves each part into place as `name` (+ its suffix), numbering all parts alike ("Project 2.zip")
-    /// until none is taken. Each move is a rename that never replaces anything; if one fails, earlier
-    /// ones are undone.
+    /// until none is taken. Publication never replaces an existing name; if one fails, earlier
+    /// parts are rolled back conservatively and any retained output is reported.
     static func place(_ parts: [(URL, String)], named name: String, format: PackFormat, in destination: URL,
-                      conflict: Conflict) throws(EngineError) -> [URL] {
-        if conflict == .replace {
-            for old in existing(named: name, format: format, in: destination) {
+                      conflict: Conflict,
+                      publicationOptions: ExclusivePublication.Options = .init()) async throws(EngineError) -> [URL] {
+        var backups: [(original: URL, trash: URL)] = []
+        do {
+            if conflict == .replace {
+                for old in existing(named: name, format: format, in: destination) {
+                    var trashed: NSURL?
+                    do {
+                        try FileManager.default.trashItem(at: old, resultingItemURL: &trashed)
+                    } catch {
+                        throw EngineError(.failed, String(localized: "Couldn’t move the old “\(old.lastPathComponent)” to the Trash."))
+                    }
+                    guard let trashed else { throw PublicationRecovery.retained([old]) }
+                    backups.append((old, trashed as URL))
+                }
+            }
+            for attempt in 1..<10_000 {
+                if Task.isCancelled { throw EngineError(.cancelled) }
+                let stem = attempt == 1 ? name : "\(name) \(attempt)"
+                let targets = parts.map { destination.appending(path: stem + $0.1) }
+                if targets.contains(where: exists) { continue }
+                var published: [(ExclusivePublication.Receipt, URL)] = []
                 do {
-                    try FileManager.default.trashItem(at: old, resultingItemURL: nil)
+                    for ((source, _), target) in zip(parts, targets) {
+                        let receipt = try await ExclusivePublication.publish(source: source, to: target, options: publicationOptions)
+                        published.append((receipt, target))
+                    }
+                    if Task.isCancelled { throw EngineError(.cancelled) }
+                    published.forEach { $0.0.commit() }
+                    return targets
                 } catch {
-                    throw EngineError(.failed, String(localized: "Couldn’t move the old “\(old.lastPathComponent)” to the Trash."))
+                    var retained = PublicationRecovery.paths(in: error, otherwise: [])
+                    for (receipt, target) in published.reversed() {
+                        do { try await receipt.rollback() }
+                        catch { retained += PublicationRecovery.paths(in: error, otherwise: [target]) }
+                    }
+                    if !retained.isEmpty { throw ExclusivePublication.Failure.rollbackIncomplete(retained) }
+                    if case ExclusivePublication.Failure.collision = error { continue }
+                    throw PublicationRecovery.engineError(error)
                 }
             }
+            throw EngineError(.failed, String(localized: "Couldn’t find a free name for “\(name)”."))
+        } catch {
+            var retained = PublicationRecovery.paths(in: error, otherwise: [])
+            for backup in backups.reversed() {
+                do { try await PublicationRecovery.restore(backup.trash, to: backup.original) }
+                catch { retained += [backup.trash, backup.original] }
+            }
+            if !retained.isEmpty { throw PublicationRecovery.retained(retained) }
+            throw PublicationRecovery.engineError(error)
         }
-        var attempt = 1
-        while attempt < 10_000 {
-            let stem = attempt == 1 ? name : "\(name) \(attempt)"
-            let targets = parts.map { destination.appending(path: stem + $0.1) }
-            if targets.contains(where: exists) {
-                attempt += 1
-                continue
-            }
-            var moved: [(from: URL, to: URL)] = []
-            var failure: Int32?
-            for ((source, _), target) in zip(parts, targets) {
-                if renamex_np(source.path, target.path, UInt32(RENAME_EXCL)) == 0 {
-                    moved.append((source, target))
-                } else {
-                    failure = errno
-                    break
-                }
-            }
-            guard let code = failure else { return targets }
-            for move in moved.reversed() { _ = renamex_np(move.to.path, move.from.path, UInt32(RENAME_EXCL)) }
-            guard code == EEXIST else {
-                throw EngineError(.failed, String(localized: "Couldn’t save “\(stem + parts[0].1)”: \(String(cString: strerror(code)))."))
-            }
-            attempt += 1
-        }
-        throw EngineError(.failed, String(localized: "Couldn’t find a free name for “\(name)”."))
     }
 
     private static func exists(_ url: URL) -> Bool {

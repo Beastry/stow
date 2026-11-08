@@ -95,9 +95,10 @@ All archive parsing happens in `StowEngine.xpc`, a sandboxed XPC service that ru
   warnings; ZIPs with surrounding data are read-only so Save cannot discard unrelated bytes (#207).
 - **Extraction:** the engine extracts into its *own* container (the only place it can write) with
   `-bsp1` progress, removes links that point outside and device files, then streams the folder to
-  Stow over a pipe as an Apple Archive. Stow unpacks it into `.itemReplacementDirectory` staging on
-  the destination volume, audits it again, and moves each item into place with a no-clobber
-  `rename`. Cancel or failure leaves nothing behind.
+  Stow over a pipe as an Apple Archive. Stow unpacks it into private staging on the destination
+  volume, audits it again, and publishes with an exclusive rename. FSKit exFAT uses an exclusive,
+  cancellable copy when that rename is unsupported; partial output is visible during copying.
+  Rollback removes unchanged owned output and reports locations it cannot safely clean up.
 - **Containment** (`Shared/PathContainment.swift`): `../`, absolute paths and outside-pointing
   links are kept inside the destination; tests pin the rules to the bundled 7-Zip build.
 
@@ -165,8 +166,8 @@ Stow stays sandboxed (user-selected files only) and asks for the narrowest acces
 - **Why staging lives in the destination.** macOS marks files a sandboxed app writes into its own
   container as "created by a sandboxed app" (quarantine flag `0x0080`), and Gatekeeper then refuses
   to run them. Stow therefore stages each extraction in a hidden `.stow-staging-…` folder inside the
-  folder you chose (entitlement `files.user-selected.executable`), audits it there and renames items
-  into place. Installer packages are unpacked the same way beside the archive.
+  folder you chose (entitlement `files.user-selected.executable`), audits it there and publishes
+  without replacing existing names. Installer packages are unpacked the same way beside the archive.
 - **Gatekeeper still runs.** Before installing, Stow checks the app's code signature and
   notarization (`App/Model/CodeSignature.swift`) and asks before installing anything unsigned,
   ad-hoc signed, not notarized, broken or signed with an unknown certificate. Files written into a

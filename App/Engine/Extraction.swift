@@ -1,12 +1,11 @@
 import Foundation
 
-/// Extracts without anything half-written ever appearing where people look:
+/// Extracts and audits in private staging before publishing the result:
 ///
 /// 1. The engine extracts and audits inside its own sandbox container (it can't write anywhere else).
-/// 2. It streams the result into a staging folder from `.itemReplacementDirectory` on the
-///    destination's volume, where Stow audits it again.
-/// 3. Each finished item moves into place with one rename (`Placement`), which also settles
-///    same-name conflicts.
+/// 2. It streams the result into a private staging folder on the destination's volume and audits again.
+/// 3. `Placement` settles conflicts and publishes with an exclusive rename, or a cancellable
+///    exclusive copy on unsupported volumes. Partial copy output is visible until commit or rollback.
 ///
 /// The engine's output and the staging folder are removed on success, failure and cancel alike.
 enum Extraction {
@@ -141,7 +140,7 @@ enum Extraction {
         }
     }
 
-    /// Inside the destination itself: the final move is a rename, and — because the person chose
+    /// Inside the destination itself: publication stays on that volume, and — because the person chose
     /// that folder — what Stow writes there isn't marked "created by a sandboxed app, may not run"
     /// (see `com.apple.security.files.user-selected.executable` in App/Stow.entitlements). Staged
     /// in Stow's container instead, extracted apps and packages would refuse to open.

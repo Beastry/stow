@@ -33,7 +33,7 @@ struct NextStepsBar: View {
                                 : activity.step.progressTitle(itemCount: activity.itemCount, name: activity.name),
                             glass: glass,
                             stop: model.archive.source != nil ? { model.cancelActivity() } : nil,
-                            stopHelp: String(localized: "Stop — nothing is left half-extracted"),
+                            stopHelp: String(localized: "Stop and clean up unfinished files"),
                             showInFinder: activity.placed.isEmpty ? nil : { model.showInFinder() },
                             perform: { model.follow($0) },
                             dismiss: { model.dismissActivity() })
