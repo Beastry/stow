@@ -13,6 +13,8 @@ struct PackSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.reducesMotion) private var reduceMotion
     @State private var options = PackOptions()
+    @State private var cpuLimit = CPUCoreLimitInput()
+    @AppStorage("PackCPUCores") private var globalCPUCores = 0
     @State private var password = ""
     @State private var confirmation = ""
     @State private var revealsPassword = false
@@ -50,8 +52,13 @@ struct PackSheet: View {
     private var middleMinHeight: CGFloat {
         // Design review: -StowPackWhole YES lifts the screen budget so a view-tree snapshot shows it all.
         if UserDefaults.standard.bool(forKey: "StowPackWhole") { return middleHeight ?? 0 }
-        let budget = (NSScreen.main?.visibleFrame.height ?? 800) - 380
-        return min(middleHeight ?? 0, max(budget, 240))
+        let screen = sheetWindow?.screen ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1280, height: 800)
+        // A sheet starts at its presenter's top, not the display's top. Reserve room for
+        // fixed controls and validation below that anchor so an error cannot fall offscreen.
+        let top = min(visible.maxY, sheetWindow?.sheetParent?.frame.maxY ?? visible.maxY)
+        let budget = top - visible.minY - 380
+        return min(middleHeight ?? 0, max(budget, 80))
     }
 
     /// More Options' place in the scrolling middle.
@@ -106,6 +113,12 @@ struct PackSheet: View {
             .padding(-Space.xs) // …without moving the content off the sheet's grid
             VStack(alignment: .leading, spacing: Space.l) {
                 nameRow
+                if !cpuLimit.isValid(available: availableCores) {
+                    // Names the setting: with More Options closed, this line is all that shows.
+                    Label(String(localized: "Enter a whole number from 1 to \(availableCores) for CPU threads."), systemImage: "exclamationmark.circle")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
                 footer(report)
             }
         }
@@ -124,6 +137,22 @@ struct PackSheet: View {
         }
         .onChange(of: password) { _, new in
             if revealsPassword { seenPassword = new }
+        }
+        .onChange(of: cpuLimit) { _, input in
+            if input.isValid(available: availableCores) {
+                options.threads = input.overrideValue(available: availableCores)
+            }
+        }
+        .onChange(of: options.threads) { _, value in
+            // Reset More Options restores inheritance, including clearing any invalid edit.
+            if value == nil, cpuLimit.isCustom {
+                cpuLimit = CPUCoreLimitInput(inherited: inheritedThreadLimit, available: availableCores)
+            }
+        }
+        .onChange(of: globalCPUCores) { _, _ in
+            if !cpuLimit.isCustom {
+                cpuLimit = CPUCoreLimitInput(inherited: inheritedThreadLimit, available: availableCores)
+            }
         }
         .onAppear(perform: restore)
         .onDisappear {
@@ -413,7 +442,7 @@ struct PackSheet: View {
             add(String(localized: "File names visible"), changed: true)
         }
         if let threads = options.threads {
-            add(threads == 1 ? String(localized: "1 CPU core") : String(localized: "\(threads) CPU cores"), changed: true)
+            add(threads == 1 ? String(localized: "1 CPU thread") : String(localized: "\(threads) CPU threads"), changed: true)
         }
         return usual + changed
     }
@@ -449,7 +478,7 @@ struct PackSheet: View {
             || changesHelperFiles
             || changesMacMetadata
             || (options.format == .sevenZip && options.usesPassword && !options.encryptFilenames)
-            || options.threads != nil
+            || cpuLimit.isCustom
             || options.diskImageFilesystem != defaults.diskImageFilesystem
             || options.diskImageApplicationsLink != defaults.diskImageApplicationsLink
             || options.diskImageFinderChrome != defaults.diskImageFinderChrome
@@ -641,18 +670,23 @@ struct PackSheet: View {
             }
 
             groupDivider
-            optionRow("CPU cores") {
-                Picker("CPU cores", selection: $options.threads) {
-                    Text(settingsCores).tag(Int?.none)
-                    Divider()
-                    ForEach(1...ProcessInfo.processInfo.activeProcessorCount, id: \.self) { n in
-                        Text(n == 1 ? String(localized: "1 core") : String(localized: "\(n) cores")).tag(Int?.some(n))
-                    }
+            // The field's own range sits beside it ("of 8"), so the caption can say why someone
+            // would change it; that it's a ceiling some formats stay under goes in the tooltip.
+            optionRow("CPU threads") {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                    TextField("CPU threads", text: Binding(get: { cpuLimit.text }, set: { cpuLimit.edit($0) }),
+                              prompt: Text(verbatim: "1–\(availableCores)"))
+                        .textFieldStyle(.roundedBorder)
+                        .monospacedDigit()
+                        .frame(width: 60)
+                        .accessibilityLabel(Text("CPU threads"))
+                        .help(String(localized: "Packing uses at most this many at once. Some formats use fewer."))
+                        .revealsKeyboardFocus()
+                    Text("of \(availableCores)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
-                .labelsHidden()
-                .revealsKeyboardFocus()
-                .fixedSize()
-                caption(String(localized: "Some formats can’t use every core, so they may use fewer."))
+                caption(String(localized: "Use fewer to keep your Mac responsive while it packs."))
             }
 
             // Open, Reset sits under the rows it puts back, with its reach in words rather than
@@ -704,7 +738,7 @@ struct PackSheet: View {
                 Image(systemName: "pencil.circle.fill")
                     .foregroundStyle(.accentText)
             }
-            // Each fact keeps its words together, so a line never starts at "CPU cores".
+            // Each fact keeps its words together, so a line never starts at "CPU threads".
             Text(verbatim: item.text.replacingOccurrences(of: " ", with: "\u{00A0}") + (isLast ? "" : " ·"))
                 .foregroundStyle(.secondary)
         }
@@ -715,6 +749,7 @@ struct PackSheet: View {
     private var resetButton: some View {
         Button {
             options.resetToPurposeDefaults()
+            cpuLimit = CPUCoreLimitInput(inherited: inheritedThreadLimit, available: availableCores)
         } label: {
             Label("Reset These Options", systemImage: "arrow.uturn.backward")
         }
@@ -744,13 +779,10 @@ struct PackSheet: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// The first CPU choice says what Settings › General is set to, not just that it exists.
-    private var settingsCores: String {
-        switch PackPreferences.threads {
-        case nil: String(localized: "As in Settings (all cores)")
-        case 1: String(localized: "As in Settings (1 core)")
-        case let threads?: String(localized: "As in Settings (\(threads) cores)")
-        }
+    private var availableCores: Int { max(1, ProcessInfo.processInfo.activeProcessorCount) }
+
+    private var inheritedThreadLimit: Int? {
+        globalCPUCores > 0 ? min(globalCPUCores, availableCores) : nil
     }
 
     private func optionRow(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
@@ -874,7 +906,7 @@ struct PackSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
-                .disabled(isChoosing || app.packing.isRunning || report.included.isEmpty || (options.usesPassword && (password.isEmpty || !passwordChecked)))
+                .disabled(isChoosing || app.packing.isRunning || !cpuLimit.isValid(available: availableCores) || report.included.isEmpty || (options.usesPassword && (password.isEmpty || !passwordChecked)))
         }
     }
 
@@ -887,6 +919,12 @@ struct PackSheet: View {
     // MARK: Actions
 
     private func restore() {
+        defer {
+            cpuLimit = CPUCoreLimitInput(threads: options.threads, inherited: inheritedThreadLimit, available: availableCores)
+            // Design review: -StowPackCPUText <text> types that into the CPU field; "none" clears it
+            // (an empty launch argument never arrives).
+            if let text = UserDefaults.standard.string(forKey: "StowPackCPUText") { cpuLimit.edit(text == "none" ? "" : text) }
+        }
         if let configuration = draft?.configuration {
             options = configuration.options
             name = request.suggestedName
@@ -916,7 +954,7 @@ struct PackSheet: View {
         default: break
         }
         // Design review: -StowPackMore YES opens More Options alone; -StowPackChanged YES changes two
-        // choices from the purpose (support files, CPU cores); -StowPackSplitEditor sentence|options
+        // choices from the purpose (support files, CPU threads); -StowPackSplitEditor sentence|options
         // opens the part-size editor from that control once the sheet is up.
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: "StowPackMore") { showMore = true }
@@ -952,6 +990,9 @@ struct PackSheet: View {
     }
 
     private func pack(_ report: PackReport) {
+        guard cpuLimit.isValid(available: availableCores) else { return }
+        // Recheck at dispatch as well as disabling the button; never run with stale valid input.
+        options.threads = cpuLimit.overrideValue(available: availableCores)
         let format = options.format
         let fileName = archiveName + "." + format.fileExtension
         PackPreferences.audience = options.audience
@@ -989,7 +1030,7 @@ struct PackSheet: View {
                 volumeSize: options.split.isNone ? nil : options.split.rawValue,
                 keepsMacMetadata: keepsMetadata,
                 verify: options.verify,
-                threads: options.effectiveThreads(global: PackPreferences.threads),
+                threads: options.effectiveThreads(global: inheritedThreadLimit),
                 diskImageFilesystem: format == .dmg ? options.diskImageFilesystem : .hfsPlus,
                 diskImageApplicationsLink: format == .dmg && options.diskImageApplicationsLink,
                 diskImageFinderChrome: format == .dmg && options.diskImageFinderChrome

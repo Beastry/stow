@@ -1,5 +1,9 @@
 # UI and motion handoff — Claude Code
 
+## Pack CPU threads — current user decision
+
+Use one numeric input, initialized from Settings, with a concise available-thread count. The user rejected separate mode/custom controls and presets. Follow [the functional brief](cpu-thread-input.md). Codex owns validation, per-job scope and keyboard behavior; Claude Code retains visual/motion treatment.
+
 ## Browser/Glance dragging — #332 (supersedes draft #320's gesture approach)
 
 Root cause of "later drags became range selection": SwiftUI's `Table` is an `NSOutlineView`
