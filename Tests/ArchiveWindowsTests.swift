@@ -1,4 +1,6 @@
 import AppKit
+import Observation
+import Synchronization
 import Testing
 import UniformTypeIdentifiers
 @testable import Stow
@@ -34,6 +36,33 @@ struct ArchiveWindowsTests {
         app.releaseFinishedWork()
         #expect(app.additionalSessions.isEmpty)
         app.mainWindowDidClose(.browser)
+    }
+
+    /// ApplicationLifecycle observes the sessions and calls this on every evaluation. A pass that
+    /// releases nothing must not count as a change, or it re-evaluates forever and rebuilds the
+    /// menu bar each time (File › Open Recent flickered and couldn't open).
+    @Test func releasingNothingLeavesObserversAlone() throws {
+        let app = AppState()
+        app.presentsArchiveWindows = false
+        app.openArchive(named: "First.zip")
+        let other = app.sessionForOpening(URL(filePath: "/tmp/Second.zip"))
+        other.openArchive(named: "Second.zip")
+        #expect(app.additionalSessions.count == 1)
+
+        let changed = Mutex(false)
+        withObservationTracking {
+            _ = app.additionalSessions
+            _ = app.hasLifetimeWork
+        } onChange: {
+            changed.withLock { $0 = true }
+        }
+        app.releaseFinishedWork()
+        #expect(!changed.withLock { $0 })
+        #expect(app.additionalSessions.count == 1)
+
+        other.mainWindowDidClose(.browser)
+        app.releaseFinishedWork()
+        #expect(app.additionalSessions.isEmpty)
     }
 
     @Test func openingAnotherArchiveKeepsDirtySelectionAndUndoInTheOriginal() async throws {

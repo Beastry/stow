@@ -128,8 +128,12 @@ struct BrowserFocusTests {
             // Search lives in the title bar (#231), so the window carries the view's toolbar
             // as the app's own windows do.
             host.sceneBridgingOptions = [.toolbars, .title]
+            // Match ArchiveWindowController: attaching an offscreen host can reset the window
+            // to its intrinsic size, clipping rows before the native selection mirrors the model.
+            host.sizingOptions = [.minSize]
             self.host = host
             window.contentViewController = host
+            window.setContentSize(NSSize(width: 1120, height: 700))
             host.view.layoutSubtreeIfNeeded()
         }
 
