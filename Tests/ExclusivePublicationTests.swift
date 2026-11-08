@@ -138,6 +138,25 @@ struct ExclusivePublicationTests {
         }
     }
 
+    @Test func replacementOfExplicitHelperDuringCancelledCopyIsRetained() throws {
+        try fixture { source, target in
+            let helper = source.deletingLastPathComponent().appendingPathComponent("._selected")
+            let published = target.deletingLastPathComponent().appendingPathComponent("._published")
+            try Data(repeating: 7, count: 2_000_000).write(to: helper)
+            let foreign = Data("foreign helper replacement".utf8)
+            let options = ExclusivePublication.Options(forceCopy: true, didCopyChunk: { _ in
+                try foreign.write(to: published, options: .atomic)
+                throw CancellationError()
+            })
+            do {
+                _ = try ExclusivePublication.publishSynchronously(source: helper, to: published, options: options)
+                Issue.record("Expected retained replacement")
+            } catch ExclusivePublication.Failure.rollbackIncomplete(let paths) { #expect(paths.contains(published)) }
+            #expect(try Data(contentsOf: published) == foreign)
+            #expect(try Data(contentsOf: helper) == Data(repeating: 7, count: 2_000_000))
+        }
+    }
+
     @Test func semanticCompanionRequiresAppleDoubleAndCorroboratedPairedAttributes() throws {
         try fixture { source, target in
             let fork = Data("resource fork payload".utf8)

@@ -255,23 +255,29 @@ nonisolated enum ExclusivePublication {
         let node = Node(name: targetName, url: target, fd: output, status: initial)
         node.companion = companion
         created(node)
+        var metadataComplete = false
         defer {
             if isExFAT(destinationParent) { _ = fsync(output) }
             var latest = stat()
             if fstat(output, &latest) == 0 { node.fingerprint = Fingerprint(latest) }
             close(output); node.fd = -1
-            if let companion {
-                if companion.fd >= 0 { close(companion.fd); companion.fd = -1 }
+            if metadataComplete, let companion {
                 var final = stat()
                 if fstatat(destinationParent, companion.name, &final, AT_SYMLINK_NOFOLLOW) == 0 {
                     companion.fingerprint = Fingerprint(final)
                 }
             }
-            // FSKit assigns a stable inode to AppleDouble files only once their writer closes.
-            var final = stat()
-            if targetName.hasPrefix("._"), fstatat(destinationParent, targetName, &final, AT_SYMLINK_NOFOLLOW) == 0 {
-                node.fingerprint = Fingerprint(final)
+        }
+        if let companion {
+            guard fsync(output) == 0 else { throw Failure.rollbackIncomplete([target, companion.url]) }
+            var value = stat()
+            guard fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW) == 0 else {
+                throw Failure.rollbackIncomplete([target, companion.url])
             }
+            companion.fingerprint = Fingerprint(value)
+            var stableOutput = stat()
+            guard fstat(output, &stableOutput) == 0 else { throw Failure.rollbackIncomplete([target]) }
+            node.fingerprint = Fingerprint(stableOutput)
         }
         if kind == S_IFDIR {
             guard let directory = fdopendir(dup(input)) else { throw system("read directory", target) }
@@ -287,7 +293,11 @@ nonisolated enum ExclusivePublication {
                 if child == "." || child == ".." { continue }
                 if try isSemanticCompanion(child, parent: input) { continue }
                 try copy(name: child, sourceParent: input, targetName: child, destinationParent: output,
-                         target: target.appendingPathComponent(child), options: options, checkCancellation: checkCancellation) { node.children.append($0) }
+                         target: target.appendingPathComponent(child), options: options, checkCancellation: checkCancellation) { childNode in
+                    if let reservation = childNode.companion, node.children.last === reservation {
+                        node.children[node.children.count - 1] = childNode
+                    } else { node.children.append(childNode) }
+                }
             }
         } else {
             var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
@@ -307,6 +317,16 @@ nonisolated enum ExclusivePublication {
                 try options.didCopyChunk?(count)
             }
         }
+        var linked = stat()
+        guard fstatat(destinationParent, targetName, &linked, AT_SYMLINK_NOFOLLOW) == 0,
+              node.fingerprint.owns(linked) else { throw Failure.rollbackIncomplete([target]) }
+        if let companion {
+            var value = stat()
+            guard fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW) == 0,
+                  companion.fingerprint == Fingerprint(value) else {
+                throw Failure.rollbackIncomplete([target, companion.url])
+            }
+        }
         // Includes modes, timestamps, ACLs, resource forks and extended attributes. Unsupported
         // metadata is a failure, rather than silently losing an audited staging tree's metadata.
         if name.hasPrefix("._"), isExFAT(sourceParent), flistxattr(input, nil, 0, 0) < 0, errno == EPERM {
@@ -321,6 +341,7 @@ nonisolated enum ExclusivePublication {
             }
             try verifyExtendedAttributes(input: input, output: output, target: target)
         }
+        metadataComplete = true
         var finished = stat()
         guard fstat(input, &finished) == 0, Fingerprint(opened) == Fingerprint(finished) else {
             throw Failure.unsupportedSource(path: target.path)
