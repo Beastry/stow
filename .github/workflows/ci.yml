@@ -46,7 +46,8 @@ jobs:
           sha256=$(sed -n 's/^sha256=//p' scripts/fetch-7zip.sh)
           [[ "$version" =~ ^[0-9]+\.[0-9]+$ ]]
           [[ "$sha256" =~ ^[[:xdigit:]]{64}$ ]]
-          echo "key=7zip-${{ runner.os }}-${{ runner.arch }}-${version}-${sha256}" >> "$GITHUB_OUTPUT"
+          recipe=$(cat scripts/fetch-7zip.sh scripts/build-7zip-source.sh scripts/patches/7zip/zstd-7z-decoder.patch | shasum -a 256 | cut -d' ' -f1)
+          echo "key=7zip-${{ runner.os }}-${{ runner.arch }}-${version}-${sha256}-${recipe}" >> "$GITHUB_OUTPUT"
 
       # Restore and save separately: a combined actions/cache only saves when the whole job passes.
       - id: cache-7zip
@@ -165,7 +166,8 @@ jobs:
           set -euo pipefail
           version=$(sed -n 's/^version=//p' scripts/fetch-7zip.sh)
           sha256=$(sed -n 's/^sha256=//p' scripts/fetch-7zip.sh)
-          echo "key=7zip-${{ runner.os }}-${{ runner.arch }}-${version}-${sha256}" >> "$GITHUB_OUTPUT"
+          recipe=$(cat scripts/fetch-7zip.sh scripts/build-7zip-source.sh scripts/patches/7zip/zstd-7z-decoder.patch | shasum -a 256 | cut -d' ' -f1)
+          echo "key=7zip-${{ runner.os }}-${{ runner.arch }}-${version}-${sha256}-${recipe}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@v5
         with:

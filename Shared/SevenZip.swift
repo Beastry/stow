@@ -8,7 +8,7 @@ nonisolated enum ArchiveInput: Sendable {
     case descriptor(FileHandle, name: String)
 }
 
-/// Drives the bundled, unmodified 7-Zip console binary (`7zz`, LGPL — see THIRD_PARTY_NOTICES.md).
+/// Drives the bundled 7-Zip console binary (official source + Stow decoder registration) (`7zz`, LGPL — see THIRD_PARTY_NOTICES.md).
 /// Runs inside the sandboxed engine; the child process inherits that sandbox.
 nonisolated struct SevenZip: Sendable {
     let executable: URL
