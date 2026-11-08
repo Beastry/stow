@@ -1,0 +1,2 @@
+# Unified diff context lines encode blank source lines as one space.
+scripts/patches/7zip/*.patch whitespace=-blank-at-eol
