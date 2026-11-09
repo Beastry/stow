@@ -34,9 +34,15 @@ final class PreviewService {
     private var batch: [ArchiveEntry] = []
     private var batchTask: Task<[String: URL], Never>?
     private var batchArchive: Archive.ID?
+    private let appIcons = NSCache<NSString, NSImage>()
+    private var appIconFailures = Set<String>()
+    private var appIconBatch: [ArchiveEntry] = []
+    private var appIconBatchTask: Task<[String: NSImage], Never>?
+    private var appIconBatchArchive: Archive.ID?
 
     func passwordDidChange() {
         failed.removeAll()
+        appIconFailures.removeAll()
         batchTask?.cancel()
         batchTask = nil
         batch = []
@@ -123,6 +129,51 @@ final class PreviewService {
         let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: side, height: side),
                                                    scale: scale, representationTypes: .thumbnail)
         return try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request).nsImage
+    }
+
+    // MARK: - App icons
+
+    func cachedAppIcon(for entry: ArchiveEntry, in archive: Archive) -> NSImage? {
+        guard ArchivedAppIcon.applies(to: entry) else { return nil }
+        return cache.key(for: entry, in: archive).flatMap { appIcons.object(forKey: $0 as NSString) }
+    }
+
+    /// The app's own icon, read out of the archive (`ArchivedAppIcon`), or nil when it names none
+    /// Stow can read. Apps appearing together are read in one request.
+    func appIcon(for entry: ArchiveEntry, in archive: Archive) async -> NSImage? {
+        guard archive.source != nil, ArchivedAppIcon.applies(to: entry), archive.entry(at: entry.path) != nil,
+              let key = cache.key(for: entry, in: archive) else { return nil }
+        if let image = appIcons.object(forKey: key as NSString) { return image }
+        guard !appIconFailures.contains(key) else { return nil }
+        if appIconBatchTask == nil || appIconBatchArchive != archive.id {
+            appIconBatch = []
+            appIconBatchArchive = archive.id
+            let password = password(archive)
+            appIconBatchTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(25))
+                guard let self else { return [:] }
+                let apps = appIconBatch.map(\.path)
+                appIconBatch = []
+                appIconBatchTask = nil
+                return await ArchivedAppIcon.load(apps, in: archive, password: password)
+            }
+        }
+        if !appIconBatch.contains(where: { $0.path == entry.path }) { appIconBatch.append(entry) }
+        guard let icons = await appIconBatchTask?.value else { return nil }
+        if let image = icons[entry.path] {
+            appIcons.setObject(image, forKey: key as NSString)
+            return image
+        }
+        appIconFailures.insert(key)
+        return nil
+    }
+
+    /// Icons read elsewhere (a disk image's window) for the views that show the same apps.
+    func remember(appIcons icons: [String: NSImage], in archive: Archive) {
+        for (path, image) in icons {
+            guard let entry = archive.entry(at: path), let key = cache.key(for: entry, in: archive) else { continue }
+            appIcons.setObject(image, forKey: key as NSString)
+        }
     }
 
     // MARK: - Files on request

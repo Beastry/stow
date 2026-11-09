@@ -13837,6 +13837,186 @@
           }
         }
       }
+    },
+    "Choose Install App, or drag the app here": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择“安装 App”，或将 App 拖到这里"
+          }
+        }
+      }
+    },
+    "Drag to Applications to install, or choose Install App": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖到“应用程序”即可安装，或选择“安装 App”"
+          }
+        }
+      }
+    },
+    "Install destination: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装位置：%@"
+          }
+        }
+      }
+    },
+    "Installer window": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装窗口"
+          }
+        }
+      }
+    },
+    "Other Items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他项目"
+          }
+        }
+      }
+    },
+    "Reading the disk image…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在读取磁盘映像…"
+          }
+        }
+      }
+    },
+    "Reading the archive…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在读取压缩包…"
+          }
+        }
+      }
+    },
+    "Preparing the installer window…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备安装窗口…"
+          }
+        }
+      }
+    },
+    "Installer layout files": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装器布局文件"
+          }
+        }
+      }
+    },
+    "The background picture, volume icon and “drag here” shortcuts only lay out this disk image’s window in Finder. They’re shown dimmed and left out of Extract All.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景图片、宗卷图标和“拖到这里”快捷方式仅用于布置访达中的磁盘映像窗口。它们以淡色显示，“全部解压缩”时会略过。"
+          }
+        }
+      }
+    },
+    "Shortcut to %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指向 %@ 的快捷方式"
+          }
+        }
+      }
+    },
+    "Shortcut": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快捷方式"
+          }
+        }
+      }
+    },
+    "%lld shown": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已显示 %lld 项"
+          }
+        }
+      }
+    },
+    "%lld hidden": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已隐藏 %lld 项"
+          }
+        }
+      }
+    },
+    "Show Hidden Items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示隐藏项目"
+          }
+        }
+      }
+    },
+    "Hide Hidden Items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不显示隐藏项目"
+          }
+        }
+      }
+    },
+    "Show the %lld hidden items here, such as a disk image’s layout files (⇧⌘.)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示此处的 %lld 个隐藏项目，例如磁盘映像的布局文件（⇧⌘.）"
+          }
+        }
+      }
+    },
+    "Hide the %lld hidden items here, such as a disk image’s layout files (⇧⌘.)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏此处的 %lld 个隐藏项目，例如磁盘映像的布局文件（⇧⌘.）"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

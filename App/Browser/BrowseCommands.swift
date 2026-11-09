@@ -138,7 +138,7 @@ struct BrowseCommands: Commands {
             Divider()
             Toggle("Show macOS Helper Items", isOn: Binding(
                 get: { browser?.showHelperItems ?? false },
-                set: { value in app.passwords.performCommand { browser?.showHelperItems = value } }
+                set: { value in app.passwords.performCommand { browser?.setShowsHelperItems(value) } }
             ))
             .keyboardShortcut(".", modifiers: [.command, .shift])
             .disabled(browser?.archive.hasHelpers != true)

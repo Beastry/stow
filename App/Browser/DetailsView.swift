@@ -268,13 +268,23 @@ private struct EntryDetail: View {
             Group {
                 if model.archive.source != nil, entry.kind.isPreviewable {
                     RichPreviewView(entry: entry, model: model, fitsContent: true)
+                } else if let target = model.archive.dropTarget(at: entry.path) {
+                    DropTargetIcon(target: target)
+                        .frame(width: 112, height: 112)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if model.archive.source != nil, ArchivedAppIcon.applies(to: entry) {
+                    ArchivedAppIconView(entry: entry, model: model)
+                        .frame(width: 112, height: 112)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     EntryThumbnail(entry: entry, style: .large)
                 }
             }
             .frame(maxWidth: .infinity)
 
-            ItemIdentity(name: entry.name, kind: entry.kindDescription.capitalizedFirst,
+            ItemIdentity(name: entry.name,
+                         kind: model.archive.dropTarget(at: entry.path).map { String(localized: "Shortcut to \($0.folder)") }
+                             ?? entry.kindDescription.capitalizedFirst,
                          state: model.editSession.state(for: entry.path))
 
             let compressed = DetailsPane.compressedFigures(size: entry.size, packed: entry.packedSize,

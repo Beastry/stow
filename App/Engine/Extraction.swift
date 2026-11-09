@@ -124,7 +124,10 @@ enum Extraction {
             LegacyNames.repair(source.renamed, in: root)
             // A disk image's window dressing (background art, volume icon, the Applications alias)
             // only means something in Finder's window for that image.
-            for extra in archive.installerExtras {
+            // Someone who chose one of them on purpose gets it.
+            let chosen = (selection ?? []).map(\.path)
+            for extra in archive.installerExtras
+            where !chosen.contains(where: { $0 == extra || $0.hasPrefix(extra + "/") }) {
                 try? FileManager.default.removeItem(at: root.appending(path: extra))
             }
             let restored = AppleDouble.apply(output.report.macMetadata, in: root)

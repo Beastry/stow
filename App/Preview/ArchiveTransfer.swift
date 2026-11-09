@@ -57,6 +57,14 @@ final class ArchiveTransfer {
         return pending[token]?.source
     }
 
+    /// What the drag in progress carries, when it comes from `source` and still matches it.
+    static func activeEntries(from source: BrowserModel) -> [ArchiveEntry]? {
+        guard let pasteboard = activePasteboard, pasteboard.changeCount == activeChangeCount,
+              let token = activeToken, let transfer = pending[token],
+              transfer.source === source, transfer.sourceIsCurrent else { return nil }
+        return transfer.entries
+    }
+
     static func finish(_ token: String?) {
         activePasteboard = nil
         activeChangeCount = nil

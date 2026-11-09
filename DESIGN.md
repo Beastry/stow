@@ -223,6 +223,34 @@ install, with the same confirmations and checks, on that app only. Hiding Instal
 in Settings removes it; File › Actions still lists it. Glance shows Install App just before its
 Quick Look · Extract All capsule.
 
+**A disk image's own window (#344).** An image whose author laid out its Finder window opens on
+that window in Icons, at the volume's top: the author's artwork, the apps' own icons and the
+"drag here" shortcut where the author placed them, on one rounded card with the panel radius and
+a soft shadow. Artwork and icons scale as one, never stretched, from full size down to half; past
+that the files scroll. Names keep Finder's look: plain text over the artwork, dark or light by
+what's under it, in the accent capsule when selected. Items the author didn't place sit under the
+card in **Other Items**. The shortcut shows the real folder's icon and lights in the accent, with
+a little give (`Motion.target`), only while this image's app is held over it; dropping there runs
+Install App with every check. Nothing installs by selecting, pointing or starting a drag. List
+and Columns, Search and folders inside the volume browse as usual; someone who picked another view
+before the canvas arrived keeps it. An image without a usable layout opens on the plain grid.
+As in ArcZip, the window stays on its opening status until the layout is read (up to 5 s), so
+the image arrives as its author's window rather than as plain icons that turn into it; a slower
+read shows the files first and fades the canvas in. Apps anywhere in any archive show their own
+icon (the one their Info.plist names) in the grid, the list, Columns, Details, Glance and drag
+images; the generic app icon only stands in until it's read, or for an app with none Stow can read. Glance
+shows the same window, scaled to fit, as ArcZip's Mini does, with the same drop target and Install App.
+An archive tool shows everything in an image: its window dressing (`.background`, `.DS_Store`,
+`.VolumeIcon.icns`, the Applications shortcut, drawn as the folder it points at and called a
+Shortcut) is listed by default, dimmed like helper items, as ArcZip lists it. A switch at the
+far end of the path's row (Browser and Glance), in its own glass, says how many there are (“4 shown”,
+lit like Pin on Top; “4 hidden” with the eye crossed out) and flips them, as View › Show macOS
+Helper Items (⇧⌘.) does; it appears only where there are some, and not over the installer window. The last
+choice is remembered: the next disk image opens the same way (`browse.showsDiskImageHelpers`, shown
+until someone hides them). Other archives open with them hidden, as before. It never lands on the canvas, never counts as the image's app, and
+Extract All still leaves it out; choosing one on purpose extracts it. File-system bookkeeping
+(`.fseventsd`, `.Trashes`, HFS+ private data) stays hidden.
+
 One prominent action at a time: Extract All carries the accent while Actions is down; once
 Actions is up, for a selection or an archive's app, the stack's front does and Extract All stays
 put, unaccented (in Glance it keeps its weight and only the fill fades; see Glance layout). Archive facts live in one place, Archive Info, reached from Details with nothing
@@ -523,7 +551,8 @@ Values from Apple's fluid-interface guidance and Emil Kowalski's design-engineer
 | Files dragged in another app (#180) | Nothing comes out at the start, and nothing comes out for a drag passing by. The menu-bar icon becomes `tray.and.arrow.down`; over the icon it highlights. **Dropped on the icon**, the files go into the Tray without bringing it out, and the icon shows `tray.full` for 1 s. **Held over the icon** for the system's spring-loading delay (0.5 s unless set, kept to 0.2–1.5 s, as Finder opens a folder), the Tray comes out (under the icon, or where it was put), stays for the rest of the drag and goes back 0.8 s after the drag ends if nothing was dropped. There is no hint or approach zone, and without a visible icon a drag leaves the Tray alone: ArcZip's wide zone, a 64 pt area around the icon and Stow's earlier screen-edge hint (160 pt in, as tall as the Tray) all caught drags only passing by on a laptop screen. ArcZip's Box: no reveal at drag start; opens at once ~150–165 pt under its icon, about its own width; stays while dragging; gone within ~3 s of a drag with no drop | Symbol swaps, no motion; the Tray uses its own show/hide |
 | Password card in Glance appears / goes | A click: scale 0.96 → 1 + opacity, dimming fades in; it eases out. Asked again after a wrong password: fade only. **None** when a key (Return, Esc, Space) caused it | `appear` in, `exit` out |
 | Preparing-a-preview capsule appears / goes (after 0.4 s) | Ease-out fade with a 4 pt drop and scale 0.96 → 1 from its top; fades out. Its ring as Actions' | `status` in, `exit` out |
-| An archive's opening status (Browser, Glance) | Waits 0.4 s, then fades in; nothing moves. The listing replaces it at once; the title bar is already in place | `status` in |
+| An archive's opening card (Browser, Glance) | A Liquid Glass card over the files' column: the format badge, the name, what's being read (“Reading the disk image…”, then “Preparing the installer window…” for a laid-out image; the words swap with a blur) and a soft accent band crossing its track, linear, 1.6 s a pass (resting mid-track under Reduce Motion), as ArcZip's opening card has. Waits 0.4 s, then settles in: 4 pt drop, scale 0.96 → 1 + opacity. The title bar and Details' column are already in place, so the window keeps its shape | `status` in; band linear |
+| The archive arrives after the card was seen | The window's first frame keeps the same card over the files, laid out but hidden; after 60 ms the card steps back (scale 0.97) and fades, and 60 ms later the files fade in (fade only: the list and columns are AppKit tables, which mustn't be scaled), about 300 ms in all. Glance's window controls stay put. An archive that arrives before the card shows appears at once | `exit` card, `status` files |
 | Glance opens (click, Finder) | Content springs out of the pointer, scale 0.96 → 1 + opacity; glass fades in | `response 0.32, damping 1.0` |
 | Glance via ⌥⌘G, Esc, Glance ↔ full window by keyboard | **None** | — |
 | Pack sentence token change | Blur-crossfade of the token text (the chevron stays put) | 180 ms |

@@ -161,8 +161,8 @@ nonisolated enum Checkup {
         if scan.installerExtras > 0 {
             findings.append(CheckupFinding(
                 severity: .info,
-                title: String(localized: "Installer layout hidden"),
-                detail: String(localized: "The background picture, volume icon and “drag here” shortcuts only lay out this disk image’s window in Finder. They’re hidden and won’t be extracted.")
+                title: String(localized: "Installer layout files"),
+                detail: String(localized: "The background picture, volume icon and “drag here” shortcuts only lay out this disk image’s window in Finder. They’re shown dimmed and left out of Extract All.")
             ))
         }
 
@@ -233,6 +233,7 @@ nonisolated extension Archive {
         var helpers: [String: ArchiveEntry] = [:]
         var explicitFolders: [String: Date] = [:]
         var appleDoublePaths = Set<String>()
+        var presentationFiles: [String: Int64] = [:]
         let displayName = name ?? url.lastPathComponent
         let format = ArchiveFormat(sevenZipType: listing.type, name: displayName)
         scan.format = Checkup.FormatScan(name: displayName, real: format, realType: listing.type,
@@ -251,6 +252,9 @@ nonisolated extension Archive {
             }
             let path = PathContainment.containedPath(for: shown)
             storedPaths[path, default: []].append(item.path)
+            if layout.isPresentationFile(path), !item.isFolder, !item.isSymlink, presentationFiles.count < 256 {
+                presentationFiles[path] = item.size
+            }
             if item.rawPath != nil {
                 let written = PathContainment.containedPath(for: item.path)
                 if written != path { renamed[written] = path }
@@ -269,6 +273,12 @@ nonisolated extension Archive {
             }
             if layout.hides(path) {
                 if layout.extras.contains(path) { scan.installerExtras += 1 }
+                // Listed dimmed, as helper items are; their folders come with them.
+                if !item.isFolder, layout.isAuthoredExtra(path) {
+                    helpers[path] = ArchiveEntry(path: path, isFolder: false, size: item.size,
+                                                 packedSize: item.packedSize,
+                                                 modified: item.modified ?? fallbackDate, isHelper: true)
+                }
                 continue
             }
             if PathContainment.escapes(shown) { scan.escapingPaths.append(shown) }
@@ -317,6 +327,7 @@ nonisolated extension Archive {
         installerExtras = layout.extras
         self.appleDoublePaths = appleDoublePaths
         dropTargets = layout.dropTargets
+        self.presentationFiles = presentationFiles
     }
 
     /// The archive's own names for these entries; a folder stands for everything under it.

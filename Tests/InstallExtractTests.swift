@@ -228,7 +228,7 @@ struct DiskImageLayoutTests {
         #expect(archive.volumeRoot == "Stow Fixture")
         #expect(archive.dropTargets == [DiskImageLayout.DropTarget(path: "Stow Fixture/Applications", folder: "/Applications")])
         #expect(Set(archive.children(of: "Stow Fixture").map(\.name)) == ["Fixture.app", ".gitignore"])
-        #expect(archive.checkup.contains { $0.title == "Installer layout hidden" })
+        #expect(archive.checkup.contains { $0.title == "Installer layout files" })
         #expect(!archive.checkup.contains { $0.title.contains("symbolic link") })
         #expect(BrowserModel.suggestedSelection(in: archive) == "Stow Fixture/Fixture.app")
     }

@@ -696,7 +696,15 @@ enum DemoScene {
 
         // `-StowViewMode grid|list|columns` and `-StowScrollToEnd YES`: check what floats over the last row.
         if let mode = defaults.string(forKey: "StowViewMode").flatMap(BrowserModel.ViewMode.init(rawValue:)) {
-            app.browser?.viewMode = mode
+            if let browser = app.browser {
+                browser.viewMode = mode
+            } else {
+                // A real archive (`open`) arrives later: a disk image waits for its own window.
+                Task {
+                    while app.browser == nil { try? await Task.sleep(for: .milliseconds(50)) }
+                    app.browser?.viewMode = mode
+                }
+            }
         }
         if defaults.bool(forKey: "StowScrollToEnd") {
             Task {
