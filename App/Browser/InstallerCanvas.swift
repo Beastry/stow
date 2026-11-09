@@ -253,7 +253,7 @@ struct InstallerCanvasView: View {
 
     var body: some View {
         // The window dressing is the canvas itself; the shortcut is its drop target.
-        let entries = model.visibleEntries.filter { !$0.isHelper }
+        let entries = model.visibleEntries
         let positions = canvas.layout.positions
         let placed = entries.filter { positions[$0.name] != nil }
         let targets = model.archive.dropTargets.filter {
@@ -301,7 +301,7 @@ struct InstallerCanvasView: View {
     private func artwork(size: CGSize, scale: CGFloat, placed: [ArchiveEntry],
                          targets: [DiskImageLayout.DropTarget]) -> some View {
         ZStack(alignment: .topLeading) {
-            backdrop
+            InstallerCanvasBackground(canvas: canvas, scale: scale)
                 .frame(width: size.width, height: size.height)
                 .contentShape(.rect)
                 .onTapGesture {
@@ -338,24 +338,31 @@ struct InstallerCanvasView: View {
         .accessibilityLabel(Text("Installer window"))
     }
 
-    @ViewBuilder
-    private var backdrop: some View {
-        if let image = canvas.background {
-            Image(nsImage: image)
-                .resizable()
-                .interpolation(.high)
-        } else if let color = canvas.backgroundColor {
-            color
-        } else {
-            Color.white
-        }
-    }
-
     /// Where an item's view goes so its icon's centre lands on the author's point: the view is the
     /// icon with its name below.
     private func itemCenter(_ point: CGPoint, scale: CGFloat) -> CGPoint {
         let item = CanvasItemMetrics(iconSize: canvas.layout.iconSize * scale, textSize: canvas.layout.textSize * scale)
         return CGPoint(x: point.x * scale, y: point.y * scale - item.iconSize / 2 + item.height / 2)
+    }
+}
+
+/// The canvas may grow for icons beyond the picture. Its artwork keeps the authored dimensions
+/// and origin, using the same scale as the icons instead of stretching to fill the larger canvas.
+struct InstallerCanvasBackground: View {
+    let canvas: InstallerCanvas
+    let scale: CGFloat
+
+    var body: some View {
+        (canvas.backgroundColor ?? Color.white)
+            .overlay(alignment: .topLeading) {
+                if let image = canvas.background {
+                    let size = canvas.backgroundSize ?? image.size
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: size.width * scale, height: size.height * scale)
+                }
+            }
     }
 }
 

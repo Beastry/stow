@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import DSStore
 import Foundation
+import SwiftUI
 import Testing
 @testable import Stow
 
@@ -308,6 +309,87 @@ struct InstallerCanvasTests {
         #expect(model.installerCanvas == nil)
     }
 
+    @Test func canvasSelectionAndExtractionUseOnlyDisplayedFiles() async throws {
+        let (archive, folder) = try await open()
+        defer { folder.cleanUp() }
+        let model = BrowserModel(archive: archive, installerCanvas: await InstallerCanvasLoader.prepare(archive, password: nil))
+        model.showHelperItems = true
+        model.gridColumns = 1
+        #expect(model.showsInstallerCanvas)
+        let expected = Set(archive.children(of: archive.volumeRoot).map(\.id))
+        #expect(!expected.isEmpty)
+        #expect(Set(model.visibleEntries.map(\.id)) == expected)
+
+        model.select([])
+        var reached = Set<ArchiveEntry.ID>()
+        for _ in 0..<expected.count {
+            model.move(.down)
+            reached.formUnion(model.selection)
+        }
+        #expect(reached == expected)
+
+        let first = try #require(model.visibleEntries.first)
+        let last = try #require(model.visibleEntries.last)
+        model.select([first.id])
+        model.click(last, modifiers: .shift)
+        #expect(model.selection == expected)
+        model.select([first.id])
+        model.move(.down, extending: true)
+        #expect(model.selection == expected)
+        model.select([first.id])
+        model.typeSelect(".")
+        #expect(model.selection == [first.id])
+
+        model.selectAll()
+        #expect(model.selection == expected)
+        let out = folder.url.appending(path: "Canvas Selection", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        _ = try await Extraction.run(archive, selection: model.selectedEntries, to: out) { _ in }
+        let names = TemporaryFolder.contents(of: out)
+        #expect(names.contains("Layout Tool.app") && names.contains("Read Me.txt"))
+        #expect(!names.contains { $0.contains(".background") || $0.contains(".DS_Store") || $0 == "Applications" })
+    }
+
+    @Test func returningToCanvasDropsHelperSelectionWithoutChangingThePreference() async throws {
+        let (archive, folder) = try await open()
+        defer { folder.cleanUp() }
+        let model = BrowserModel(archive: archive, installerCanvas: await InstallerCanvasLoader.prepare(archive, password: nil))
+        model.showHelperItems = true
+        let helper = try #require(archive.entry(at: "\(Self.volume)/.DS_Store"))
+        let app = try #require(archive.installable)
+        for mode in [BrowserModel.ViewMode.list, .columns] {
+            model.viewMode = mode
+            #expect(model.visibleEntries.contains { $0.id == helper.id })
+            model.select([helper.id, app.id])
+            model.viewMode = .grid
+            #expect(model.showsInstallerCanvas && model.showHelperItems)
+            #expect(model.selection == [app.id])
+            #expect(model.cursor == app.id && model.anchor == app.id)
+            #expect(!model.visibleEntries.contains { $0.isHelper })
+        }
+        model.viewMode = .list
+        model.select([helper.id])
+        model.viewMode = .grid
+        #expect(model.selection.isEmpty && model.cursor == nil && model.anchor == nil)
+    }
+
+    @Test func aLateCanvasRemovesSelectionsItDoesNotDisplay() async throws {
+        let (archive, folder) = try await open()
+        defer { folder.cleanUp() }
+        let canvas = try #require(await InstallerCanvasLoader.load(archive, password: nil))
+        let pending = Task<InstallerCanvas?, Never> { canvas }
+        let model = BrowserModel(archive: archive, installerCanvas: .pending(pending))
+        model.viewMode = .grid
+        model.showHelperItems = true
+        let helper = try #require(archive.entry(at: "\(Self.volume)/.background"))
+        model.select([helper.id])
+        #expect(model.installerCanvas == nil)
+        for _ in 0..<200 where model.installerCanvas == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.showsInstallerCanvas)
+        #expect(model.selection.isEmpty)
+        #expect(!model.visibleEntries.contains { $0.isHelper })
+    }
+
     @Test func theImagesWindowDressingIsListedDimmed() async throws {
         let (archive, folder) = try await open()
         defer { folder.cleanUp() }
@@ -361,6 +443,39 @@ struct InstallerCanvasTests {
         let names = TemporaryFolder.contents(of: out).filter { !$0.contains(".app/") }
         #expect(!names.contains { $0.contains(".background") || $0.contains(".DS_Store") || $0.hasSuffix("Applications") })
         #expect(names.contains { $0.hasSuffix("Layout Tool.app") } && names.contains { $0.hasSuffix("Read Me.txt") })
+    }
+}
+
+@Suite("Installer canvas artwork geometry")
+@MainActor
+struct InstallerCanvasArtworkTests {
+    @Test(arguments: [1.0, 0.5])
+    func extendingCanvasDoesNotMoveArtworkLandmarks(scale: Double) throws {
+        // A green name plate at x=100 in red artwork. Another authored icon beyond the picture
+        // grows the canvas, but must not move the plate or spread the red artwork into the margin.
+        let context = try #require(CGContext(data: nil, width: 400, height: 250, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 400, height: 250))
+        context.setFillColor(CGColor(srgbRed: 0, green: 1, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 90, y: 0, width: 20, height: 250))
+        let backgroundSize = CGSize(width: 400, height: 250)
+        let image = NSImage(cgImage: try #require(context.makeImage()), size: backgroundSize)
+        var layout = InstallerLayout()
+        layout.positions = ["Tool.app": CGPoint(x: 100, y: 100), "Read Me.txt": CGPoint(x: 600, y: 300)]
+        let canvas = InstallerCanvas(archiveID: UUID(), layout: layout, background: image,
+                                     backgroundSize: backgroundSize, icons: [:], darkUnderLabel: [])
+        let extent = layout.canvasSize(background: backgroundSize, placed: layout.positions.keys)
+        #expect(extent.width > backgroundSize.width && extent.height > backgroundSize.height)
+        let renderer = ImageRenderer(content: InstallerCanvasBackground(canvas: canvas, scale: scale)
+            .frame(width: extent.width * scale, height: extent.height * scale))
+        renderer.scale = 1
+        let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+        let plate = try #require(bitmap.colorAt(x: Int(100 * scale), y: Int(125 * scale))?.usingColorSpace(.deviceRGB))
+        #expect(plate.greenComponent > 0.9 && plate.redComponent < 0.1)
+        let margin = try #require(bitmap.colorAt(x: Int(450 * scale), y: Int(125 * scale))?.usingColorSpace(.deviceRGB))
+        #expect(margin.redComponent > 0.9 && margin.greenComponent > 0.9 && margin.blueComponent > 0.9)
     }
 }
 

@@ -76,7 +76,9 @@ final class BrowserModel {
     }
     var folder = "" { didSet { if folder != oldValue { refresh() } } }
     var selection: Set<ArchiveEntry.ID> = []
-    var viewMode: ViewMode = SettingsKeys.browserView()
+    var viewMode: ViewMode = SettingsKeys.browserView() {
+        didSet { if viewMode != oldValue { refresh() } }
+    }
     var query = "" { didSet { if query != oldValue { runSearch() } } }
     /// Edit › Find… (⌘F) asks the Browser's search field for the keyboard; it counts, so each
     /// press is a new request.
@@ -140,7 +142,9 @@ final class BrowserModel {
 
     /// A disk image's own window (#344), once read: nil while it's read, for other archives, and
     /// for images without a usable layout. It belongs to the archive it was read from.
-    private(set) var installerCanvas: InstallerCanvas?
+    private(set) var installerCanvas: InstallerCanvas? {
+        didSet { refresh() }
+    }
     /// The archive arrived after the opening card had shown: the window takes over from the card
     /// rather than cutting to the files (`ArchiveArrival`).
     var arrivesAfterWait = false
@@ -723,9 +727,16 @@ final class BrowserModel {
     private func refresh() {
         let here = archive.children(of: folder, includingHelpers: true)
         helperItemCount = here.reduce(0) { $0 + ($1.isHelper ? 1 : 0) }
+        // The canvas renders install destinations separately, not as selectable archive files.
+        // Keep keyboard, range selection and Select All on the same entries as its file controls.
         visibleEntries = isSearching ? searchResults
-            : showHelperItems ? here : here.filter { !$0.isHelper }
+            : showHelperItems && !showsInstallerCanvas ? here : here.filter { !$0.isHelper }
         positions = Dictionary(visibleEntries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // A layout can arrive after browsing began, or a person can return from List/Search
+        // with a helper selected. Hidden selections must not survive that handoff.
+        if showsInstallerCanvas, selection.contains(where: { archive.entry(at: $0)?.isHelper == true }) {
+            select(selection.filter { archive.entry(at: $0)?.isHelper != true })
+        }
     }
 
     private func runSearch() {
