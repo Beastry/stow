@@ -375,6 +375,7 @@ final class BrowserModel {
             guard let self, let target else { return }
             let old = target.archive
             let nextOperations = target.edits.operations
+            let preservesBytes = nextOperations == previousOperations && !target.edits.isSaving && !target.edits.changedOnDisk
             let common = zip(previousOperations, nextOperations).prefix { pair in pair.0 == pair.1 }.count
             let reversedRenames = previousOperations.dropFirst(common).reversed().compactMap { operation -> EditOperation? in
                 if case let .rename(from, to) = operation { return .rename(from: to, to: from) }
@@ -390,8 +391,10 @@ final class BrowserModel {
                 Location(levels: location.levels, folder: location.levels.last === target ? EditSession.map(path: location.folder, through: moves) : location.folder)
             }
             if let url = old.source?.url {
-                var updated = Archive(listing: target.edits.pending, url: url, name: old.name, nameEncoding: old.source?.nameEncoding)
+                var updated = Archive(listing: target.edits.pending, url: url, name: old.name,
+                                      nameEncoding: old.source?.nameEncoding, aliasDropTargets: old.aliasDropTargets)
                 updated.source?.password = target.password
+                if preservesBytes { updated.record(old.checkup) }
                 target.archive = updated
                 if target.edits.isSaving { target.savedArchive = updated }
             } else {
@@ -496,11 +499,15 @@ final class BrowserModel {
         var archive = Archive(listing: target.edits.base, url: url,
                               name: target.edits.name, nameEncoding: target.archive.source?.nameEncoding)
         archive.source?.password = target.password
+        // `reload` already notified onChange, which carried aliases from the previous bytes.
+        // Publish the fresh, unclassified listing before another suspension so cancellation can
+        // never retain an old install destination for a file that changed on disk.
         target.archive = archive
         target.savedArchive = archive
         target.search = SearchIndex(total: archive.index.visible.count + archive.index.helpers.count)
         target.indexed = 0
         startIndexing(target)
+        guard !isClosed, level === target else { return false }
         folder = EditSession.nearestExistingParent(folderBefore, in: target.edits.base)
         selection = Set(selectionBefore.filter { target.archive.entry(at: $0) != nil })
         history = historyBefore.map { location in
@@ -511,6 +518,20 @@ final class BrowserModel {
         }
         refresh()
         runSearch()
+        let freshID = archive.id
+        archive = await DiskImageAliasLoader.prepare(archive, password: target.password)
+        guard !Task.isCancelled, !isClosed, level === target, target.archive.id == freshID else { return false }
+        if archive.id != freshID {
+            target.archive = archive
+            target.savedArchive = archive
+            target.search = SearchIndex(total: archive.index.visible.count + archive.index.helpers.count)
+            target.indexed = 0
+            startIndexing(target)
+            selection = selection.filter { archive.entry(at: $0) != nil }
+            refresh()
+            runSearch()
+        }
+        if levels.first === target { loadInstallerCanvas() }
         editingWindow?.isDocumentEdited = levels.contains { $0.edits.isEdited }
         return true
     }
@@ -571,19 +592,26 @@ final class BrowserModel {
     }
 
     private func adoptArchiveURL(_ url: URL, on target: Level) {
-        let encoding = target.archive.source?.nameEncoding
+        let previous = target.archive
+        let encoding = previous.source?.nameEncoding
         let listing = target.edits.isEdited ? target.edits.pending : target.edits.base
-        var archive = Archive(listing: listing, url: url, name: url.lastPathComponent, nameEncoding: encoding)
+        let aliasTargets = target.archive.aliasDropTargets
+        var archive = Archive(listing: listing, url: url, name: url.lastPathComponent,
+                              nameEncoding: encoding, aliasDropTargets: aliasTargets)
         archive.source?.password = target.password
+        if !target.edits.isSaving { archive.record(previous.checkup) }
         target.archive = archive
         if !target.edits.isEdited {
             target.savedArchive = archive
         } else {
-            var saved = Archive(listing: target.edits.base, url: url, name: url.lastPathComponent, nameEncoding: encoding)
+            var saved = Archive(listing: target.edits.base, url: url, name: url.lastPathComponent,
+                                nameEncoding: encoding, aliasDropTargets: aliasTargets)
             saved.source?.password = target.password
+            if !target.edits.isSaving { saved.record(target.savedArchive.checkup) }
             target.savedArchive = saved
         }
         updateRepresentedURL()
+        if levels.first === target { loadInstallerCanvas() }
         if level === target { editingWindow?.title = url.lastPathComponent }
     }
 
@@ -610,18 +638,32 @@ final class BrowserModel {
     }
 
     /// Disk images are checked against their checksums in the background; browsing doesn't wait.
-    func verifyDiskImage() {
-        guard archive.format == .dmg, let url = archive.source?.url else { return }
-        Task { [weak self] in
+    @discardableResult
+    func verifyDiskImage(using verify: @escaping (URL) async throws -> Void = { try await ArchiveEngine.shared.verify($0) }) -> Task<Void, Never>? {
+        let target = level
+        guard target.archive.format == .dmg, let url = target.archive.source?.url else { return nil }
+        let archiveID = target.archive.id
+        let identity = target.edits.identity
+        return Task { [weak self, weak target] in
             var damage: String?
             do {
-                try await ArchiveEngine.shared.verify(url)
+                try await verify(url)
             } catch {
                 let error = EngineError(error)
                 if error.failure == .cancelled || error.failure == .passwordRequired { return }
                 damage = error.message
             }
-            self?.archive.record([Checkup.diskImageFinding(damaged: damage)])
+            guard !Task.isCancelled, let self, !self.isClosed, let target,
+                  self.levels.contains(where: { $0 === target }), target.archive.source?.url == url,
+                  target.archive.format == .dmg, !target.edits.changedOnDisk else { return }
+            if let identity {
+                guard target.edits.identity == identity, (try? FileIdentity(of: url)) == identity else { return }
+            } else {
+                guard target.archive.id == archiveID else { return }
+            }
+            let finding = Checkup.diskImageFinding(damaged: damage)
+            target.archive.record([finding])
+            target.savedArchive.record([finding])
         }
     }
 
@@ -1146,7 +1188,7 @@ final class BrowserModel {
                 let (listing, password) = try await passwords.retrying(entry.name) { password in
                     try await ArchiveEngine.shared.list(url, password: password)
                 }
-                let inner = await Self.makeArchive(listing, url: url, name: entry.name)
+                let inner = await Self.makeArchive(listing, url: url, name: entry.name, password: password)
                 guard !Task.isCancelled else { return }
                 let level = Level(archive: inner, password: password, entryPath: entry.path)
                 connectEdits(level)
@@ -1164,8 +1206,10 @@ final class BrowserModel {
     }
 
     @concurrent
-    private static func makeArchive(_ listing: ArchiveListing, url: URL, name: String) async -> Archive {
-        Archive(listing: listing, url: url, name: name)
+    private static func makeArchive(_ listing: ArchiveListing, url: URL, name: String, password: String? = nil) async -> Archive {
+        var archive = Archive(listing: listing, url: url, name: name)
+        archive.source?.password = password
+        return await DiskImageAliasLoader.prepare(archive, password: password)
     }
 
     private func report(_ error: any Error, step: NextStep, count: Int, name: String? = nil) {
@@ -1187,11 +1231,14 @@ final class BrowserModel {
 
     func readNames(as encoding: NameEncoding?) {
         guard let source = archive.source, let listing = source.listing else { return }
-        var reread = Archive(listing: listing, url: source.url, name: archive.name, nameEncoding: encoding)
+        let aliasTargets = archive.aliasDropTargets
+        var reread = Archive(listing: listing, url: source.url, name: archive.name,
+                             nameEncoding: encoding, aliasDropTargets: aliasTargets)
         reread.record(archive.checkup.filter { finding in !reread.checkup.contains { $0.title == finding.title } })
         let level = level
         reread.source?.password = level.password
-        level.savedArchive = Archive(listing: level.edits.base, url: source.url, name: archive.name, nameEncoding: encoding)
+        level.savedArchive = Archive(listing: level.edits.base, url: source.url, name: archive.name,
+                                     nameEncoding: encoding, aliasDropTargets: aliasTargets)
         level.savedArchive.source?.password = level.password
         level.edits.displayedPaths = [:]
         for (shown, stored) in reread.source?.storedPaths ?? [:] {
@@ -1205,6 +1252,7 @@ final class BrowserModel {
         selection = []
         if !folder.isEmpty, reread.entry(at: folder) == nil { folder = "" } else { refresh() }
         runSearch()
+        if levels.first === level { loadInstallerCanvas() }
     }
 
     // MARK: - Next steps

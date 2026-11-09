@@ -101,6 +101,8 @@ final class SystemActions {
                         let listing = try await ArchiveEngine.shared.list(url, password: password)
                         var archive = await Self.makeArchive(listing, url: url)
                         archive.source?.password = password
+                        archive = await DiskImageAliasLoader.prepare(archive, password: password)
+                        if Task.isCancelled { throw EngineError(.cancelled) }
                         source = ArchiveAftercare.Source.capture(url)
                         return try await Extraction.run(archive, selection: nil, to: folder, onProgress: report)
                     }

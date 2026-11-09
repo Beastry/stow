@@ -12,7 +12,7 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_APPROACHABLE_CONCURRENCY: YES
-    MARKETING_VERSION: "0.1.6"
+    MARKETING_VERSION: "0.1.7"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_IDENTITY: "-"
@@ -26,8 +26,7 @@ settings:
       ONLY_ACTIVE_ARCH: NO
 packages:
   DSStore:
-    url: https://github.com/sindresorhus/DSStore
-    exactVersion: 1.0.0
+    path: ThirdParty/DSStore
   # Zstandard (BSD) for .tar.zst: the bundled 7zz reads zstd but can't write it. Linked into the
   # app and the engine; Quick Look never creates archives, so it goes without.
   zstd:

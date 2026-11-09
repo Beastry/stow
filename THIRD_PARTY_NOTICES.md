@@ -227,8 +227,11 @@ Bernard Spragg, dedicated to the public domain under CC0 1.0. `Resources/Sample/
 
 ## DSStore 1.0.0
 
-Stow links DSStore to write optional Finder metadata in DMG staging folders (#85).
-Pinned to exactly 1.0.0 in `project.yml`.
+Stow links DSStore to read installer-window metadata and write optional Finder metadata in DMG
+staging folders (#85). Vendored from 1.0.0 in `ThirdParty/DSStore`, with a local compatibility
+patch allowing valid tree nodes larger than the nominal 4 KiB page size. Allocator validation,
+file and node bounds, traversal limits, and record validation remain in place. Stow caps incoming
+installer stores at 4 MiB. See `ThirdParty/DSStore/README.stow.md` for provenance and validation.
 
 - Source: <https://github.com/sindresorhus/DSStore/tree/1.0.0>
 

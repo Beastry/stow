@@ -112,8 +112,8 @@ nonisolated struct SevenZip: Sendable {
     }
 
     /// Extracts with full paths into `directory`. `paths` empty means everything. Returns the links
-    /// 7-Zip refused to create because they pointed outside; it leaves an empty placeholder file for
-    /// each, which is removed here.
+    /// 7-Zip refused and Stow could not safely restore. 7-Zip also refuses contained parent-relative
+    /// links; verified ones are restored without enabling its unsafe-link extraction switch.
     func extract(_ archive: ArchiveInput, into directory: URL, paths: [String] = [], password: String? = nil,
                  progress: @escaping @Sendable (Double) -> Void) async throws(EngineError) -> [RemovedLink] {
         if Self.isTarball(name: archive.name) {
@@ -122,6 +122,7 @@ nonisolated struct SevenZip: Sendable {
 
         let input = try Prepared(archive)
         defer { input.cleanUp() }
+        let restoration = ContainedLinkRestoration(in: directory)
         // `-sns-`: on macOS 7-Zip would write HFS+/APFS extended attributes as extra files named
         // "file:com.apple.quarantine", which breaks the seal of every signed app in a disk image.
         var arguments = ["x", "-y", "-aou", "-sns-", "-bso0", "-bsp1", "-sccUTF-8", "-o" + directory.path]
@@ -147,19 +148,63 @@ nonisolated struct SevenZip: Sendable {
             if let fraction = parser.consume(chunk) { progress(fraction) }
         })
         let refused = Self.refusedLinks(in: result.errors)
-        for link in refused {
-            let placeholder = directory.appending(path: link.path)
-            if (try? placeholder.resourceValues(forKeys: [.fileSizeKey]).fileSize) == 0 {
-                try? FileManager.default.removeItem(at: placeholder)
-            }
-        }
         // 7-Zip exits 2 when it refused a link; that alone is containment working, not a failure.
         let otherErrors = result.errors.split(whereSeparator: \.isNewline)
             .filter { $0.hasPrefix("ERROR:") && !$0.contains("Dangerous link path was ignored") }
         if result.status != 0, !(result.status == 2 && otherErrors.isEmpty && !refused.isEmpty) {
             try Self.check(result)
         }
-        return refused
+        guard !refused.isEmpty, let restoration else { return refused }
+        let verified = try await verifiedRefusedLinks(refused, input: input, password: password)
+        return restoration.finish(refused, verified: verified)
+    }
+
+    /// Never trust a diagnostic to replace a file. Confirm a unique clean listed symlink and
+    /// compare its actual bounded bytes; HFS+ listings do not include symbolic-link targets.
+    private func verifiedRefusedLinks(_ refused: [RemovedLink], input: Prepared,
+                                      password: String?) async throws(EngineError) -> Set<RemovedLink> {
+        guard refused.count <= 2_048 else { return [] }
+        let result: RunResult
+        do {
+            result = try await read(["l", "-slt", "-sccUTF-8", input.path], input: input, password: password)
+        } catch {
+            if error.failure == .cancelled { throw error }
+            return []
+        }
+        guard result.status == 0, let listing = Self.parseListing(result.output) else { return [] }
+        let entries = Dictionary(grouping: listing.entries) {
+            ContainedLinkRestoration.collisionKey(PathContainment.containedPath(for: $0.path))
+        }
+        var verified = Set<RemovedLink>()
+        for link in refused {
+            guard !link.path.contains(where: \.isNewline), !link.path.contains("\0"),
+                  PathContainment.containedPath(for: link.path) == link.path,
+                  let matches = entries[ContainedLinkRestoration.collisionKey(link.path)], matches.count == 1,
+                  let entry = matches.first, entry.path == link.path, entry.isSymlink, !entry.isFolder,
+                  (1...4_096).contains(entry.size),
+                  !link.target.contains("\u{FFFD}"),
+                  entry.linkTarget == nil || entry.linkTarget == link.target else { continue }
+            do {
+                // An include switch keeps a leading '-' or '@' in the entry name literal.
+                let bytes = try await read(["x", "-so", "-bd", "-sns-", "-spd", input.path, "-i!" + entry.path],
+                                           input: input, password: password, outputLimit: 4_096)
+                if bytes.status == 0, Self.refusedLinkBytesMatch(link, entry: entry, bytes: bytes.output) {
+                    verified.insert(link)
+                }
+            } catch {
+                if error.failure == .cancelled { throw error }
+            }
+        }
+        return verified
+    }
+
+    /// APFS stores a terminating NUL in the symlink data fork and counts it in Size. Its explicit
+    /// Symbolic Link field names the actual POSIX target. HFS+/ZIP targets need no terminator.
+    static func refusedLinkBytesMatch(_ link: RemovedLink, entry: ListedEntry, bytes: String) -> Bool {
+        guard !link.target.isEmpty, !link.target.contains("\0"),
+              entry.size == bytes.utf8.count else { return false }
+        if bytes == link.target { return true }
+        return entry.linkTarget == link.target && bytes == link.target + "\0"
     }
 
     /// Reads every entry and checks it against the archive's checksums. Throws when data is damaged.
@@ -339,9 +384,11 @@ nonisolated struct SevenZip: Sendable {
     /// Keep this in the sandboxed read path, never in archive creation or mutation.
     private func read(_ arguments: [String], input: Prepared, password: String?,
                       onRetry: (@Sendable () -> Void)? = nil,
-                      onOutput: (@Sendable (Data) -> Void)? = nil) async throws(EngineError) -> RunResult {
+                      onOutput: (@Sendable (Data) -> Void)? = nil,
+                      outputLimit: Int? = nil) async throws(EngineError) -> RunResult {
         if Task.isCancelled { throw EngineError(.cancelled) }
-        let result = try await run(arguments, input: input.descriptor, password: password, onOutput: onOutput)
+        let result = try await run(arguments, input: input.descriptor, password: password, onOutput: onOutput,
+                                   outputLimit: outputLimit)
         guard Self.shouldScanForZIP(result),
               arguments.filter({ $0.hasPrefix("-t") }).allSatisfy({ $0 == "-tzip" }),
               let size = try? URL(filePath: input.path).resourceValues(forKeys: [.fileSizeKey]).fileSize,
@@ -349,7 +396,7 @@ nonisolated struct SevenZip: Sendable {
         if Task.isCancelled { throw EngineError(.cancelled) }
         onRetry?()
         return try await run(arguments.filter { $0 != "-tzip" } + ["-tzip:s\(size)b"],
-                             input: input.descriptor, password: password, onOutput: onOutput)
+                             input: input.descriptor, password: password, onOutput: onOutput, outputLimit: outputLimit)
     }
 
     static func shouldScanForZIP(_ result: RunResult) -> Bool {
@@ -375,7 +422,7 @@ nonisolated struct SevenZip: Sendable {
     /// `posix_spawn` rather than `Process`, which closes every descriptor but 0–2 in the child.
     /// `directory` is the child's working directory.
     func run(_ arguments: [String], input: Int32?, password: String?, in directory: URL? = nil,
-             onOutput: (@Sendable (Data) -> Void)? = nil) async throws(EngineError) -> RunResult {
+             onOutput: (@Sendable (Data) -> Void)? = nil, outputLimit: Int? = nil) async throws(EngineError) -> RunResult {
         var stdinPipe: [Int32] = [-1, -1], stdoutPipe: [Int32] = [-1, -1], stderrPipe: [Int32] = [-1, -1]
         guard pipe(&stdinPipe) == 0, pipe(&stdoutPipe) == 0, pipe(&stderrPipe) == 0 else {
             throw EngineError(.failed, String(cString: strerror(errno)))
@@ -416,15 +463,23 @@ nonisolated struct SevenZip: Sendable {
         try? toChild.close()
 
         let collected = Mutex((output: Data(), errors: Data()))
+        let child = ChildProcess(pid)
         let outputDone = drain(fromChild) { chunk in
-            collected.withLock { $0.output.append(chunk) }
+            let overflow = collected.withLock { data in
+                if let outputLimit {
+                    data.output.append(chunk.prefix(max(0, outputLimit + 1 - data.output.count)))
+                    return data.output.count > outputLimit
+                }
+                data.output.append(chunk)
+                return false
+            }
+            if overflow { child.terminate() }
             onOutput?(chunk)
         }
         let errorsDone = drain(errorsFromChild) { chunk in
             collected.withLock { $0.errors.append(chunk) }
         }
 
-        let child = ChildProcess(pid)
         let status = await withTaskCancellationHandler {
             if Task.isCancelled { child.terminate() }
             let status = await child.exitStatus()

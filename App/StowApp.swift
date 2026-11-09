@@ -195,6 +195,8 @@ final class AppState {
                 var archive = await Self.makeArchive(listing, url: url)
                 if Task.isCancelled || openingID != id { throw EngineError(.cancelled) }
                 archive.source?.password = password
+                archive = await DiskImageAliasLoader.prepare(archive, password: password)
+                if Task.isCancelled || openingID != id { throw EngineError(.cancelled) }
                 // A disk image opens as its author's window, icons and all, as ArcZip's does,
                 // rather than as plain files that turn into it a moment later (#344).
                 if InstallerCanvasLoader.wantsCanvas(archive), browser == nil { openingPhase = .preparingWindow }

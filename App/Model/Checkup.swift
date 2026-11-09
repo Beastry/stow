@@ -222,7 +222,8 @@ nonisolated extension Archive {
     /// Maps an engine listing into the browser's model: names are shown where they will actually be
     /// written, folders are synthesized from file paths, and the listing-time Checkup runs. Names
     /// stored in an older encoding are read with `nameEncoding` (nil: whichever suits each name).
-    init(listing: ArchiveListing, url: URL, name: String? = nil, nameEncoding: NameEncoding? = nil) {
+    init(listing: ArchiveListing, url: URL, name: String? = nil, nameEncoding: NameEncoding? = nil,
+         aliasDropTargets: [DiskImageLayout.DropTarget] = []) {
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let fallbackDate = values?.contentModificationDate ?? .now
         var scan = Checkup.ListingScan(archiveSize: listing.physicalSize ?? Int64(values?.fileSize ?? 0))
@@ -241,7 +242,7 @@ nonisolated extension Archive {
         let layout = format == .dmg || format == .iso
             ? DiskImageLayout.layout(of: listing.entries.map {
                 (PathContainment.containedPath(for: $0.path), $0.isFolder, $0.isSymlink, $0.linkTarget)
-            })
+            }, aliasDropTargets: aliasDropTargets)
             : DiskImageLayout.Layout()
 
         for item in listing.entries {
@@ -327,6 +328,7 @@ nonisolated extension Archive {
         installerExtras = layout.extras
         self.appleDoublePaths = appleDoublePaths
         dropTargets = layout.dropTargets
+        self.aliasDropTargets = aliasDropTargets
         self.presentationFiles = presentationFiles
     }
 

@@ -2,6 +2,76 @@ import AppKit
 import ImageIO
 import SwiftUI
 
+/// Finder aliases have a regular data fork, unlike the symlinks recognized in the listing. Read
+/// only their cached bookmark properties: resolving an alias could access the author's volume or
+/// a network share. Unrecognized files keep their ordinary content semantics.
+enum DiskImageAliasLoader {
+    static let maxAliasBytes: Int64 = 64 << 10
+    static let maxAliases = 32
+
+    /// Classification is rebuilt before the model receives it, so aliases are consistently dimmed,
+    /// excluded from Extract All and offered as install destinations. Unrecognized archives stay unchanged.
+    static func prepare(_ archive: Archive, password: String?) async -> Archive {
+        let targets = await load(in: archive, password: password)
+        guard !targets.isEmpty, !Task.isCancelled, let source = archive.source, let listing = source.listing else { return archive }
+        var result = Archive(listing: listing, url: source.url, name: archive.name, nameEncoding: source.nameEncoding,
+                             aliasDropTargets: archive.aliasDropTargets + targets)
+        result.source = source
+        // Preserve checks that finished after listing (for example the disk-image checksum), and
+        // add only the newly learned layout classification rather than generating duplicate cards.
+        result.checkup = archive.checkup + result.checkup.filter { finding in
+            !archive.checkup.contains { $0.title == finding.title && $0.detail == finding.detail && $0.severity == finding.severity }
+        }
+        return result
+    }
+
+    static func candidates(in archive: Archive) -> [String: Int64] {
+        guard archive.isDiskImage, let listing = archive.source?.listing else { return [:] }
+        let regular = Set(listing.entries.filter { !$0.isFolder && !$0.isSymlink && !PathContainment.escapes($0.path) }
+            .map { PathContainment.containedPath(for: $0.path) })
+        let entries = archive.children(of: archive.volumeRoot).filter {
+            !$0.isFolder && DiskImageLayout.applicationsNames.contains($0.name)
+                && $0.size > 0 && $0.size <= maxAliasBytes && regular.contains($0.path)
+                && archive.source?.storedPaths[$0.path]?.count == 1
+        }.sorted {
+            if ($0.name == "Applications") != ($1.name == "Applications") { return $0.name == "Applications" }
+            return $0.path < $1.path
+        }
+        return Dictionary(uniqueKeysWithValues: entries.prefix(maxAliases).map { ($0.path, maxAliasBytes) })
+    }
+
+    static func load(in archive: Archive, password: String?) async -> [DiskImageLayout.DropTarget] {
+        guard !Task.isCancelled else { return [] }
+        let wanted = candidates(in: archive)
+        guard !wanted.isEmpty, let source = archive.source,
+              let files = try? await ArchiveFileReader.read(wanted, from: archive, source: source, password: password),
+              !Task.isCancelled else { return [] }
+        return files.keys.sorted().compactMap { path in
+            guard let data = files[path], let folder = cachedFolder(in: data) else { return nil }
+            return DiskImageLayout.DropTarget(path: path, folder: folder)
+        }
+    }
+
+    /// Converts a Finder alias-file wrapper to bookmark data without resolving its destination.
+    /// Foundation reads cached path/directory properties even when that destination no longer exists.
+    static func cachedFolder(in data: Data) -> String? {
+        guard data.count >= 16, data.count <= maxAliasBytes,
+              data.prefix(4) == Data("book".utf8), data[8..<12] == Data("mark".utf8) else { return nil }
+        let directory = FileManager.default.temporaryDirectory.appending(path: "StowAlias-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+            let file = directory.appending(path: "alias")
+            try data.write(to: file, options: .atomic)
+            let bookmark = try URL.bookmarkData(withContentsOf: file)
+            guard bookmark.count <= maxAliasBytes,
+                  let values = URL.resourceValues(forKeys: [.pathKey, .isDirectoryKey], fromBookmarkData: bookmark),
+                  values.isDirectory == true, let path = values.path, DiskImageLayout.isSafeDropFolder(path) else { return nil }
+            return path
+        } catch { return nil }
+    }
+}
+
 // MARK: - Model
 
 /// A disk image's own window, ready to draw (#344): the author's background, the apps' own icons

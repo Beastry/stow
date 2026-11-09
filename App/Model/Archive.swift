@@ -275,6 +275,9 @@ nonisolated struct Archive: Identifiable, Sendable {
     /// Stored paths of the AppleDouble files a Mac packed (`__MACOSX/…/._name`, `._name`).
     var appleDoublePaths: Set<String> = []
     var dropTargets: [DiskImageLayout.DropTarget] = []
+    /// Finder bookmark destinations verified from archive-contained bytes. Reused when only
+    /// the archive's name/encoding changes; an on-disk reload reads the metadata again.
+    var aliasDropTargets: [DiskImageLayout.DropTarget] = []
     /// Hidden files that dress the volume's window — its `.DS_Store` and what sits in the hidden
     /// folders beside it — with their listed sizes, by contained path. Read for the installer
     /// canvas (#344); never browsed or extracted with the contents.
