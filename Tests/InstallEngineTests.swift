@@ -226,7 +226,7 @@ struct InstallEngineTests {
         #expect(archive.format == .dmg)
         #expect(archive.dropTargets.map(\.folder) == ["/Applications"])
         #expect(archive.children(of: archive.volumeRoot).map(\.name) == ["Fixture Tool.app"], "\(archive.children(of: archive.volumeRoot).map(\.name.debugDescription))")
-        #expect(archive.checkup.contains { $0.title == "Installer layout hidden" })
+        #expect(archive.checkup.contains { $0.title == "Installer layout files" })
         let model = BrowserModel(archive: archive)
         #expect(model.folder == archive.volumeRoot)
         #expect(model.selectedEntries.map(\.name) == ["Fixture Tool.app"])

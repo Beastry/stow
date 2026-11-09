@@ -187,8 +187,11 @@ nonisolated struct ArchiveEntry: Identifiable, Hashable, Sendable {
     var kind: EntryKind { isFolder && !isPackage ? .folder : EntryKind.infer(fromName: name) }
 
     /// A folder macOS shows as one file: apps, bundles, `.rtfd`. Opened with Show Package Contents.
-    var isPackage: Bool {
-        guard isFolder else { return false }
+    var isPackage: Bool { isFolder && Self.isPackageName(name) }
+
+    /// Whether a folder with this name is one macOS shows as a file (`.app`, `.pkg`, `.bundle`,
+    /// `.rtfd`). A dotted name like "Tool-v2.7.1" is not: its "extension" names no package type.
+    static func isPackageName(_ name: String) -> Bool {
         let ext = (name as NSString).pathExtension
         guard !ext.isEmpty, let type = UTType(filenameExtension: ext, conformingTo: .directory), !type.isDynamic else {
             return false
@@ -272,6 +275,10 @@ nonisolated struct Archive: Identifiable, Sendable {
     /// Stored paths of the AppleDouble files a Mac packed (`__MACOSX/…/._name`, `._name`).
     var appleDoublePaths: Set<String> = []
     var dropTargets: [DiskImageLayout.DropTarget] = []
+    /// Hidden files that dress the volume's window — its `.DS_Store` and what sits in the hidden
+    /// folders beside it — with their listed sizes, by contained path. Read for the installer
+    /// canvas (#344); never browsed or extracted with the contents.
+    var presentationFiles: [String: Int64] = [:]
 
     var isDiskImage: Bool { format == .dmg || format == .iso }
 
@@ -318,15 +325,24 @@ nonisolated struct Archive: Identifiable, Sendable {
             ArchiveEntry(path: path, isFolder: true, size: info.size, packedSize: info.packed, modified: info.modified)
         }
         // Helper items may sit in folders of their own (`__MACOSX/…`); those folders are helpers too.
+        // They add up what's in them, as other folders do.
         var helperEntries = helpers
-        var known = Set(visible.map(\.path)).union(helpers.map(\.path))
-        for helper in helpers {
+        let visiblePaths = Set(visible.map(\.path))
+        var helperFolders: [String: (size: Int64, packed: Int64?, modified: Date)] = [:]
+        for helper in helpers where !helper.isFolder {
             var parent = helper.parent
-            while !parent.isEmpty, known.insert(parent).inserted {
-                helperEntries.append(ArchiveEntry(path: parent, isFolder: true, size: 0, packedSize: 0,
-                                                  modified: helper.modified, isHelper: true))
+            while !parent.isEmpty, !visiblePaths.contains(parent) {
+                let current = helperFolders[parent] ?? (0, 0, .distantPast)
+                helperFolders[parent] = (current.size + helper.size,
+                                         current.packed.flatMap { packed in helper.packedSize.map { packed + $0 } },
+                                         max(current.modified, helper.modified))
                 parent = ArchiveEntry.parent(of: parent)
             }
+        }
+        let helperPaths = Set(helpers.map(\.path))
+        for (path, info) in helperFolders where !helperPaths.contains(path) {
+            helperEntries.append(ArchiveEntry(path: path, isFolder: true, size: info.size, packedSize: info.packed,
+                                              modified: info.modified, isHelper: true))
         }
         index = ArchiveIndex(visible: visible, helpers: helperEntries, containerPackedSize: containerPackedSize)
     }
@@ -343,6 +359,11 @@ nonisolated struct Archive: Identifiable, Sendable {
     var packedSize: Int64? { index.packedSize }
     var packedSizeIncludesContainer: Bool { index.containerPackedSize != nil }
     var hasHelpers: Bool { !index.helpers.isEmpty }
+
+    /// The image's "drag here" shortcut at this path, if it is one.
+    func dropTarget(at path: String) -> DiskImageLayout.DropTarget? {
+        dropTargets.first { $0.path == path }
+    }
 
     var hasCautions: Bool { checkup.contains { $0.severity == .caution } }
 

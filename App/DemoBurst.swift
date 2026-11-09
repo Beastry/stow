@@ -46,10 +46,18 @@ enum DemoBurst {
 
     static func run(_ transition: String, app: AppState, label: String) async -> URL? {
         let steps = steps(for: transition, app: app)
-        let length = (steps.map(\.at).max() ?? 0) + 700
+        // `-StowBurstLength <ms>` records longer: a real archive's opening takes a while.
+        let length = max((steps.map(\.at).max() ?? 0) + 700, UserDefaults.standard.integer(forKey: "StowBurstLength"))
         let grabber = FrameGrabber()
+        // "opening" of a real archive (scene open): the row starts when the archive arrives.
+        final class Arrival { var at: Int? }
+        let arrival = Arrival()
+        let begin = ProcessInfo.processInfo.systemUptime
         let windows = Task { @MainActor in
             while !Task.isCancelled {
+                if arrival.at == nil, app.browser != nil, !app.isOpening {
+                    arrival.at = Int((ProcessInfo.processInfo.systemUptime - begin) * 1000)
+                }
                 // The Tray is a panel of its own; leave out the welcome window behind it.
                 grabber.windowIDs = NSApp.windows
                     .filter { $0.isVisible && !$0.className.contains("StatusBar") && $0.windowNumber > 0 }
@@ -74,7 +82,10 @@ enum DemoBurst {
         if rest > 0 { try? await Task.sleep(for: .seconds(rest)) }
         windows.cancel()
         let frames = grabber.stop()
-        let rows = steps.isEmpty ? [Step(at: 0, name: "shown", cause: .auto) {}] : steps
+        let arrived = transition == "opening" && UserDefaults.standard.string(forKey: "StowOpen") != nil ? arrival.at : nil
+        let rows = !steps.isEmpty ? steps
+            : arrived.map { [Step(at: $0, name: "archive arrives", cause: .auto) {}] }
+            ?? [Step(at: 0, name: "shown", cause: .auto) {}]
         let pixels = crop.map { CGRect(x: $0.minX * scale, y: $0.minY * scale, width: $0.width * scale, height: $0.height * scale) }
         return sheet(frames, rows: rows, crop: pixels, name: "\(label)-burst-\(transition)")
     }
@@ -265,7 +276,8 @@ enum DemoBurst {
         }
         guard let first = images.compactMap({ $0 }).first else { return nil }
         let isOpening = rows.count == 1 && rows[0].name == "shown"
-        let offsets = isOpening ? [0, 100, 200, 300, 380, 420, 460, 500, 560, 650] : Self.offsets
+        let custom = UserDefaults.standard.string(forKey: "StowBurstOffsets") != nil
+        let offsets = isOpening && !custom ? [0, 100, 200, 300, 380, 420, 460, 500, 560, 650] : Self.offsets
         let cellWidth: CGFloat = min(CGFloat(images.compactMap { $0?.width }.max() ?? 300), crop == nil ? 360 : 440)
         let aspect = CGFloat(first.height) / CGFloat(max(first.width, 1))
         let cellHeight = (cellWidth * aspect).rounded()

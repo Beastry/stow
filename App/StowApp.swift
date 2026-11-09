@@ -60,6 +60,9 @@ final class AppState {
     var isChoosingBatch = false
     private(set) var isOpening = false
     private(set) var openingName: String?
+    /// What the opening card says is being read.
+    private(set) var openingPhase: OpeningPhase = .reading
+    private var openingStarted: ContinuousClock.Instant?
     /// Loading and open failures belong to Browser too, without a Welcome interlude.
     var usesBrowserWindow: Bool { browser != nil || isOpening || (openingName != nil && openFailure != nil) }
     var presentationDefaults = UserDefaults.standard
@@ -156,6 +159,8 @@ final class AppState {
         isOpening = true
         openingName = url.lastPathComponent
         openingURL = url
+        openingPhase = .reading
+        openingStarted = .now
         let scoped = url.startAccessingSecurityScopedResource()
         openingTask = Task {
             var recovered: SourceReadAccess.Grant?
@@ -190,16 +195,29 @@ final class AppState {
                 var archive = await Self.makeArchive(listing, url: url)
                 if Task.isCancelled || openingID != id { throw EngineError(.cancelled) }
                 archive.source?.password = password
+                // A disk image opens as its author's window, icons and all, as ArcZip's does,
+                // rather than as plain files that turn into it a moment later (#344).
+                if InstallerCanvasLoader.wantsCanvas(archive), browser == nil { openingPhase = .preparingWindow }
+                let canvas = await InstallerCanvasLoader.prepare(archive, password: password)
+                if Task.isCancelled || openingID != id {
+                    canvas.cancel()
+                    throw EngineError(.cancelled)
+                }
                 releaseScope()
                 scopedURL = scoped ? url : nil
                 sourceGrant = recovered
                 transferred = true
                 // Files received from a drag (Mail, chat apps) live in a folder Stow empties at launch.
                 if !OtherAppFiles.isReceived(url) { recents.add(url) }
-                if browser?.isListing == true { browser?.applyListing(archive, complete: true) }
+                if browser?.isListing == true { browser?.applyListing(archive, complete: true, installerCanvas: canvas) }
                 else {
                     browser?.quickLook.close()
-                    browser = makeBrowser(archive)
+                    // The opening card has been up: the window keeps it for its first frame and
+                    // lets it go as the files settle in. A quick open just shows them.
+                    let waited = browser == nil && openingStarted.map { .now - $0 >= ArchiveOpeningStatus.delay } == true
+                    let model = makeBrowser(archive, installerCanvas: canvas)
+                    model.arrivesAfterWait = waited
+                    browser = model
                 }
                 browser?.verifyDiskImage()
                 if let recovered, let error = recovered.persistenceError, let browser,
@@ -447,8 +465,9 @@ final class AppState {
         browser = makeBrowser(archive)
     }
 
-    private func makeBrowser(_ archive: Archive, isListing: Bool = false) -> BrowserModel {
-        let model = BrowserModel(archive: archive, isListing: isListing)
+    private func makeBrowser(_ archive: Archive, isListing: Bool = false,
+                             installerCanvas: InstallerCanvasStart = .load) -> BrowserModel {
+        let model = BrowserModel(archive: archive, isListing: isListing, installerCanvas: installerCanvas)
         model.passwords = PasswordHook(prompt: passwords)
         // A retained background job may finish after a different archive has taken over.
         model.onArchiveGone = { [weak self, weak model] in
@@ -696,7 +715,7 @@ struct RootView: View {
                 BrowserView(model: browser)
                     .overlay(alignment: .bottom) { PackActivityAccessory() }
             } else {
-                BrowserOpeningView(name: app.openingName ?? "", isOpening: app.isOpening) {
+                BrowserOpeningView(name: app.openingName ?? "", isOpening: app.isOpening, phase: app.openingPhase) {
                     app.cancelCloudDownload(); app.cancelOpening()
                 }
             }
@@ -725,6 +744,7 @@ struct RootView: View {
 private struct BrowserOpeningView: View {
     let name: String
     let isOpening: Bool
+    let phase: OpeningPhase
     let cancel: () -> Void
 
     private var kind: String {
@@ -733,9 +753,16 @@ private struct BrowserOpeningView: View {
 
     var body: some View {
         ZStack {
-            if isOpening { ArchiveOpeningStatus(name: name, cancel: cancel) }
+            if isOpening { ArchiveOpeningStatus(name: name, phase: phase, cancel: cancel) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Details' column is already there, so the window keeps its shape as the archive arrives
+        // and the card stands where the files will be.
+        .inspector(isPresented: .constant(true)) {
+            Color.clear
+                .accessibilityHidden(true)
+                .inspectorColumnWidth(min: 250, ideal: DetailsPane.idealWidth, max: 400)
+        }
         .navigationTitle(name.isEmpty ? "Stow" : name)
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)

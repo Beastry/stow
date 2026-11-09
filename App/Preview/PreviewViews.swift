@@ -15,6 +15,10 @@ struct LiveThumbnail: View {
         Group {
             if archive.source == nil {
                 EntryThumbnail(entry: entry, style: .tile)
+            } else if let target = archive.dropTarget(at: entry.path) {
+                DropTargetIcon(target: target).padding(4)
+            } else if ArchivedAppIcon.applies(to: entry) {
+                ArchivedAppIconView(entry: entry, model: model).padding(4)
             } else if let image = image ?? model.previews.cachedThumbnail(for: entry, in: archive, side: side) {
                 Image(nsImage: image)
                     .resizable()
@@ -343,6 +347,10 @@ struct RowIcon: View {
         let archive = model.archive
         if archive.source == nil {
             EntryThumbnail(entry: entry, style: .row)
+        } else if let target = archive.dropTarget(at: entry.path) {
+            DropTargetIcon(target: target)
+        } else if ArchivedAppIcon.applies(to: entry) {
+            ArchivedAppIconView(entry: entry, model: model)
         } else if Self.showsThumbnail(entry), let image = model.previews.cachedThumbnail(for: entry, in: archive, side: 96) {
             // A page is white on the white list; the shadow follows its edge (or a picture's
             // outline) so it never fades into the row.
@@ -365,5 +373,18 @@ struct RowIcon: View {
         case .text, .data, .font: false
         default: true
         }
+    }
+}
+
+/// A disk image's "drag here" shortcut, drawn as the folder it points at (Applications), as Finder
+/// draws it in the image's window.
+struct DropTargetIcon: View {
+    let target: DiskImageLayout.DropTarget
+
+    var body: some View {
+        Image(nsImage: NSWorkspace.shared.icon(forFile: target.folder))
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
     }
 }

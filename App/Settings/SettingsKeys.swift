@@ -12,6 +12,14 @@ nonisolated enum SettingsKeys {
     static let openInGlance = "glance.openFromFinder" // Legacy fixed-mode preference.
     static let archiveWindowMode = "browse.archiveWindowMode"
     static let lastArchiveWindow = "browse.lastArchiveWindow"
+    /// Whether a disk image opens with its hidden items (its window dressing) shown: the last
+    /// choice made with the switch beside the path or View › Show macOS Helper Items. Shown until
+    /// someone hides them (#344).
+    static let diskImageHelpers = "browse.showsDiskImageHelpers"
+
+    static func showsDiskImageHelpers(in store: UserDefaults = .standard) -> Bool {
+        store.object(forKey: diskImageHelpers) as? Bool ?? true
+    }
 
     enum ArchiveWindow: String, Sendable { case browser, glance }
     enum ArchiveWindowMode: String, CaseIterable, Identifiable, Sendable {

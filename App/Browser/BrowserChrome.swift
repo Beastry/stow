@@ -25,6 +25,7 @@ struct BrowserNavigation: View {
         HStack(spacing: Space.s) {
             NavigationCapsule(model: model)
             Spacer(minLength: 0)
+            HiddenItemsSwitch(model: model)
         }
         .padding(.horizontal, FloatingGlass.edgeInset)
         .padding(.top, FloatingGlass.topInset)
@@ -138,43 +139,137 @@ struct ArchiveTitleLabel: View {
     }
 }
 
-/// What an archive window shows while its archive is still being read (Browser and Glance): a small
-/// spinner and its name. It waits 0.4 s before fading in, as the preparing-a-preview capsule does,
-/// so an archive that opens at once never flashes it; the window's own chrome is already in place.
+/// What an opening window is waiting for: the listing, then, for a disk image its author laid
+/// out, that window (#344).
+enum OpeningPhase: Equatable {
+    case reading
+    case preparingWindow
+}
+
+/// What an archive window shows while its archive is still being read (Browser and Glance): a
+/// Liquid Glass card with the archive's badge and name, what's being read, and a sweep along a
+/// track, as ArcZip's opening card has. It waits 0.4 s before settling in, as the
+/// preparing-a-preview capsule does, so an archive that opens at once never flashes it; the
+/// window's own chrome is already in place. When the archive arrives, the window keeps the card up
+/// for its first frame and lets it go as the files settle in (`ArchiveArrival`).
 struct ArchiveOpeningStatus: View {
     let name: String
+    var phase: OpeningPhase = .reading
     /// The Browser offers Cancel (and Esc); Glance stops with its Close button instead.
     var cancel: (() -> Void)?
+    /// Already on screen: the archive's own window keeps it up as it arrives, without the wait.
+    var isAlreadyShown = false
     @State private var isShown = false
     @Environment(\.reducesMotion) private var reduceMotion
 
     static let delay = Duration.milliseconds(400)
+    static let width: CGFloat = 360
+
+    private var format: ArchiveFormat { ArchiveFormat.infer(fromName: name) ?? .other }
+
+    private var detail: String {
+        switch phase {
+        case .reading where format == .dmg: String(localized: "Reading the disk image…")
+        case .reading: String(localized: "Reading the archive…")
+        case .preparingWindow: String(localized: "Preparing the installer window…")
+        }
+    }
 
     var body: some View {
-        VStack(spacing: Space.m) {
-            ProgressView().controlSize(.small)
-            Text("Opening “\(name)”…")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .multilineTextAlignment(.center)
-            if let cancel {
-                Button("Cancel", action: cancel)
-                    .keyboardShortcut(.cancelAction)
-                    .padding(.top, Space.xs)
+        let shown = isShown || isAlreadyShown
+        VStack(alignment: .leading, spacing: Space.m + 2) {
+            HStack(alignment: .center, spacing: Space.m) {
+                FormatBadge(format: format, height: 36)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: name)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    // A new phase swaps its words with a soft blur, as the Pack sentence's tokens do.
+                    ZStack(alignment: .leading) {
+                        Text(detail)
+                            .id(phase)
+                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .animation(Motion.resolved(Motion.token, reduceMotion: reduceMotion), value: phase)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Opening “\(name)”…"))
+                .accessibilityValue(detail)
+                Spacer(minLength: 0)
+                if let cancel {
+                    Button("Cancel", action: cancel)
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                        .keyboardShortcut(.cancelAction)
+                }
             }
+            OpeningSweep()
+                .accessibilityHidden(true)
         }
+        .padding(Space.l)
+        .frame(maxWidth: Self.width)
+        .accessibleGlass(in: .rect(cornerRadius: Radius.panel))
+        // Lifted off the window's plain surface, which gives the glass nothing to show through.
+        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
         .padding(Space.xl)
-        .frame(maxWidth: 420)
-        .opacity(isShown ? 1 : 0)
+        // Settles in from just above and slightly small, as the preparing capsule does; fades only
+        // under Reduce Motion.
+        .opacity(shown ? 1 : 0)
+        .scaleEffect(shown || reduceMotion ? 1 : 0.96)
+        .offset(y: shown || reduceMotion ? 0 : -4)
         // Esc cancels from the start; a click can't land on a Cancel nobody sees yet.
-        .allowsHitTesting(isShown)
-        .accessibilityHidden(!isShown)
+        .allowsHitTesting(shown)
+        .accessibilityElement(children: .contain)
+        .accessibilityHidden(!shown)
         .task {
+            guard !isAlreadyShown else { return }
             try? await Task.sleep(for: Self.delay)
             withAnimation(Motion.resolved(Motion.status, reduceMotion: reduceMotion)) { isShown = true }
         }
+    }
+}
+
+/// The opening card's track: a soft band of the accent crossing it again and again, since reading
+/// a listing measures nothing to fill it with. Constant motion, so linear. Under Reduce Motion the
+/// band rests in the middle.
+private struct OpeningSweep: View {
+    @Environment(\.reducesMotion) private var reduceMotion
+    private static let period = 1.6
+
+    var body: some View {
+        Capsule()
+            .fill(.primary.opacity(0.08))
+            .frame(height: 4)
+            .overlay {
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    let length = width * 0.36
+                    if reduceMotion {
+                        band(width: length).offset(x: (width - length) / 2)
+                    } else {
+                        TimelineView(.animation) { context in
+                            let time = context.date.timeIntervalSinceReferenceDate
+                            let progress = time.truncatingRemainder(dividingBy: Self.period) / Self.period
+                            band(width: length).offset(x: -length + (width + length) * progress)
+                        }
+                    }
+                }
+                .clipShape(.capsule)
+            }
+    }
+
+    private func band(width: CGFloat) -> some View {
+        Capsule()
+            .fill(LinearGradient(stops: [.init(color: .accentColor.opacity(0), location: 0),
+                                         .init(color: .accentColor, location: 0.5),
+                                         .init(color: .accentColor.opacity(0), location: 1)],
+                                 startPoint: .leading, endPoint: .trailing))
+            .frame(width: width)
     }
 }
 
@@ -704,5 +799,93 @@ nonisolated struct TitleBarLayout: Equatable, Sendable {
             searchWidth = Self.buttonWidth
         }
         titleMaxWidth = min(max(room - searchWidth, Self.titleSqueezed), Self.titleMaximum)
+    }
+}
+
+/// How an archive's window takes over from its opening card (DESIGN.md › Motion): its first frame
+/// still shows the card over the files, already laid out but not yet shown; then the card steps
+/// back and out, and the files fade in just behind it. Only after a wait the card was seen for:
+/// an archive that opens at once just shows. Fades only under Reduce Motion.
+@MainActor
+@Observable
+final class ArchiveArrival {
+    private(set) var showsCard: Bool
+    private(set) var showsFiles: Bool
+
+    /// The window's first layout pass: thumbnails and the canvas are placed before anything shows.
+    static let settle = Duration.milliseconds(60)
+    /// The files follow the card a beat later, so the two never sit half-faded over each other.
+    static let stagger = 0.06
+
+    init(afterWait: Bool) {
+        showsCard = afterWait
+        showsFiles = !afterWait
+    }
+
+    func play(reduceMotion: Bool) async {
+        guard !showsFiles else { return }
+        try? await Task.sleep(for: Self.settle)
+        withAnimation(Motion.resolved(Motion.exit, reduceMotion: reduceMotion)) { showsCard = false }
+        withAnimation(Motion.resolved(Motion.status, reduceMotion: reduceMotion).delay(Self.stagger)) { showsFiles = true }
+    }
+}
+
+extension View {
+    /// Files waiting under the opening card: hidden until the card steps out. They only fade: the
+    /// list and columns are AppKit tables, and scaling one moves every row's geometry on each frame,
+    /// which AppKit can abort on mid-layout.
+    func arriving(_ arrival: ArchiveArrival) -> some View {
+        opacity(arrival.showsFiles ? 1 : 0)
+    }
+
+    /// The opening card, kept over the window's first frame until the files take over.
+    /// `showsCancel`: as the opening card had it (the Browser's has Cancel, Glance's doesn't), so
+    /// nothing in the card changes as the window takes it over.
+    func arrivalCard(_ arrival: ArchiveArrival, name: String, phase: OpeningPhase, showsCancel: Bool,
+                     reduceMotion: Bool) -> some View {
+        overlay {
+            if arrival.showsCard {
+                ArchiveOpeningStatus(name: name, phase: phase, cancel: showsCancel ? {} : nil, isAlreadyShown: true)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+/// Shows or hides the folder's hidden items — a disk image's window dressing, a Mac's `__MACOSX`
+/// and `.DS_Store` — for anyone who doesn't know View › Show macOS Helper Items (⇧⌘.), as ArcZip's
+/// "Shown 2 items" does. It sits at the far end of the path's row in its own glass, only where
+/// there's something to show, and says how many. On, it's lit as Glance's Pin on Top is: the
+/// symbol in the accent with a ring round it. Not while searching, where results come from
+/// everywhere, nor over a disk image's own window, which never shows them.
+struct HiddenItemsSwitch: View {
+    @Bindable var model: BrowserModel
+
+    var body: some View {
+        let count = model.helperItemCount
+        // The installer window never shows them, so there it would switch nothing.
+        if count > 0, !model.isSearching, !model.showsInstallerCanvas {
+            let shown = model.showHelperItems
+            Button {
+                model.setShowsHelperItems(!shown)
+            } label: {
+                Label {
+                    Text(shown ? "\(count) shown" : "\(count) hidden").monospacedDigit()
+                } icon: {
+                    Image(systemName: shown ? "eye" : "eye.slash")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+            }
+            .buttonStyle(ActionButtonStyle(height: FloatingGlass.barHeight - 2 * FloatingGlass.barInset, isOn: shown))
+            .padding(FloatingGlass.barInset)
+            .frame(height: FloatingGlass.barHeight)
+            .accessibleGlass(in: .capsule)
+            .fixedSize()
+            .accessibilityLabel(shown ? String(localized: "Hide Hidden Items") : String(localized: "Show Hidden Items"))
+            .accessibilityValue(String(localized: "\(count) items"))
+            .help(shown ? String(localized: "Hide the \(count) hidden items here, such as a disk image’s layout files (⇧⌘.)")
+                        : String(localized: "Show the \(count) hidden items here, such as a disk image’s layout files (⇧⌘.)"))
+        }
     }
 }

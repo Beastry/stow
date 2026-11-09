@@ -31,10 +31,18 @@ struct BrowserView: View {
     @State private var shownSearchWidth = TitleBarLayout.buttonWidth
     @State private var searchWasOpen = false
     @State private var searchWidthMove: Task<Void, Never>?
+    /// Taking over from the opening card, when it was seen.
+    @State private var arrival: ArchiveArrival
+
+    init(model: BrowserModel) {
+        self.model = model
+        _arrival = State(initialValue: ArchiveArrival(afterWait: model.arrivesAfterWait))
+    }
 
     var body: some View {
         // Keep the navigation inset attached to one stable container as the file view changes.
         ZStack { content }
+            .arriving(arrival)
             // An encrypted preview being read before Quick Look can show it.
             .overlay(alignment: .top) { QuickLookPreparingCapsule(model: model, passwords: app.passwords) }
             .accessibilityElement(children: .contain)
@@ -75,13 +83,18 @@ struct BrowserView: View {
                     else if model.editSession.isEdited { UnsavedChangesBar(model: model, showsSave: false) }
                 }
             }
+            .arriving(arrival)
+            // Over the files' column, where the opening card stood and the files will be.
+            .arrivalCard(arrival, name: model.archive.name, phase: app.openingPhase, showsCancel: true, reduceMotion: reduceMotion)
             // Details is part of the window, not an option: no toggle, no close button.
             .inspector(isPresented: .constant(true)) {
                 DetailsPane(model: model)
+                    .arriving(arrival)
                     .accessibilityElement(children: .contain)
                     .accessibilitySortPriority(1)
                     .inspectorColumnWidth(min: 250, ideal: DetailsPane.idealWidth, max: 400)
             }
+            .task { await arrival.play(reduceMotion: reduceMotion) }
             // The whole window's width, Details included: the title bar spans it (`TitleBarLayout`).
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
             // The window keeps its title (Window menu, Mission Control); the title bar shows
@@ -238,7 +251,13 @@ struct BrowserView: View {
             // View-mode switches are keyboard-speed actions: no animation. Search keeps the
             // keyboard when results appear or clearing it restores Columns.
             switch model.isSearching && model.viewMode == .columns ? .list : model.viewMode {
-            case .grid: ContentGrid(model: model, isSearchFocused: $isSearchFocused)
+            case .grid:
+                if model.showsInstallerCanvas, let canvas = model.installerCanvas {
+                    InstallerCanvasView(model: model, canvas: canvas, isSearchFocused: $isSearchFocused)
+                        .transition(.opacity)
+                } else {
+                    ContentGrid(model: model, isSearchFocused: $isSearchFocused)
+                }
             case .list: ContentList(model: model, isSearchFocused: $isSearchFocused)
             case .columns: ContentColumns(model: model, isSearchFocused: $isSearchFocused)
             }

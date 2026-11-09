@@ -89,16 +89,31 @@ struct GlanceView: View {
     let glance: GlanceController
     @AppStorage(SettingsKeys.nextStepsShown) private var showsNextSteps = true
     @AppStorage(SettingsKeys.nextStepsHidden) private var hiddenSteps = NextStepsSettings.encode(NextStepsSettings.defaultHidden)
+    /// Taking over from the opening card, when it was seen.
+    @State private var arrival: ArchiveArrival
+
+    init(model: BrowserModel, glance: GlanceController) {
+        self.model = model
+        self.glance = glance
+        _arrival = State(initialValue: ArchiveArrival(afterWait: model.arrivesAfterWait))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            GlanceHeader(model: model)
-            SourceAccessNotice(model: model, placement: .glance)
-                .padding(.horizontal, GlanceLayout.inset)
-            ArchiveNotices(findings: model.archive.checkup, placement: .glance)
-                .padding(.horizontal, GlanceLayout.inset)
+            // The window controls were there while it opened and stay put; the archive's own
+            // parts settle in as the opening card goes.
+            VStack(spacing: 0) {
+                GlanceHeader(model: model)
+                SourceAccessNotice(model: model, placement: .glance)
+                    .padding(.horizontal, GlanceLayout.inset)
+                ArchiveNotices(findings: model.archive.checkup, placement: .glance)
+                    .padding(.horizontal, GlanceLayout.inset)
+            }
+            .arriving(arrival)
             files
         }
+        .arrivalCard(arrival, name: model.archive.name, phase: app.openingPhase, showsCancel: false, reduceMotion: reduceMotion)
+        .task { await arrival.play(reduceMotion: reduceMotion) }
         // The header takes the title bar's place, so it starts at the window's top edge.
         .ignoresSafeArea(.container, edges: .top)
         // The window keeps its title for the Window menu, Mission Control and accessibility;
@@ -139,12 +154,17 @@ struct GlanceView: View {
     /// bottom, and the full window's unsaved-changes and changed-on-disk bars under them.
     private var files: some View {
         content
+            .arriving(arrival)
             // An encrypted preview being read before Quick Look can show it.
             .overlay(alignment: .top) { QuickLookPreparingCapsule(model: model, passwords: app.passwords) }
             .safeAreaInset(edge: .top, spacing: 0) {
                 // Glance has no Search, so the path has the window's width.
-                NavigationCapsule(model: model, fillsWidth: true)
-                    .padding(.horizontal, GlanceLayout.inset)
+                HStack(spacing: Space.s) {
+                    NavigationCapsule(model: model, fillsWidth: true)
+                    HiddenItemsSwitch(model: model)
+                }
+                .padding(.horizontal, GlanceLayout.inset)
+                .arriving(arrival)
             }
             .overlay(alignment: .bottom) { floatingControls }
             // Glance shares the Browser's editable files surface, including its navigation and
@@ -164,6 +184,12 @@ struct GlanceView: View {
         } else if model.visibleEntries.isEmpty {
             // The full window's words; there's no Open panel here, so an empty archive offers nothing.
             EmptyContentView(model: model)
+        } else if model.showsInstallerCanvas, let canvas = model.installerCanvas {
+            // The image's own window, as ArcZip's Mini shows it: drop the app on Applications or
+            // choose Install App, with the same checks as the full window.
+            InstallerCanvasView(model: model, canvas: canvas, isSearchFocused: .constant(false))
+                .safeAreaPadding(.bottom, 56)
+                .transition(.opacity)
         } else {
             GlanceList(model: model)
         }
@@ -199,12 +225,14 @@ struct GlanceView: View {
                         .transition(.emerge(reduceMotion: reduceMotion))
                 }
             }
+            .arriving(arrival)
             // Eases out for a click, quicker back in; none for arrow keys, ⌘A or Esc.
             .animation(Motion.presence(showsActions, reduceMotion: reduceMotion), value: showsActions)
             ViewThatFits(in: .horizontal) {
                 ArchiveActions(model: model, prominent: extractsProminently)
                 ArchiveActions(model: model, prominent: extractsProminently, compact: true)
             }
+            .arriving(arrival)
             // The accent passes to the selection's action as a status change; a key press just swaps it.
             .animation(Motion.byKeyboard ? nil : Motion.resolved(Motion.status, reduceMotion: reduceMotion),
                        value: extractsProminently)

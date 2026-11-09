@@ -334,7 +334,8 @@ struct ContentList: View {
                 .alignment(.trailing)
 
                 TableColumn(String(localized: "Kind")) { entry in
-                    Text(entry.kindDescription).foregroundStyle(.secondary).lineLimit(1)
+                    Text(model.archive.dropTarget(at: entry.path) != nil ? String(localized: "Shortcut") : entry.kindDescription)
+                        .foregroundStyle(.secondary).lineLimit(1)
                 }
                 .width(min: 64, ideal: 150, max: 220)
 

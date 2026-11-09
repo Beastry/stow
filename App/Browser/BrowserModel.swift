@@ -76,7 +76,9 @@ final class BrowserModel {
     }
     var folder = "" { didSet { if folder != oldValue { refresh() } } }
     var selection: Set<ArchiveEntry.ID> = []
-    var viewMode: ViewMode = SettingsKeys.browserView()
+    var viewMode: ViewMode = SettingsKeys.browserView() {
+        didSet { if viewMode != oldValue { refresh() } }
+    }
     var query = "" { didSet { if query != oldValue { runSearch() } } }
     /// Edit › Find… (⌘F) asks the Browser's search field for the keyboard; it counts, so each
     /// press is a new request.
@@ -87,10 +89,19 @@ final class BrowserModel {
     /// back, a moment after it folds. The Browser keeps the room below the files meanwhile.
     var isActionStackGrown = false
     var showHelperItems = false { didSet { if showHelperItems != oldValue { refresh(); runSearch() } } }
+
+    /// Someone shows or hides the hidden items (the switch beside the path, View › Show macOS
+    /// Helper Items): in a disk image, the next image opens the same way.
+    func setShowsHelperItems(_ shown: Bool, rememberingIn store: UserDefaults = .standard) {
+        showHelperItems = shown
+        if archive.isDiskImage { store.set(shown, forKey: SettingsKeys.diskImageHelpers) }
+    }
     var isChoosingEncoding = false
     /// A hover preview to show without a pointer (design review: `-StowHover`).
     var demoHover: ArchiveEntry.ID?
     private(set) var visibleEntries: [ArchiveEntry] = []
+    /// Helper items in the folder on show, listed or not: what the hidden-items switch counts.
+    private(set) var helperItemCount = 0
     private(set) var activity: Activity?
     /// Non-blocking bookmark warning belonging only to this opened archive.
     var sourceAccessNotice: Failure?
@@ -124,7 +135,23 @@ final class BrowserModel {
     private(set) var previewRevision = 0
     private var unlockTask: Task<Void, Never>?
 
-    isolated deinit { unlockTask?.cancel() }
+    isolated deinit {
+        unlockTask?.cancel()
+        installerCanvasTask?.cancel()
+    }
+
+    /// A disk image's own window (#344), once read: nil while it's read, for other archives, and
+    /// for images without a usable layout. It belongs to the archive it was read from.
+    private(set) var installerCanvas: InstallerCanvas? {
+        didSet { refresh() }
+    }
+    /// The archive arrived after the opening card had shown: the window takes over from the card
+    /// rather than cutting to the files (`ArchiveArrival`).
+    var arrivesAfterWait = false
+    private var installerCanvasTask: Task<Void, Never>?
+    /// The view the window opened in; an image with a layout opens on it unless someone has
+    /// picked another view meanwhile.
+    private var openingViewMode: ViewMode?
 
     private var positions: [ArchiveEntry.ID: Int] = [:]
     private var searchResults: [ArchiveEntry] = []
@@ -144,6 +171,7 @@ final class BrowserModel {
 
     func cancelTransfers() {
         isClosed = true
+        installerCanvasTask?.cancel()
         for task in transferTasks.values { task.cancel() }
     }
 
@@ -183,7 +211,8 @@ final class BrowserModel {
     private(set) var isListing = false
     private(set) var listedCount = 0
 
-    init(archive: Archive, previews: PreviewService = PreviewService(), isListing: Bool = false) {
+    init(archive: Archive, previews: PreviewService = PreviewService(), isListing: Bool = false,
+         installerCanvas start: InstallerCanvasStart = .load) {
         self.isListing = isListing
         listedCount = archive.source?.listing?.entries.count ?? archive.entries.count
         let root = Level(archive: archive, password: archive.source?.password)
@@ -192,6 +221,9 @@ final class BrowserModel {
         self.previews = previews
         // A disk image opens at its volume, with the one thing to install already selected.
         folder = archive.volumeRoot
+        // An archive tool shows what's in an image, its window dressing too (dimmed), as ArcZip
+        // does; View › Show macOS Helper Items hides it again.
+        showHelperItems = archive.isDiskImage && SettingsKeys.showsDiskImageHelpers()
         history = [Location(levels: levels, folder: folder)]
         previews.password = { [weak self] archive in
             self?.levels.first { $0.archive.id == archive.id }?.password
@@ -213,11 +245,17 @@ final class BrowserModel {
         }
         refresh()
         if let suggested = Self.suggestedSelection(in: archive) { select([suggested]) }
-        if !isListing { startIndexing(root) }
+        openingViewMode = viewMode
+        if !isListing {
+            startIndexing(root)
+            loadInstallerCanvas(start)
+        } else {
+            start.cancel()
+        }
     }
 
     /// Keep navigation and selection while replacing provisional metadata with the final listing.
-    func applyListing(_ archive: Archive, complete: Bool) {
+    func applyListing(_ archive: Archive, complete: Bool, installerCanvas start: InstallerCanvasStart = .load) {
         let oldFolder = folder
         let oldSelection = selection
         let root = Level(archive: archive, password: archive.source?.password)
@@ -231,7 +269,76 @@ final class BrowserModel {
         historyIndex = 0
         selection = oldSelection.filter { archive.entry(at: $0) != nil }
         refresh()
-        if complete { startIndexing(root) }
+        if complete {
+            startIndexing(root)
+            loadInstallerCanvas(start)
+        } else {
+            start.cancel()
+        }
+    }
+
+    /// Shows the image's authored window: at once when it was read while the window was opening,
+    /// else once it's read in the background. Closing the window, or another listing replacing
+    /// this archive, drops the result.
+    private func loadInstallerCanvas(_ start: InstallerCanvasStart = .load) {
+        installerCanvasTask?.cancel()
+        installerCanvas = nil
+        let level = levels[0]
+        let archive = level.archive
+        guard InstallerCanvasLoader.wantsCanvas(archive) else {
+            start.cancel()
+            return
+        }
+        switch start {
+        case .ready(let canvas):
+            // The window's first frame: nothing to fade from.
+            if let canvas { show(canvas, for: level, animated: false) }
+        case .pending(let pending):
+            installerCanvasTask = Task { [weak self] in
+                let canvas = await withTaskCancellationHandler { await pending.value } onCancel: { pending.cancel() }
+                guard let canvas, !Task.isCancelled else { return }
+                self?.show(canvas, for: level, animated: true)
+            }
+        case .load:
+            installerCanvasTask = Task { [weak self, password = level.password] in
+                let canvas = await InstallerCanvasLoader.load(archive, password: password)
+                guard let canvas, !Task.isCancelled else { return }
+                self?.show(canvas, for: level, animated: true)
+            }
+        }
+    }
+
+    private func show(_ canvas: InstallerCanvas, for level: Level, animated: Bool) {
+        guard !isClosed, levels.first === level, level.archive.id == canvas.archiveID else { return }
+        // The grid, list and Details show the same apps: they needn't read their icons again.
+        previews.remember(appIcons: canvas.icons, in: level.archive)
+        if animated {
+            withTransaction(Motion.keyboardAware) {
+                withAnimation(Motion.current(Motion.status)) { installerCanvas = canvas }
+            }
+        } else {
+            installerCanvas = canvas
+        }
+        if viewMode == openingViewMode, folder == level.archive.volumeRoot { viewMode = .grid }
+        openingViewMode = nil
+    }
+
+    /// Whether the files show as the image's own window: Icons, at the volume's top, not searching.
+    var showsInstallerCanvas: Bool {
+        guard let installerCanvas, levels.count == 1, installerCanvas.archiveID == levels[0].archive.id else { return false }
+        return viewMode == .grid && !isSearching && folder == archive.volumeRoot
+    }
+
+    /// The step dropping `entries` on an image's "drag here" shortcut runs: Install App for one app
+    /// on Applications, Copy to for one plug-in on its folder. Nil for anything else.
+    func installStep(for entries: [ArchiveEntry], onto target: DiskImageLayout.DropTarget) -> NextStep? {
+        guard entries.count == 1, let entry = entries.first, !entry.isHelper,
+              archive.dropTargets.contains(target), entry.parent == ArchiveEntry.parent(of: target.path) else { return nil }
+        if entry.kind == .app {
+            return target.folder.hasSuffix("/Applications") ? .moveToApplications : nil
+        }
+        let step = NextStep.copyTo(folder: target.folder)
+        return NextStep.applicable(for: entries, dropTargets: [target]).contains(step) ? step : nil
     }
 
     var editSession: EditSession { level.edits }
@@ -618,9 +725,18 @@ final class BrowserModel {
     // MARK: - Contents
 
     private func refresh() {
+        let here = archive.children(of: folder, includingHelpers: true)
+        helperItemCount = here.reduce(0) { $0 + ($1.isHelper ? 1 : 0) }
+        // The canvas renders install destinations separately, not as selectable archive files.
+        // Keep keyboard, range selection and Select All on the same entries as its file controls.
         visibleEntries = isSearching ? searchResults
-            : archive.children(of: folder, includingHelpers: showHelperItems)
+            : showHelperItems && !showsInstallerCanvas ? here : here.filter { !$0.isHelper }
         positions = Dictionary(visibleEntries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // A layout can arrive after browsing began, or a person can return from List/Search
+        // with a helper selected. Hidden selections must not survive that handoff.
+        if showsInstallerCanvas, selection.contains(where: { archive.entry(at: $0)?.isHelper == true }) {
+            select(selection.filter { archive.entry(at: $0)?.isHelper != true })
+        }
     }
 
     private func runSearch() {
@@ -948,6 +1064,9 @@ final class BrowserModel {
             showNested(hit)
         } else if entry.isNavigable {
             navigate(to: entry.path)
+        } else if archive.dropTargets.contains(where: { $0.path == entry.path }) {
+            // The image's "drag here" shortcut points at this Mac's folder, not at anything inside.
+            select([entry.id])
         } else if archive.source == nil {
             entry.kind == .archive ? run(.openInside, on: [entry]) : run(.quickLook, on: [entry])
         } else if entry.kind == .archive {

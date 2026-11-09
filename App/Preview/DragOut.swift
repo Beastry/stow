@@ -135,6 +135,7 @@ final class DragOutController: NSObject, NSFilePromiseProviderDelegate, NSDraggi
 
     /// The row's own icon, as the list draws it: a thumbnail where it has one, else the type's.
     func icon(for entry: ArchiveEntry) -> NSImage {
+        if let model, let icon = model.previews.cachedAppIcon(for: entry, in: model.archive) { return icon }
         if let model, RowIcon.showsThumbnail(entry),
            let thumbnail = model.previews.cachedThumbnail(for: entry, in: model.archive, side: 96) { return thumbnail }
         return NSWorkspace.shared.icon(for: Self.dragType(entry))
@@ -156,7 +157,8 @@ final class DragOutController: NSObject, NSFilePromiseProviderDelegate, NSDraggi
                                 rowHeight: 20, at: NSPoint(x: point.x - 9, y: point.y - 10), appearance: view.effectiveAppearance)
                 return item
             }
-            let picture = model.previews.cachedThumbnail(for: entry, in: model.archive, side: 96)
+            let picture = model.previews.cachedAppIcon(for: entry, in: model.archive)
+                ?? model.previews.cachedThumbnail(for: entry, in: model.archive, side: 96)
                 ?? NSWorkspace.shared.icon(for: Self.dragType(entry))
             let offset = CGFloat(min(index, 4)) * 6
             item.setDraggingFrame(NSRect(x: point.x - 32 + offset, y: point.y - 32 - offset, width: 64, height: 64),
