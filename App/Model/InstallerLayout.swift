@@ -40,9 +40,10 @@ nonisolated struct InstallerLayout: Equatable, Sendable {
         var layout = InstallerLayout()
 
         let settings = store.iconViewSettings()
-        if let size = settings?.iconSize, (16...512).contains(size) { layout.iconSize = CGFloat(size) }
-        if let size = settings?.textSize, (9...20).contains(size) { layout.textSize = CGFloat(size) }
-        switch store.background() {
+        let legacy = legacySettings(in: store)
+        if let size = settings?.iconSize ?? legacy.iconSize, (16...512).contains(size) { layout.iconSize = CGFloat(size) }
+        if let size = settings?.textSize ?? legacy.textSize, (9...20).contains(size) { layout.textSize = CGFloat(size) }
+        switch store.background() ?? legacy.background {
         case .color(let red, let green, let blue)?:
             let channels = [red, green, blue].map { min(max($0.isFinite ? $0 : 1, 0), 1) }
             layout.background = .color(red: channels[0], green: channels[1], blue: channels[2])
@@ -68,6 +69,36 @@ nonisolated struct InstallerLayout: Equatable, Sendable {
 
         if layout.positions.isEmpty, case .plain = layout.background { return nil }
         return layout
+    }
+
+    /// Older Finder/dmgcanvas windows (including ArcZip) keep the same information in separate
+    /// records instead of `icvp`. Read only directory records and let modern settings win.
+    private static func legacySettings(in store: DSStore) -> (iconSize: Int?, textSize: Int?, background: DSStore.BackgroundType?) {
+        func record(_ code: String) -> DSStore.Value? {
+            store.records.first { $0.filename == "." && $0.type.fourCC.stringValue == code }?.value
+        }
+        var iconSize: Int?
+        if case .data(let data)? = record("icvo"), data.count >= 6, data.prefix(4) == Data("icv4".utf8) {
+            iconSize = Int(data[4]) << 8 | Int(data[5])
+        }
+        let textSize: Int?
+        if case .uint16(let size)? = record("icvt") { textSize = Int(size) } else { textSize = nil }
+        var background: DSStore.BackgroundType?
+        if case .data(let data)? = record("BKGD"), data.count >= 12 {
+            switch String(data: data.prefix(4), encoding: .ascii) {
+            case "DefB": background = .default
+            case "ClrB":
+                let channels = [4, 6, 8].map { Double(Int(data[$0]) << 8 | Int(data[$0 + 1])) / 65_535 }
+                background = .color(red: channels[0], green: channels[1], blue: channels[2])
+            case "PctB":
+                let length = data[4..<8].reduce(0) { ($0 << 8) | Int($1) }
+                if case .data(let alias)? = record("pict"), length > 0, length <= alias.count {
+                    background = .picture(aliasData: Data(alias.prefix(length)))
+                }
+            default: break
+            }
+        }
+        return (iconSize, textSize, background)
     }
 
     /// The canvas: the window, grown to hold every placed icon and its name.

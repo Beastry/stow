@@ -185,6 +185,8 @@ final class BatchQueue {
                 let listing = try await ArchiveEngine.shared.list(job.url, password: password)
                 var archive = Archive(listing: listing, url: job.url)
                 archive.source?.password = password
+                archive = await DiskImageAliasLoader.prepare(archive, password: password)
+                if Task.isCancelled { throw EngineError(.cancelled) }
                 // Listing acquires any required split-folder grant. Capture before extraction,
                 // not afterward: replaced archives must never be mistaken for the extracted input.
                 source = ArchiveAftercare.Source.capture(job.url)

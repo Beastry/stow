@@ -22,19 +22,23 @@ enum ArchivedAppIcon {
 
     static func plistPath(app: String) -> String { app + "/Contents/Info.plist" }
 
-    /// The icon an app's Info.plist names, inside that app's Resources.
-    static func iconPath(app: String, plist data: Data) -> String? {
+    /// The icon an app's Info.plist names, inside that app's Resources. Asset-catalog names can
+    /// also have a matching `.icns` companion (as ArcZip does); only an exactly listed file is read.
+    static func iconPath(app: String, plist data: Data, namedAsset: Bool = false) -> String? {
         guard let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              var name = info["CFBundleIconFile"] as? String, !name.isEmpty,
+              var name = info[namedAsset ? "CFBundleIconName" : "CFBundleIconFile"] as? String, !name.isEmpty,
               !name.contains("/"), name != ".", name != ".." else { return nil }
-        if (name as NSString).pathExtension.isEmpty { name += ".icns" }
+        if namedAsset ? (name as NSString).pathExtension.lowercased() != "icns" : (name as NSString).pathExtension.isEmpty {
+            name += ".icns"
+        }
         return app + "/Contents/Resources/" + name
     }
 
-    /// The listed icon file to read for an app: the declared one, else Xcode's `AppIcon.icns`.
+    /// The listed icon file to read: the explicit file, a named asset's `.icns`, then Xcode's fallback.
     static func iconFile(app: String, plist: Data?, in archive: Archive) -> String? {
         let declared = plist.flatMap { iconPath(app: app, plist: $0) }
-        for path in [declared, app + "/Contents/Resources/AppIcon.icns"].compactMap(\.self) {
+        let named = plist.flatMap { iconPath(app: app, plist: $0, namedAsset: true) }
+        for path in [declared, named, app + "/Contents/Resources/AppIcon.icns"].compactMap(\.self) {
             if let entry = archive.entry(at: path), !entry.isFolder, entry.size <= maxIconBytes { return path }
         }
         return nil

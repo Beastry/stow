@@ -19,6 +19,16 @@ nonisolated enum DiskImageLayout {
     /// What the author put on the volume to dress its window, as opposed to file-system bookkeeping
     /// (`.fseventsd`, `.Trashes`, HFS+ private data…), which stays out of sight.
     static let authoredNames: Set<String> = [".background", ".VolumeIcon.icns", ".DS_Store"]
+    /// Finder installers also use the localized Applications name in the image itself.
+    static let applicationsNames: Set<String> = ["Applications", "应用程序"]
+
+    /// Some image builders place the picture beside `.DS_Store`, rather than in a folder.
+    /// Match their exact basename, not every hidden picture or arbitrary `.background.*` data.
+    static func isBackgroundPicture(_ name: String) -> Bool {
+        guard name.hasPrefix(".background.") else { return false }
+        return ["png", "jpg", "jpeg", "tif", "tiff", "heic", "heif", "gif", "bmp", "webp", "avif"]
+            .contains(String(name.dropFirst(".background.".count)).lowercased())
+    }
 
     /// A shortcut on the volume, like "Applications → /Applications": the developer's "drag here".
     struct DropTarget: Hashable, Sendable {
@@ -46,7 +56,7 @@ nonisolated enum DiskImageLayout {
             let prefix = volumeRoot.isEmpty ? "" : volumeRoot + "/"
             guard path.hasPrefix(prefix) else { return false }
             let first = path.dropFirst(prefix.count).split(separator: "/").first.map(String.init) ?? ""
-            return DiskImageLayout.authoredNames.contains(first)
+            return DiskImageLayout.authoredNames.contains(first) || DiskImageLayout.isBackgroundPicture(first)
         }
 
         func hides(_ path: String) -> Bool {
@@ -68,7 +78,8 @@ nonisolated enum DiskImageLayout {
 
     /// `entries` with contained paths. HFS+ images list everything under the volume's name;
     /// APFS and ISO images list the volume's contents at the top.
-    static func layout(of entries: [(path: String, isFolder: Bool, isSymlink: Bool, linkTarget: String?)]) -> Layout {
+    static func layout(of entries: [(path: String, isFolder: Bool, isSymlink: Bool, linkTarget: String?)],
+                       aliasDropTargets: [DropTarget] = []) -> Layout {
         var layout = Layout()
         let firsts = Set(entries.map { $0.path.split(separator: "/").first.map(String.init) ?? "" })
         if firsts.count == 1, let only = firsts.first, isVolumeFolder(only, in: entries) {
@@ -80,11 +91,16 @@ nonisolated enum DiskImageLayout {
             let relative = String(entry.path.dropFirst(prefix.count))
             guard let top = relative.split(separator: "/").first.map(String.init) else { continue }
             // Listings needn't hold an entry for each folder: `.background/bg.png` alone hides `.background`.
-            if extraNames.contains(top) {
+            if extraNames.contains(top) || (top == relative && !entry.isFolder && isBackgroundPicture(top)) {
                 extras.insert(prefix + top)
             } else if top == relative, entry.isSymlink, let folder = dropFolder(name: relative, target: entry.linkTarget) {
                 extras.insert(entry.path)
                 layout.dropTargets.append(DropTarget(path: entry.path, folder: folder))
+            } else if top == relative, !entry.isFolder, !entry.isSymlink,
+                      let target = aliasDropTargets.first(where: { $0.path == entry.path }),
+                      isSafeDropFolder(target.folder) {
+                extras.insert(entry.path)
+                layout.dropTargets.append(target)
             }
         }
         layout.extras = extras.sorted()
@@ -111,7 +127,13 @@ nonisolated enum DiskImageLayout {
     /// taken at its word.
     private static func dropFolder(name: String, target: String?) -> String? {
         if let target, target.hasPrefix("/") { return target }
-        if (target ?? "").isEmpty, name == "Applications" { return "/Applications" }
+        if (target ?? "").isEmpty, applicationsNames.contains(name) { return "/Applications" }
         return nil
+    }
+
+    /// Cached bookmark paths are descriptive metadata, never resolved on this Mac.
+    static func isSafeDropFolder(_ path: String) -> Bool {
+        path.hasPrefix("/") && path != "/" && path.utf8.count <= 4_096 && !path.contains("\0")
+            && !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." })
     }
 }

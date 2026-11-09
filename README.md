@@ -78,6 +78,10 @@ captures each one light and dark, plain and with each override.
 
 Test fixtures are rebuilt with `scripts/make-fixtures.sh` (disk images) and
 `scripts/make-browse-fixtures.sh [--big]` (browsing, 100k entries).
+Use `scripts/make-fixtures.sh --compatibility-only` for the self-generated realistic installer:
+8 KiB Finder store leaves, a multi-resolution root TIFF, a regular Applications bookmark and a
+named ICNS companion. The private real-image corpus runner and coverage are described in
+[the DMG compatibility report](Handoff/dmg-corpus-compatibility-2026-11-08.md).
 
 ## Archive engine
 
