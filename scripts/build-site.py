@@ -50,21 +50,28 @@ def render(markdown: str) -> str:
 
 
 def fix_links(page: str) -> str:
-    """Links between the rendered documents stay on the site; anything else in the repo goes to GitHub."""
+    """Keep rendered docs and copied website assets local; other repository links go to GitHub."""
     def repl(match: re.Match) -> str:
         attr, target = match.group(1), match.group(2)
+        if attr == "srcset":
+            # Rewrite each local website candidate, preserving descriptors and external URLs.
+            target = re.sub(r"(^|,\s*)(?:\./)*website/([^\s,]+)",
+                            lambda candidate: candidate.group(1) + "../" + candidate.group(2), target)
+            return f'{attr}="{target}"'
         if re.match(r"^[a-z][a-z0-9+.-]*:|^#|^//", target):
             return match.group(0)
         path, _, anchor = target.partition("#")
         path = path.lstrip("./")
         if path in DOCS:
             new = DOCS[path][0] + (f"#{anchor}" if anchor else "")
+        elif path.startswith("website/"):
+            new = "../" + path.removeprefix("website/") + (f"#{anchor}" if anchor else "")
         else:
             kind = "tree" if (ROOT / path).is_dir() else "blob"
             new = f"{REPO_URL}/{kind}/main/{path}" + (f"#{anchor}" if anchor else "")
         return f'{attr}="{new}"'
 
-    return re.sub(r'(href|src)="([^"]+)"', repl, page)
+    return re.sub(r'\b(href|src|srcset)="([^"]+)"', repl, page)
 
 
 def add_heading_ids(page: str) -> str:
