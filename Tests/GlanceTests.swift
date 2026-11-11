@@ -397,6 +397,58 @@ struct GlanceTests {
         #expect(frame == visible.insetBy(dx: GlancePlacement.margin, dy: GlancePlacement.margin))
     }
 
+    @Test func aSecondGlanceStepsAsideFromOneAtTheSameSpot() {
+        let visible = Self.screens[0]
+        let first = GlancePlacement.frame(size: Self.size, pointer: CGPoint(x: 700, y: 800), visible: visible)
+        #expect(GlancePlacement.cascaded(first, clearOf: [], visible: visible) == first)
+        let second = GlancePlacement.cascaded(first, clearOf: [first], visible: visible)
+        #expect(second.minX == first.minX + GlancePlacement.cascadeStep)
+        #expect(second.maxY == first.maxY - GlancePlacement.cascadeStep)
+        #expect(second.size == first.size)
+        let third = GlancePlacement.cascaded(first, clearOf: [first, second], visible: visible)
+        #expect(third.minX == second.minX + GlancePlacement.cascadeStep)
+        // A Glance somewhere else is left alone.
+        let elsewhere = first.offsetBy(dx: 300, dy: 0)
+        #expect(GlancePlacement.cascaded(first, clearOf: [elsewhere], visible: visible) == first)
+    }
+
+    @Test(arguments: GlancePlacement.Edge.allCases)
+    func aSteppedGlanceStaysInsideTheVisibleArea(_ edge: GlancePlacement.Edge) {
+        for visible in Self.screens {
+            let first = GlancePlacement.frame(size: Self.size, pointer: edge.pointer(in: visible), visible: visible)
+            let second = GlancePlacement.cascaded(first, clearOf: [first], visible: visible)
+            #expect(visible.insetBy(dx: GlancePlacement.margin, dy: GlancePlacement.margin).contains(second))
+        }
+    }
+
+    @Test func remembersTheSizeItWasGivenButNeverUnderTheMinimum() {
+        #expect(GlancePlacement.size(saved: nil) == GlancePlacement.defaultSize)
+        #expect(GlancePlacement.size(saved: "nonsense") == GlancePlacement.defaultSize)
+        #expect(GlancePlacement.size(saved: NSStringFromSize(CGSize(width: 520, height: 640))) == CGSize(width: 520, height: 640))
+        #expect(GlancePlacement.size(saved: NSStringFromSize(CGSize(width: 100, height: 100))) == GlancePlacement.minimumSize)
+    }
+
+    @Test func anotherArchiveWindowOpensAStepFromTheFrontBrowserAtItsSize() {
+        let visible = CGRect(x: 0, y: 0, width: 1512, height: 944)
+        let front = CGRect(x: 100, y: 200, width: 1000, height: 640)
+        let next = ArchiveWindowPlacement.frame(after: front, visible: visible)
+        #expect(next.size == front.size)
+        #expect(next.minX == front.minX + ArchiveWindowPlacement.step)
+        #expect(next.maxY == front.maxY - ArchiveWindowPlacement.step)
+    }
+
+    @Test func anotherArchiveWindowNeverLeavesTheVisibleArea() {
+        let visible = CGRect(x: 0, y: 70, width: 1440, height: 800)
+        // Against the right edge and the Dock: both steps start again from the near edges.
+        let cornered = CGRect(x: 320, y: 70, width: 1120, height: 700)
+        let wrapped = ArchiveWindowPlacement.frame(after: cornered, visible: visible)
+        #expect(visible.contains(wrapped))
+        #expect(wrapped.minX == visible.minX && wrapped.maxY == visible.maxY)
+        // A Browser larger than this screen is cut to it.
+        let huge = CGRect(x: 0, y: 0, width: 3000, height: 2000)
+        #expect(ArchiveWindowPlacement.frame(after: huge, visible: visible) == visible)
+    }
+
     @Test func reduceTransparencyGetsASolidBackground() {
         #expect(GlanceMaterial.resolve(reduceTransparency: false, override: false) == .glass)
         #expect(GlanceMaterial.resolve(reduceTransparency: true, override: false) == .solid)

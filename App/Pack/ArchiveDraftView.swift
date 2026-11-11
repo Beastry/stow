@@ -111,6 +111,10 @@ struct ArchiveDraftView: View {
             }
             .background {
                 WindowReader { window in
+                    // State restoration is off (as for the Browser): the draft's window keeps the
+                    // size and place it was left at instead of opening at its default every time.
+                    // Design snapshots keep the default.
+                    if UserDefaults.standard.string(forKey: "StowScene") == nil { window.setFrameAutosaveName("Draft") }
                     delegate.attach(window, draft: draft) {
                         if app.archiveDraft === draft { app.archiveDraft = nil }
                     }

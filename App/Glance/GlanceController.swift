@@ -22,6 +22,40 @@ nonisolated enum GlancePlacement {
         return CGRect(x: x, y: y, width: width, height: height)
     }
 
+    /// How far a Glance opens from another that already stands where it would: enough for the
+    /// one behind to keep its header's edge in view.
+    static let cascadeStep: CGFloat = 28
+
+    /// `frame` moved down and to the right until its top-left corner is clear of every frame in
+    /// `others`, still inside the visible area. Several archives opened at once (one pointer, one
+    /// spot) would otherwise stand exactly on top of each other and read as a single window.
+    static func cascaded(_ frame: CGRect, clearOf others: [CGRect], visible: CGRect) -> CGRect {
+        let room = visible.insetBy(dx: margin, dy: margin)
+        var result = frame
+        for _ in others {
+            let taken = others.contains {
+                abs($0.minX - result.minX) < cascadeStep / 2 && abs($0.maxY - result.maxY) < cascadeStep / 2
+            }
+            guard taken else { break }
+            var next = result
+            next.origin.x = clamp(result.minX + cascadeStep, room.minX, room.maxX - result.width)
+            next.origin.y = clamp(result.minY - cascadeStep, room.minY, room.maxY - result.height)
+            // In the screen's bottom-right corner there's nowhere further to step.
+            guard next != result else { break }
+            result = next
+        }
+        return result
+    }
+
+    /// The size Glance was last given by hand (`NSStringFromSize`), never under the minimum;
+    /// the default when there's none yet.
+    static func size(saved: String?) -> CGSize {
+        guard let saved else { return defaultSize }
+        let size = NSSizeFromString(saved)
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return defaultSize }
+        return CGSize(width: max(size.width.rounded(), minimumSize.width), height: max(size.height.rounded(), minimumSize.height))
+    }
+
     /// The pointer as a point in the window's own top-left space, kept inside it — where the
     /// opening scale is anchored.
     static func anchor(pointer: CGPoint, in frame: CGRect) -> UnitPoint {
@@ -212,8 +246,10 @@ final class GlanceController: NSObject, NSWindowDelegate {
 
     func show(near pointer: CGPoint, size: CGSize? = nil, animated: Bool) {
         let visible = Self.screen(containing: pointer).visibleFrame
-        let frame = GlancePlacement.frame(size: size ?? window?.frame.size ?? GlancePlacement.defaultSize,
+        var frame = GlancePlacement.frame(size: size ?? window?.frame.size ?? Self.rememberedSize,
                                           pointer: pointer, visible: visible)
+        // Another archive's Glance already stands there (several opened at once): step aside.
+        frame = GlancePlacement.cascaded(frame, clearOf: otherGlanceFrames, visible: visible)
         anchor = GlancePlacement.anchor(pointer: pointer, in: frame)
         isShown = true
         guard presentsWindow else { return }
@@ -240,6 +276,50 @@ final class GlanceController: NSObject, NSWindowDelegate {
         }
         // Each time it shows, so they stay hidden whatever the window went through since.
         updateWindowControls()
+    }
+
+    /// Brings Glance forward where it stands. Only opening it (a click, Finder, the switch from
+    /// the full window) puts it at the pointer; asking for a Glance that's already on screen (the
+    /// same archive opened again, Open Stow in the Tray's menu, a question before quitting) must
+    /// not move the window from where it was left.
+    func bringForward() {
+        guard isShown else { return }
+        guard presentsWindow, let window, window.isVisible || window.isMiniaturized || NSApp.isHidden else {
+            return show(near: NSEvent.mouseLocation, animated: false)
+        }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Where the other archives' Glance windows stand, for `GlancePlacement.cascaded`.
+    private var otherGlanceFrames: [CGRect] {
+        guard let app else { return [] }
+        return app.archiveSessions.compactMap { session in
+            guard session !== app, let other = session.glance.window, other.isVisible else { return nil }
+            return other.frame
+        }
+    }
+
+    // MARK: - Remembered size
+
+    /// Glance's size is window state, as the Browser's frame is (`NSWindow Frame Browser`), not a
+    /// preference: it isn't in Settings and no reset touches it.
+    static let sizeKey = "GlanceWindowSize"
+
+    /// Design snapshots and tests always get the default size, whatever this Mac's Glance was left at.
+    private static var remembersSize: Bool {
+        UserDefaults.standard.string(forKey: "StowScene") == nil && NSClassFromString("XCTestCase") == nil
+    }
+
+    private static var rememberedSize: CGSize {
+        remembersSize ? GlancePlacement.size(saved: UserDefaults.standard.string(forKey: sizeKey)) : GlancePlacement.defaultSize
+    }
+
+    /// Resized by hand: the next Glance (another archive's, or after a relaunch) opens at this size.
+    func windowDidEndLiveResize(_ notification: Notification) {
+        guard Self.remembersSize, let window, notification.object as? NSWindow === window else { return }
+        UserDefaults.standard.set(NSStringFromSize(window.frame.size), forKey: Self.sizeKey)
     }
 
     /// Glance is borderless (#159): its own Close, Pin on Top and Open in Full Window are along the
@@ -286,7 +366,8 @@ final class GlanceController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let window = GlanceWindow(contentRect: CGRect(origin: .zero, size: GlancePlacement.defaultSize),
+        let size = Self.rememberedSize
+        let window = GlanceWindow(contentRect: CGRect(origin: .zero, size: size),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                   backing: .buffered, defer: true)
         window.identifier = NSUserInterfaceItemIdentifier(app?.workspaceOwner == nil ? Self.windowIdentifier : "glance-" + (app?.sessionID.uuidString ?? UUID().uuidString))
@@ -308,7 +389,7 @@ final class GlanceController: NSObject, NSWindowDelegate {
         host.sceneBridgingOptions = [.title]
         host.sizingOptions = []
         window.contentViewController = host
-        window.setContentSize(GlancePlacement.defaultSize)
+        window.setContentSize(size)
         updateWindowControls(of: window)
         return window
     }

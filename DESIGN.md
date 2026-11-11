@@ -21,6 +21,23 @@ composition. Follow [the functional handoff](Handoff/multiple-archive-windows.md
 password, close/quit and staging contracts. Codex owns those functional changes; Claude Code
 retains visual and motion ownership. This supersedes earlier single-archive window assumptions.
 
+## Where windows open, and what they keep
+
+A window on screen is never moved or resized by Stow; only the person does that. What decides a
+window's frame is how it comes up:
+
+| Window | Opens | Keeps |
+| --- | --- | --- |
+| Welcome | Centred, fixed 640 × 600 | Nothing to keep: it can't be resized |
+| Browser (first archive) | Where and as large as it was left (`NSWindow Frame Browser`); 1120 × 700 the first time | Size and place |
+| Browser (another archive) | The front Browser's size, 28 pt down and to the right of it; a step that would leave the visible area starts again from the near edge. With no Browser on screen, the saved Browser frame. Never placed from Settings, Welcome, Glance or a sheet that happens to be key | It doesn't write the saved frame |
+| Glance | At the pointer, pulled inside the visible area. A second archive's Glance that would land on another's steps 28 pt down and right, so several opened at once don't hide each other | Its size (`GlanceWindowSize`), across archives and launches; the place is always the pointer's |
+| Glance, already on screen | Comes forward where it stands (the same archive opened again, Open Stow, a question before quitting). It goes to the pointer only when it opens | — |
+| Create Archive | Where and as large as it was left (`NSWindow Frame Draft`); 980 × 620 the first time | Size and place |
+| Settings | Fixed width, 600 pt tall at least; pages never resize it | Its frame (the system's) |
+
+Design snapshots ignore the saved Glance size and draft frame.
+
 ## Tray, creation and entry-point functional handoff — #286
 
 The [functional implementation brief](Handoff/286-functional-followups.md) records the new interfaces and bounded
