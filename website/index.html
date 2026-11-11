@@ -6,16 +6,22 @@
 <title>Stow — Archives, opened with care</title>
 <meta name="description" content="Stow is a native macOS archive tool. See what’s inside, take the next step — and pack files that open on anyone’s computer.">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fcf9f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141110" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Stow — Archives, opened with care">
+<meta property="og:description" content="A native macOS archive tool. See what’s inside, take the next step, and pack files that open on anyone’s computer. Free and open source.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
 /* ───────────────────────── Tokens ───────────────────────── */
 :root {
-  --bg: #fbfaf8;
-  --bg-2: #f3f1ed;
+  /* Neutrals lean toward Beastry's Cream and Charcoal; the amber accent is Stow's own. */
+  --bg: #fcf9f5;
+  --bg-2: #f5f0e9;
   --surface: #ffffff;
-  --ink: #1d1d1f;
-  --ink-2: #5f5f64;
-  --ink-3: #8e8e93;
+  --ink: #2a2421;
+  --ink-2: #655c56;
+  --ink-3: #8f867f;
   --line: rgba(0, 0, 0, .08);
   --line-2: rgba(0, 0, 0, .14);
   --accent: #d97b2b;
@@ -26,7 +32,7 @@
   --blue: #2f6fde;
   --shadow-1: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.06);
   --shadow-2: 0 2px 6px rgba(0,0,0,.05), 0 24px 60px -12px rgba(0,0,0,.18);
-  --glass: rgba(251, 250, 248, .72);
+  --glass: rgba(252, 249, 245, .72);
 
   --r-panel: 22px;
   --r-card: 16px;
@@ -41,12 +47,12 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e0e0f;
-    --bg-2: #161618;
-    --surface: #1c1c1e;
-    --ink: #f5f5f7;
-    --ink-2: #a8a8ae;
-    --ink-3: #7c7c82;
+    --bg: #141110;
+    --bg-2: #1c1816;
+    --surface: #24201d;
+    --ink: #fbf4ec;
+    --ink-2: #b3a9a1;
+    --ink-3: #857b74;
     --line: rgba(255, 255, 255, .09);
     --line-2: rgba(255, 255, 255, .16);
     --accent: #f0954a;
@@ -57,18 +63,18 @@
     --blue: #5e9bff;
     --shadow-1: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.3);
     --shadow-2: 0 2px 6px rgba(0,0,0,.3), 0 30px 70px -10px rgba(0,0,0,.6);
-    --glass: rgba(14, 14, 15, .7);
+    --glass: rgba(20, 17, 16, .7);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e0e0f; --bg-2: #161618; --surface: #1c1c1e;
-  --ink: #f5f5f7; --ink-2: #a8a8ae; --ink-3: #7c7c82;
+  --bg: #141110; --bg-2: #1c1816; --surface: #24201d;
+  --ink: #fbf4ec; --ink-2: #b3a9a1; --ink-3: #857b74;
   --line: rgba(255,255,255,.09); --line-2: rgba(255,255,255,.16);
   --accent: #f0954a; --accent-ink: #f5a766; --accent-soft: rgba(240,149,74,.14);
   --green: #34c76f; --yellow: #f2c230; --blue: #5e9bff;
   --shadow-1: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.3);
   --shadow-2: 0 2px 6px rgba(0,0,0,.3), 0 30px 70px -10px rgba(0,0,0,.6);
-  --glass: rgba(14,14,15,.7);
+  --glass: rgba(20,17,16,.7);
 }
 
 /* ───────────────────────── Base ───────────────────────── */
@@ -162,7 +168,24 @@ p { margin: 0; }
 .hero h1 em { font-style: normal; color: var(--accent-ink); }
 .hero .lede { margin: 22px auto 0; max-width: 40ch; }
 .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
-.hero-meta { margin-top: 16px; font-size: 13px; color: var(--ink-3); }
+.hero-meta { margin-top: 14px; font-size: 13px; color: var(--ink-3); }
+.brew {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin-top: 20px; padding: 4px 4px 4px 14px;
+  border-radius: 999px; background: var(--bg-2); box-shadow: 0 0 0 1px var(--line) inset;
+}
+.brew code { font: 13px/1.4 var(--mono); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brew-copy {
+  position: relative; flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%; background: none; color: var(--ink-3);
+  cursor: pointer; transition: color 150ms ease, background-color 150ms ease, transform 160ms var(--ease-out);
+}
+.brew-copy::after { content: ""; position: absolute; inset: -7px; }   /* 44 px hit area */
+.brew-copy:active { transform: scale(.94); }
+.brew-copy svg { position: absolute; inset: 0; margin: auto; transition: opacity 150ms ease, transform 200ms var(--ease-out); }
+.brew-copy .t { opacity: 0; transform: scale(.6); color: var(--green); }
+.brew-copy[data-copied] .c { opacity: 0; transform: scale(.6); }
+.brew-copy[data-copied] .t { opacity: 1; transform: none; }
+@media (hover: hover) and (pointer: fine) { .brew-copy:hover { color: var(--ink); background: var(--surface); } }
+@media (prefers-reduced-motion: reduce) { .brew-copy, .brew-copy svg { transition: opacity 150ms ease; transform: none !important; } }
 .hero-shot {
   margin: clamp(24px, 4vw, 48px) auto 0;
   width: min(1240px, 100% + 40px);
@@ -472,12 +495,15 @@ section { padding: clamp(80px, 12vw, 148px) 0; }
 
 /* ───────────────────────── CTA + Footer ───────────────────────── */
 .final { text-align: center; padding-bottom: clamp(80px, 10vw, 120px); }
-.final .mark { width: 76px; height: 76px; margin: 0 auto 26px; }
+.final .mark { display: block; width: 104px; height: 104px; margin: 0 auto 26px; border-radius: 24px; box-shadow: var(--shadow-1); }
 .final .hero-cta { margin-top: 28px; }
 footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.5px; color: var(--ink-3); }
 .foot { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
 .foot nav { display: flex; gap: 22px; flex-wrap: wrap; }
 .foot a { text-decoration: none; }
+.foot-brand { display: grid; gap: 12px; justify-items: start; }
+.beastry { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; color: var(--ink-2); }
+.beastry img { border-radius: 50%; box-shadow: 0 0 0 1px var(--line-2); }
 @media (hover: hover) and (pointer: fine) { .foot a:hover { color: var(--ink); } }
 
 /* ───────────────────────── Reveal ───────────────────────── */
@@ -524,8 +550,8 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.
       <a href="#formats">Formats</a>
       <a href="#open-source">Open source</a>
       <a href="#faq">FAQ</a>
-      <a href="docs/roadmap.html">Roadmap</a>
-      <a class="btn btn-primary btn-sm" href="{{REPO_URL}}">GitHub</a>
+      <a href="{{REPO_URL}}">GitHub</a>
+      <a class="btn btn-primary btn-sm" href="{{REPO_URL}}/releases/latest">Download</a>
     </nav>
   </div>
 </header>
@@ -541,7 +567,8 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.
       <a class="btn btn-primary" href="{{REPO_URL}}/releases/latest">Download for Mac</a>
       <a class="btn btn-ghost" href="{{REPO_URL}}">Read the source</a>
     </div>
-    <p class="hero-meta">Free and open source (GPL-3.0) · No ads, no accounts · Nothing leaves your Mac</p>
+    <div class="brew"><code>brew install --cask beastry/tap/stow</code><button type="button" class="brew-copy" data-copy="brew install --cask beastry/tap/stow" aria-label="Copy the Homebrew command"><svg class="c" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="2"/><path d="M10.5 5.5v-1a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h1" stroke-linecap="round"/></svg><svg class="t" width="15" height="15" aria-hidden="true"><use href="#i-tick"/></svg></button></div>
+    <p class="hero-meta">Free and open source · macOS 26 or later · Signed and notarized</p>
   </div>
   <div class="hero-shot">
     <picture>
@@ -584,13 +611,13 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.
   </div>
 </section>
 
-<!-- ───────── Walkthrough (stand-in for the product video) ───────── -->
+<!-- ───────── Walkthrough ───────── -->
 <section id="tour" style="padding-top:0">
   <div class="wrap">
     <div class="section-head center reveal">
       <span class="eyebrow">Walkthrough</span>
       <h2>See it work, step by step.</h2>
-      <p class="lede">Real screens from today’s build. A full video comes with the first signed release.</p>
+      <p class="lede">Real screens from the app, one step at a time.</p>
     </div>
     <div class="tour reveal" id="tour-player">
       <div class="tour-tabs">
@@ -911,7 +938,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.
       <h2>Questions</h2>
     </div>
     <div class="faq reveal">
-      <details><summary>Where do I download it?<span class="pm" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></summary><div class="a">Download the signed, notarized DMG from the <a class="link" href="{{REPO_URL}}/releases/latest">latest GitHub release</a>, then drag Stow to Applications. These are early releases for macOS 26 or later, on Apple silicon and Intel Macs. You can also <a class="link" href="docs/readme.html#build--run">build from source</a>.</div></details>
+      <details><summary>Where do I download it?<span class="pm" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></summary><div class="a">Download the signed, notarized DMG from the <a class="link" href="{{REPO_URL}}/releases/latest">latest GitHub release</a>, then drag Stow to Applications. These are early releases for macOS 26 or later, on Apple silicon and Intel Macs. You can also <a class="link" href="docs/developing.html#build--run">build from source</a>.</div></details>
       <details><summary>Will Stow change my original archive?<span class="pm" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></summary><div class="a">Never by browsing, previewing or extracting. Changes happen only when you edit and save — and they’re written to a staging copy first, so a cancel or an error leaves the original exactly as it was.</div></details>
       <details><summary>Can it create RAR files?<span class="pm" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></summary><div class="a">No — RAR creation is licensed by its authors. Stow opens and extracts RAR 4 and 5 (including encrypted and multi-part ones). To pack, ZIP works everywhere and 7Z compresses harder.</div></details>
       <details><summary>What does “for Windows PCs” actually change?<span class="pm" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></summary><div class="a">It replaces characters Windows rejects (like “:” or “?”), renames reserved names such as “aux”, stores accents the way Windows expects, and leaves out “.DS_Store” and other Finder files. You see every change before packing; your originals stay as they are.</div></details>
@@ -925,22 +952,26 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.
 <!-- ───────── Final CTA ───────── -->
 <section class="final" id="download">
   <div class="wrap reveal">
-    <svg class="mark" aria-hidden="true"><use href="#logo"/></svg>
+    <img class="mark" src="assets/mascot.svg" width="104" height="104" alt="" loading="lazy" decoding="async">
     <h2>Open your next archive<br>with Stow.</h2>
     <div class="hero-cta">
       <a class="btn btn-primary" href="{{REPO_URL}}/releases/latest">Download for Mac</a>
       <a class="btn btn-ghost" href="{{REPO_URL}}">Read the source</a>
     </div>
-    <p class="hero-meta">Early release · macOS 26 or later · Signed and notarized</p>
+    <div class="brew"><code>brew install --cask beastry/tap/stow</code><button type="button" class="brew-copy" data-copy="brew install --cask beastry/tap/stow" aria-label="Copy the Homebrew command"><svg class="c" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="2"/><path d="M10.5 5.5v-1a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h1" stroke-linecap="round"/></svg><svg class="t" width="15" height="15" aria-hidden="true"><use href="#i-tick"/></svg></button></div>
+    <p class="hero-meta">Early release · macOS 26 or later · Apple silicon and Intel</p>
   </div>
 </section>
 </main>
 
 <footer>
   <div class="wrap foot">
-    <span>Stow is free software under the GPL-3.0. Built on the 7-Zip engine (LGPL).</span>
+    <div class="foot-brand">
+      <a class="beastry" href="https://beastry.app"><img src="assets/beastry-mark.jpg" width="28" height="28" alt="" loading="lazy" decoding="async">Part of Beastry</a>
+      <span>Stow is free software under the GPL-3.0. Built on the 7-Zip engine (LGPL).</span>
+    </div>
     <nav aria-label="Footer">
-      <a href="#features">Features</a><a href="#formats">Formats</a><a href="#open-source">Open source</a><a href="#faq">FAQ</a><a href="#faq">Privacy</a><a href="{{REPO_URL}}/blob/main/LICENSE">Licence</a><a href="docs/roadmap.html">Roadmap</a>
+      <a href="#features">Features</a><a href="#formats">Formats</a><a href="#open-source">Open source</a><a href="#faq">FAQ</a><a href="#faq">Privacy</a><a href="{{REPO_URL}}/blob/main/LICENSE">Licence</a><a href="docs/roadmap.html">Roadmap</a><a href="docs/architecture.html">Architecture</a>
     </nav>
   </div>
 </footer>
@@ -953,6 +984,16 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.
   const nav = document.getElementById('nav');
   const onScroll = () => nav.toggleAttribute('data-scrolled', scrollY > 8);
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+  /* Copy the Homebrew command */
+  for (const button of document.querySelectorAll('.brew-copy')) {
+    button.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(button.dataset.copy); } catch { return; }
+      button.setAttribute('data-copied', '');
+      button.setAttribute('aria-label', 'Copied');
+      setTimeout(() => { button.removeAttribute('data-copied'); button.setAttribute('aria-label', 'Copy the Homebrew command'); }, 1600);
+    });
+  }
 
   /* Reveal once on scroll */
   const io = new IntersectionObserver(entries => {

@@ -1,4 +1,4 @@
-# Builds the website and the rendered docs (README, ROADMAP, PARITY, DESIGN) and deploys them to
+# Builds the website and the rendered docs (README, DEVELOPING, ARCHITECTURE, ROADMAP, PARITY, DESIGN) and deploys them to
 # GitHub Pages. See scripts/build-site.py.
 name: Pages
 

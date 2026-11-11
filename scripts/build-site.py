@@ -2,7 +2,7 @@
 """Builds the GitHub Pages site into _site/.
 
 - website/ is the home page, as is (with {{REPO_URL}} filled in).
-- README, ROADMAP, PARITY and DESIGN become pages under docs/, rendered by GitHub's own Markdown API
+- README, DEVELOPING, ARCHITECTURE, ROADMAP, PARITY and DESIGN become pages under docs/, rendered by GitHub's own Markdown API
   (so tables, task lists and anchors look exactly as they do on github.com) and wrapped in a page that
   uses the website's design tokens.
 
@@ -30,6 +30,8 @@ REPO_URL = f"https://github.com/{REPO}"
 # Source → (page, title shown in the nav)
 DOCS = {
     "README.md": ("readme.html", "Read me"),
+    "DEVELOPING.md": ("developing.html", "Developing"),
+    "ARCHITECTURE.md": ("architecture.html", "Architecture"),
     "ROADMAP.md": ("roadmap.html", "Roadmap"),
     "PARITY.md": ("parity.html", "Feature parity"),
     "DESIGN.md": ("design.html", "Design language"),
@@ -48,21 +50,28 @@ def render(markdown: str) -> str:
 
 
 def fix_links(page: str) -> str:
-    """Links between the four documents stay on the site; anything else in the repo goes to GitHub."""
+    """Keep rendered docs and copied website assets local; other repository links go to GitHub."""
     def repl(match: re.Match) -> str:
         attr, target = match.group(1), match.group(2)
+        if attr == "srcset":
+            # Rewrite each local website candidate, preserving descriptors and external URLs.
+            target = re.sub(r"(^|,\s*)(?:\./)*website/([^\s,]+)",
+                            lambda candidate: candidate.group(1) + "../" + candidate.group(2), target)
+            return f'{attr}="{target}"'
         if re.match(r"^[a-z][a-z0-9+.-]*:|^#|^//", target):
             return match.group(0)
         path, _, anchor = target.partition("#")
         path = path.lstrip("./")
         if path in DOCS:
             new = DOCS[path][0] + (f"#{anchor}" if anchor else "")
+        elif path.startswith("website/"):
+            new = "../" + path.removeprefix("website/") + (f"#{anchor}" if anchor else "")
         else:
             kind = "tree" if (ROOT / path).is_dir() else "blob"
             new = f"{REPO_URL}/{kind}/main/{path}" + (f"#{anchor}" if anchor else "")
         return f'{attr}="{new}"'
 
-    return re.sub(r'(href|src)="([^"]+)"', repl, page)
+    return re.sub(r'\b(href|src|srcset)="([^"]+)"', repl, page)
 
 
 def add_heading_ids(page: str) -> str:
@@ -95,18 +104,18 @@ TEMPLATE = """<!doctype html>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <style>
 :root {{
-  --bg: #fbfaf8; --bg-2: #f3f1ed; --surface: #fff; --ink: #1d1d1f; --ink-2: #5f5f64; --ink-3: #8e8e93;
+  --bg: #fcf9f5; --bg-2: #f5f0e9; --surface: #fff; --ink: #2a2421; --ink-2: #655c56; --ink-3: #8f867f;
   --line: rgba(0,0,0,.08); --accent: #d97b2b; --accent-ink: #a8541a; --accent-soft: rgba(217,123,43,.12);
-  --glass: rgba(251,250,248,.72);
+  --glass: rgba(252,249,245,.72);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
   --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }}
 @media (prefers-color-scheme: dark) {{
   :root {{
-    --bg: #0e0e0f; --bg-2: #161618; --surface: #1c1c1e; --ink: #f5f5f7; --ink-2: #a8a8ae; --ink-3: #7c7c82;
+    --bg: #141110; --bg-2: #1c1816; --surface: #24201d; --ink: #fbf4ec; --ink-2: #b3a9a1; --ink-3: #857b74;
     --line: rgba(255,255,255,.09); --accent: #f0954a; --accent-ink: #f5a766; --accent-soft: rgba(240,149,74,.14);
-    --glass: rgba(14,14,15,.7);
+    --glass: rgba(20,17,16,.7);
   }}
 }}
 * {{ box-sizing: border-box; }}
@@ -154,7 +163,7 @@ footer {{ border-top: 1px solid var(--line); padding: 28px 16px 48px; text-align
 <main class="markdown-body">
 {body}
 </main>
-<footer>Stow is free software under the GPL-3.0 · <a href="{repo_url}/edit/main/{source}">Edit this page</a></footer>
+<footer>Stow is free software under the GPL-3.0 · Part of <a href="https://beastry.app">Beastry</a> · <a href="{repo_url}/edit/main/{source}">Edit this page</a></footer>
 </body>
 </html>
 """
