@@ -54,13 +54,13 @@ Actions extensions and any plugin marketplace are only a demand-driven long-term
 | --- | --- | --- |
 | Engine | Bundled official `7zz` + ZIPFoundation | Bundled official `7zz` (pinned, checksum-verified) |
 | Parsing process | `ArcZipArchiveService.xpc` (no sandbox entitlements) | `StowEngine.xpc`, **sandboxed**, gets a read-only file handle, never a path |
-| Main app | **Not sandboxed**; onboarding asks for Full Disk Access | Sandboxed, user-selected files only. Finder actions ask once per folder (security-scoped bookmark, README › Sandbox and Finder actions); installs use a one-time folder grant |
+| Main app | **Not sandboxed**; onboarding asks for Full Disk Access | Sandboxed, user-selected files only. Finder actions ask once per folder (security-scoped bookmark, ARCHITECTURE › Sandbox and Finder actions); installs use a one-time folder grant |
 | Extensions | Finder Sync (`com.apple.FinderSync`), Quick Look preview (zip/7z/tar only) | Both; Quick Look covers all 34 registered types and runs its own sandboxed engine copy |
 | Services menu | 5 Finder services | Same set |
 | Updates | Sparkle | Sparkle (open-source appcast on GitHub Releases) |
 | Licensing | Ed25519-signed licenses, device seats, trial, Keychain | **None** — open source |
 | Languages | English, Simplified Chinese | English, Simplified Chinese at launch (String Catalog) |
-| OS | macOS 14+ | macOS 26+ (decision recorded in README) |
+| OS | macOS 14+ | macOS 26+ (decision recorded in DEVELOPING) |
 
 Legend: ✅ verified within the stated scope · ❌ confirmed native failure · 🎨 designed, UI only (simulated) · 🧪 remaining acceptance · ⏳ deferred · ⬜ not started · ➕ Stow goes further
 
@@ -150,7 +150,7 @@ Progress and result appear in an Actions-style capsule (Stop, Show in Finder).
 
 | ArcZip | Stow | Notes |
 | --- | --- | --- |
-| Install app from archive/DMG to /Applications; replace existing; reveal in Finder | ✅ one-time folder grant (see README › Installing) | replace shows both versions, old copy to the Trash; refuses while the app is running |
+| Install app from archive/DMG to /Applications; replace existing; reveal in Finder | ✅ one-time folder grant (see ARCHITECTURE › Installing) | replace shows both versions, old copy to the Trash; refuses while the app is running |
 | Signature & notarization check (unsigned / ad-hoc / unnotarized / unknown) with warnings | ✅ SecStaticCode + requirements | ➕ plain-word verdict in Checkup and Details (“Check Signature” before installing) |
 | Optional quarantine-flag removal | ✅ off by default, explained | installed apps keep the archive’s quarantine so Gatekeeper still checks them; if macOS refuses removal, Checkup says so |
 | Honour developer “drag to X” DMG layouts | ✅ | APFS images give the target; HFS+ ones only reveal a link named “Applications” |

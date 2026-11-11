@@ -65,7 +65,7 @@ This division does not add a user approval gate to already authorized work.
 
 ## Build and check
 
-Full details are in [README.md](README.md); CI enforces the last two checks.
+Full details are in [DEVELOPING.md](DEVELOPING.md); CI enforces the last two checks.
 
 - Run `scripts/fetch-7zip.sh` once in each checkout or worktree. It puts the pinned 7-Zip into
   the gitignored `Vendor/`.
@@ -77,15 +77,17 @@ Full details are in [README.md](README.md); CI enforces the last two checks.
   with the exact intended app path. A routine build/test must not replace the user's registered
   extensions with a temporary checkout. Coordinate signed system-integration artifacts with
   the release collaborator; see #32 and #38.
-- Design screenshots: `scripts/snapshot.sh <scene> [light|dark]`. Scenes are listed in the README.
+- Design screenshots: `scripts/snapshot.sh <scene> [light|dark]`. Scenes are listed in DEVELOPING.md.
 - Every user-facing string needs a Simplified Chinese translation:
   `scripts/check-localizations.sh zh-Hans`.
 - Commit any plists that `xcodegen generate` rewrites; CI fails when they differ from `project.yml`.
 
 ## Where things are
 
-- [README.md](README.md): requirements, archive engine and Finder integration architecture, and
-  the source layout table.
+- [README.md](README.md): what Stow is and how to install it.
+  [DEVELOPING.md](DEVELOPING.md): requirements, build, tests, snapshot scenes, settings keys and
+  the source layout table. [ARCHITECTURE.md](ARCHITECTURE.md): archive engine, Finder integration,
+  sandbox and install decisions, updates.
 - [DESIGN.md](DESIGN.md) and [Handoff/](Handoff/): design language, current briefs, native audits.
 - [PARITY.md](PARITY.md): feature comparison with ArcZip.
   [ROADMAP.md](ROADMAP.md): remaining work and tests not yet run.

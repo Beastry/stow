@@ -8,7 +8,7 @@ import AppKit
 /// and says why; choosing Allow grants that folder and everything inside it, remembered as a
 /// security-scoped bookmark. Choosing a different folder uses it once and remembers nothing.
 /// There is one list of grants for every feature, shown (with Remove) in Settings › Integration.
-/// No helper, no Full Disk Access. (See README › Sandbox and Finder actions, Installing from a sandbox.)
+/// No helper, no Full Disk Access. (See ARCHITECTURE.md › Sandbox and Finder actions, Installing from a sandbox.)
 @Observable
 final class FolderAccess {
     static let shared = FolderAccess()

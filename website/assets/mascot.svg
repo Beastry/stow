@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Stow">
+<!--
+  Stow's mascot: a squirrel behind the parcel from the app icon (Design/AppIcon.svg), with the same tape.
+  Used on the website and in the README. The app icon and favicon are still the parcel alone.
+  Drawn with the kit proposed for the Beastry family in Beastry/brand#2 (Charcoal outline, shared face,
+  paws on the edge, Cream tile); that proposal is under review, so treat this as a first version.
+-->
+<title>Stow</title>
+<rect width="512" height="512" rx="116" fill="#FFF6EE"/><g transform="translate(256 256) scale(1.12) translate(-286 -264)">
+    <ellipse cx="412" cy="214" rx="64" ry="92" transform="rotate(14 412 214)" fill="#DB9A6E" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M408 276C452 250 452 180 410 166C384 158 366 184 382 204" fill="none" stroke="#F3C7A2" stroke-width="15" stroke-linecap="round"/>
+    <path d="M162 170Q154 126 172 112Q180 106 188 114L210 142Z" fill="#DB9A6E" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/><path d="M302 170Q310 126 292 112Q284 106 276 114L254 142Z" fill="#DB9A6E" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M172 154Q169 134 177 126L192 144Z" fill="#FFD6C7" stroke="#FFD6C7" stroke-width="5" stroke-linejoin="round"/><path d="M292 154Q295 134 287 126L272 144Z" fill="#FFD6C7" stroke="#FFD6C7" stroke-width="5" stroke-linejoin="round"/>
+    <ellipse cx="232" cy="204" rx="86" ry="68" fill="#DB9A6E" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <ellipse cx="232" cy="228" rx="52" ry="34" fill="#FFF1E0"/>
+    
+    <circle cx="202" cy="208" r="7.5" fill="#2A2421"/><circle cx="262" cy="208" r="7.5" fill="#2A2421"/>
+    <circle cx="203.8" cy="206.2" r="2.4" fill="#fff"/><circle cx="263.8" cy="206.2" r="2.4" fill="#fff"/>
+    <ellipse cx="176" cy="220" rx="8.5" ry="5.5" fill="#F9A59A"/><ellipse cx="288" cy="220" rx="8.5" ry="5.5" fill="#F9A59A"/>
+    <path d="M225 219q3.5 5.5 7 0q3.5 5.5 7 0" fill="none" stroke="#2A2421" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <ellipse cx="232" cy="216.5" rx="3.4" ry="2.4" fill="#2A2421"/>
+    <rect x="112" y="290" width="288" height="128" rx="26" fill="#F2A24E" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <rect x="96" y="262" width="320" height="60" rx="20" fill="#F8BE7C" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M202 262H262V366Q262 378 252 371L238 361Q232 357 226 361L212 371Q202 378 202 366Z" fill="#FFFDF9" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/><ellipse cx="166" cy="266" rx="18" ry="13" fill="#DB9A6E" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/><ellipse cx="298" cy="266" rx="18" ry="13" fill="#DB9A6E" stroke="#2A2421" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/></g>
+</svg>
