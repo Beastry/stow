@@ -708,6 +708,8 @@ struct StowApp: App {
 
 /// The Browser window. It only ever shows an open archive: with none, the welcome takes over (`AppRoot`).
 struct RootView: View {
+    /// Where the Browser's frame is kept (`NSWindow Frame Browser`).
+    static let frameName = "Browser"
     @Environment(AppState.self) private var app
     @State private var rootWindow: NSWindow?
 
@@ -727,8 +729,10 @@ struct RootView: View {
                 rootWindow = window
                 app.archiveWindow = window
                 window.tabbingMode = .disallowed
-                // State restoration is off, so the Browser keeps its size and place this way.
-                window.setFrameAutosaveName("Browser")
+                // State restoration is off, so the Browser keeps its size and place this way. Only
+                // the first archive's window records them: another archive's window opens beside it
+                // (`ArchiveWindowController`) and must not take the name, or move, when it's free.
+                if app.workspaceOwner == nil { window.setFrameAutosaveName(Self.frameName) }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in

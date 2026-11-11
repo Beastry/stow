@@ -48,7 +48,7 @@ extension AppState {
 
     func presentArchive() {
         workspace.lastArchiveSessionID = sessionID
-        if glance.isShown { glance.show(near: NSEvent.mouseLocation, animated: false) }
+        if glance.isShown { glance.bringForward() }
         else { showMainWindow() }
     }
 
@@ -71,26 +71,60 @@ extension AppState {
     }
 }
 
+/// Where another archive's Browser window opens beside the one in front.
+nonisolated enum ArchiveWindowPlacement {
+    static let defaultSize = CGSize(width: 1120, height: 700)
+    /// Clear of the window in front's title bar edge, so both can be told apart and reached.
+    static let step: CGFloat = 28
+
+    /// The front Browser's size, a step down and to the right of it. A step that would leave the
+    /// visible area starts again from that side's near edge, as the system's own cascade does,
+    /// so the window is never cut off by the screen or the Dock.
+    static func frame(after front: CGRect, visible: CGRect) -> CGRect {
+        let width = min(front.width, visible.width), height = min(front.height, visible.height)
+        var x = front.minX + step
+        if x + width > visible.maxX || x < visible.minX { x = visible.minX }
+        var top = front.maxY - step
+        if top - height < visible.minY || top > visible.maxY { top = visible.maxY }
+        return CGRect(x: x, y: top - height, width: width, height: height)
+    }
+}
+
 /// Secondary Browser windows reuse the existing workspace and native toolbar. Their close,
 /// password and edit state belongs to their session, never to the app-wide Welcome scene.
 final class ArchiveWindowController: NSWindowController {
     init(session: AppState) {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 700),
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: ArchiveWindowPlacement.defaultSize),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.identifier = NSUserInterfaceItemIdentifier("archive-" + session.sessionID.uuidString)
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.toolbarStyle = .unified
-        window.center()
-        if let previous = NSApp.keyWindow { window.cascadeTopLeft(from: NSPoint(x: previous.frame.minX + 24, y: previous.frame.maxY - 24)) }
         let host = NSHostingController(rootView: RootView().environment(session))
         host.sceneBridgingOptions = [.title, .toolbars]
         host.sizingOptions = [.minSize]
         window.contentViewController = host
-        window.setContentSize(NSSize(width: 1120, height: 700))
+        window.setContentSize(ArchiveWindowPlacement.defaultSize)
         super.init(window: window)
+        Self.place(window, among: session.workspace.archiveSessions.compactMap(\.archiveWindow))
         session.archiveWindow = window
+    }
+
+    /// Another archive's window opens as the Browser people already have: the size of the front
+    /// Browser window and a step down and to the right of it, or, with none on screen, where the
+    /// Browser was last left. Never placed from whichever window happens to be key (Settings,
+    /// Welcome and Glance are not Browsers), and never at a size of its own.
+    private static func place(_ window: NSWindow, among browsers: [NSWindow]) {
+        let front = NSApp.orderedWindows.first { candidate in
+            candidate !== window && candidate.isVisible && !candidate.isMiniaturized
+                && !candidate.styleMask.contains(.fullScreen) && browsers.contains { $0 === candidate }
+        }
+        if let front, let visible = (front.screen ?? NSScreen.main)?.visibleFrame {
+            window.setFrame(ArchiveWindowPlacement.frame(after: front.frame, visible: visible), display: false)
+        } else if !window.setFrameUsingName(RootView.frameName) {
+            window.center()
+        }
     }
 
     required init?(coder: NSCoder) { nil }
