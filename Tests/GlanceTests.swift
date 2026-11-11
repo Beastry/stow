@@ -418,7 +418,23 @@ struct GlanceTests {
             let first = GlancePlacement.frame(size: Self.size, pointer: edge.pointer(in: visible), visible: visible)
             let second = GlancePlacement.cascaded(first, clearOf: [first], visible: visible)
             #expect(visible.insetBy(dx: GlancePlacement.margin, dy: GlancePlacement.margin).contains(second))
+            #expect(second != first)
         }
+    }
+
+    @Test func glancesAtTheBottomRightWrapInsteadOfHidingEachOther() {
+        let visible = Self.screens[0]
+        let first = GlancePlacement.frame(size: Self.size,
+                                         pointer: GlancePlacement.Edge.bottomRight.pointer(in: visible), visible: visible)
+        let second = GlancePlacement.cascaded(first, clearOf: [first], visible: visible)
+        let third = GlancePlacement.cascaded(first, clearOf: [first, second], visible: visible)
+        #expect(second != first && third != first && third != second)
+        #expect(third.minX == second.minX + GlancePlacement.cascadeStep)
+        #expect(third.maxY == second.maxY - GlancePlacement.cascadeStep)
+        let room = visible.insetBy(dx: GlancePlacement.margin, dy: GlancePlacement.margin)
+        #expect(room.contains(second) && room.contains(third))
+        // If the window fills the screen there is no free position, but placement must terminate.
+        #expect(GlancePlacement.cascaded(room, clearOf: [room], visible: visible) == room)
     }
 
     @Test func remembersTheSizeItWasGivenButNeverUnderTheMinimum() {

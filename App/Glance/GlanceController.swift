@@ -27,7 +27,7 @@ nonisolated enum GlancePlacement {
     static let cascadeStep: CGFloat = 28
 
     /// `frame` moved down and to the right until its top-left corner is clear of every frame in
-    /// `others`, still inside the visible area. Several archives opened at once (one pointer, one
+    /// `others`, wrapping at the visible area's edges. Several archives opened at once (one pointer, one
     /// spot) would otherwise stand exactly on top of each other and read as a single window.
     static func cascaded(_ frame: CGRect, clearOf others: [CGRect], visible: CGRect) -> CGRect {
         let room = visible.insetBy(dx: margin, dy: margin)
@@ -38,9 +38,11 @@ nonisolated enum GlancePlacement {
             }
             guard taken else { break }
             var next = result
-            next.origin.x = clamp(result.minX + cascadeStep, room.minX, room.maxX - result.width)
-            next.origin.y = clamp(result.minY - cascadeStep, room.minY, room.maxY - result.height)
-            // In the screen's bottom-right corner there's nowhere further to step.
+            next.origin.x = result.minX + cascadeStep
+            if next.maxX > room.maxX { next.origin.x = room.minX }
+            next.origin.y = result.minY - cascadeStep
+            if next.minY < room.minY { next.origin.y = room.maxY - result.height }
+            // A Glance filling the visible area has no room to step in either direction.
             guard next != result else { break }
             result = next
         }
