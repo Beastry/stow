@@ -73,11 +73,11 @@ def main() -> None:
             layer["fill-specializations"] = [{"appearance": "dark", "value": {"solid": color(dark)}}]
         if tinted := g.get("data-tinted-opacity"):
             layer["opacity-specializations"] = [{"value": 1.0}, {"appearance": "tinted", "value": float(tinted)}]
-        glass = "glass" in layer
+        translucency = float(g.get("data-translucency", 0))
         groups.append({
             "layers": [layer],
             "shadow": {"kind": "neutral", "opacity": 0.5},
-            "translucency": {"enabled": glass, "value": 0.3 if glass else 0},
+            "translucency": {"enabled": translucency > 0, "value": translucency},
         })
     document = {
         "fill": {"linear-gradient": [color(c) for c in stops]},
@@ -89,16 +89,11 @@ def main() -> None:
     }
     (ICON / "icon.json").write_text(json.dumps(document, indent=2) + "\n")
 
-    # The favicon is the light icon, flat: the rounded mask, and a hairline shadow under the lid
-    # standing in for the depth macOS adds.
+    # The favicon is the light icon, flat, under the rounded mask.
     mask = ET.fromstring(f'<clipPath xmlns="{SVG}" id="mask"><rect width="1024" height="1024" rx="230"/></clipPath>')
     body = ET.Element(f"{{{SVG}}}g", {"clip-path": "url(#mask)"})
     body.append(ET.Element(f"{{{SVG}}}rect", {"width": "1024", "height": "1024", "fill": "url(#fill)"}))
     for g in layers:
-        if g.get("id") == "lid":
-            lid = g.find("svg:rect", NS)
-            body.append(ET.Element(f"{{{SVG}}}rect", {
-                "y": lid.get("height"), "width": "1024", "height": "28", "fill": "#000", "opacity": ".12"}))
         body.extend(g)
     FAVICON.write_text(svg([*defs, mask], [body]))
 
