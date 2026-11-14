@@ -100,6 +100,9 @@ enum DemoScene {
         case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
         default: break
         }
+        // A Stow started by its executable's path, as `scripts/snapshot.sh` starts it, gets AppKit's blank
+        // placeholder as its own icon; the bundle's icon is the real one. Welcome shows it.
+        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
         // The sample's "Harbor Prototype.app" gets a real-looking icon (Design/DemoAppIcon.svg), not the generic one.
         if let icon = NSImage(named: "DemoAppIcon")?.cgImage(forProposedRect: nil, context: nil, hints: nil) { NativeIcon.bitmaps["com.apple.application-bundle"] = icon }
 
