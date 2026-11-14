@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/assets/mascot.svg" width="128" height="128" alt="Stow: a squirrel peeking over a taped parcel">
+  <img src="website/favicon.svg" width="128" height="128" alt="Stow app icon: a squirrel in silhouette">
 </p>
 
 <h1 align="center">Stow</h1>

@@ -152,7 +152,7 @@ checks remain recorded in [PARITY.md](PARITY.md) and *Tests not yet conducted* b
 
 | Area | Plan |
 | --- | --- |
-| App icon | Implemented: amber parcel icon in `Design/AppIcon.svg` and the Icon Composer document, with light/dark/tinted appearances; further tuning is optional. |
+| App icon | Implemented: a squirrel in silhouette on the amber tile, in `Design/AppIcon.svg` and the Icon Composer document, with light/dark/tinted/clear appearances; further tuning is optional. The README and website use the same mark. |
 | Welcome window | Real Open Recent is done (#83), with a responsive layout and a smaller empty-state drop target; further spacing and title-bar polish is optional. Screenshot sample recents remain in DemoScene only. |
 | Motion audit | #104 tracks current native acceptance. #255/#260 implement display-preference and accent-contrast fixes; #261/#262 refine encrypted states and Actions motion. Real System Settings switches still need acceptance. Claude Code owns visual/motion treatment. |
 | Consistency | One progress capsule style for packing, extracting, installing and batch; one prompt style for conflicts, signatures and passwords. |
