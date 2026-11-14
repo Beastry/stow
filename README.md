@@ -5,6 +5,7 @@
 <h1 align="center">Stow</h1>
 
 <p align="center">
+  <b>Archives, opened with care.</b><br>
   A native macOS archive tool. See what’s inside, take the next step,<br>
   and pack files that open on anyone’s computer.
 </p>
@@ -18,9 +19,13 @@
 </p>
 
 <p align="center">
+  <sub>Free and open source · macOS 26 or later · Signed and notarized</sub>
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="website/assets/grid-dark.webp">
-    <img src="website/assets/grid-light.webp" width="820" alt="Stow browsing the Photos folder of a ZIP: five thumbnails, two selected, Selection Info on the right and Extract at the bottom.">
+    <img src="website/assets/grid-light.webp" width="820" alt="Stow browsing the Photos folder of a ZIP: five thumbnails, two selected, Selection Info on the right, and Extract beside Extract All at the bottom.">
   </picture>
 </p>
 
@@ -52,13 +57,85 @@ Most archive tools answer one question: where should this be extracted? Stow ans
 | **What’s next?** | Actions offers the step that fits the selection: install a font or an app, open an installer, open a nested archive, or extract. |
 | **Will it open for them?** | Say who the archive is for. Stow replaces names Windows rejects, leaves out Mac-only clutter, and shows every change before it packs. |
 
-And around the Mac:
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="website/assets/steps-dark.webp">
+        <img src="website/assets/steps-light.webp" width="400" alt="The Fonts folder in Stow: three font files selected, each shown as a type specimen, with Install 3 Fonts at the bottom.">
+      </picture>
+      <br>
+      <b>Actions</b><br>
+      Select three fonts and the step on offer is Install 3 Fonts.
+    </td>
+    <td width="50%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="website/assets/editing-dark.webp">
+        <img src="website/assets/editing-light.webp" width="400" alt="Stow editing the Photos folder of an archive: two files marked New, one marked Renamed, Save in the title bar, and a bar reading “3 unsaved changes” with Revert.">
+      </picture>
+      <br>
+      <b>Editing 🧪</b><br>
+      Add, rename and delete in place. Nothing is written until you save.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="website/assets/tour/pack-1-dark.webp">
+        <img src="website/assets/tour/pack-1-light.webp" width="400" alt="The pack sheet: Pack “Harbor Handoff” as a ZIP for Windows PCs, without a password, as one file, reporting 3 names adjusted and 2 Mac-only files left out.">
+      </picture>
+      <br>
+      <b>The pack sentence</b><br>
+      Say who it’s for. The report underneath shows every change first.
+    </td>
+    <td width="50%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="website/assets/recents-dark.webp">
+        <img src="website/assets/recents-light.webp" width="400" alt="The welcome window: a drop area with Open Archive and Create Archive above a list of recent archives.">
+      </picture>
+      <br>
+      <b>Welcome</b><br>
+      Drop archives to open or extract them, or other files to pack them.
+    </td>
+  </tr>
+</table>
 
-- **Glance**: a small window by the pointer for a quick look and a quick extract.
-- **Tray**: a shelf in the menu bar. Gather files from anywhere, then pack them or drag them out together.
-- **Quick Look**: press Space on an archive in Finder to see its contents without opening Stow.
+## Around the Mac
+
+<table>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="website/assets/glance-dark.webp">
+        <img src="website/assets/glance-light.webp" width="253" alt="Glance: a compact window listing the Photos folder, two photos selected, with Extract and Extract All at the bottom.">
+      </picture>
+      <br>
+      <b>Glance</b><br>
+      A small window by the pointer for a quick look and a quick extract.
+    </td>
+    <td width="27%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="website/assets/tray-dark.webp">
+        <img src="website/assets/tray-light.webp" width="200" alt="The Tray panel holding six items, two of them selected, with Pack Selected.">
+      </picture>
+      <br>
+      <b>Tray</b><br>
+      A shelf in the menu bar. Gather files from anywhere, then pack them or drag them out together.
+    </td>
+    <td width="40%" align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="website/assets/quicklook-dark.webp">
+        <img src="website/assets/quicklook-light.webp" width="337" alt="A Quick Look preview of Harbor Rebrand Handoff.zip: its size, how much smaller it is packed, and the folder tree with file sizes.">
+      </picture>
+      <br>
+      <b>Quick Look</b><br>
+      Press Space on an archive in Finder to see its contents without opening Stow.
+    </td>
+  </tr>
+</table>
+
 - **Finder menu and Services**: Extract Here, Extract To…, Compress with Stow….
-- **Editing** 🧪: add, rename, replace and delete inside ZIP, 7Z and TAR archives. Nothing is written until you save.
+- **Editing** 🧪: add, rename, replace and delete inside ZIP, 7Z and TAR archives.
 - **Encrypted and split archives**: open them, and create ZIP and 7Z with a password or in volumes.
 
 ## Formats

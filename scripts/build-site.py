@@ -104,18 +104,18 @@ TEMPLATE = """<!doctype html>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <style>
 :root {{
-  --bg: #fcf9f5; --bg-2: #f5f0e9; --surface: #fff; --ink: #2a2421; --ink-2: #655c56; --ink-3: #8f867f;
-  --line: rgba(0,0,0,.08); --accent: #d97b2b; --accent-ink: #a8541a; --accent-soft: rgba(217,123,43,.12);
-  --glass: rgba(252,249,245,.72);
+  --bg: #fff6ee; --bg-2: #f9eadb; --surface: #fffdfa; --ink: #2a2421; --ink-2: #63584f; --ink-3: #7a6e66;
+  --line: rgba(42,36,33,.09); --accent: #d97b2b; --accent-ink: #a8541a; --accent-soft: rgba(217,123,43,.13);
+  --glass: rgba(255,246,238,.74);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
   --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }}
 @media (prefers-color-scheme: dark) {{
   :root {{
-    --bg: #141110; --bg-2: #1c1816; --surface: #24201d; --ink: #fbf4ec; --ink-2: #b3a9a1; --ink-3: #857b74;
-    --line: rgba(255,255,255,.09); --accent: #f0954a; --accent-ink: #f5a766; --accent-soft: rgba(240,149,74,.14);
-    --glass: rgba(20,17,16,.7);
+    --bg: #171311; --bg-2: #201a17; --surface: #2a2320; --ink: #fbf4ec; --ink-2: #b8ada4; --ink-3: #94887f;
+    --line: rgba(255,244,232,.09); --accent: #f0954a; --accent-ink: #f5a766; --accent-soft: rgba(240,149,74,.15);
+    --glass: rgba(23,19,17,.72);
   }}
 }}
 * {{ box-sizing: border-box; }}
