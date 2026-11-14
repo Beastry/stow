@@ -431,7 +431,7 @@ section { padding: 0 0 var(--gap); }
 }
 .peek[data-open] { opacity: 1; transform: none; }
 .peek[data-instant] { transition: none; }
-.peek .pic { aspect-ratio: 4/3; border-radius: 9px; }
+.peek .pic { aspect-ratio: 3/2; border-radius: 9px; }   /* with its caption, no taller than the five-row list */
 .peek .cap { margin-top: 8px; font-size: 13px; }
 .peek .cap small { display: block; color: var(--ink-3); }
 @media (max-width: 620px) { .peek { left: auto; right: 0; } }
@@ -1285,7 +1285,8 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 13.
     current?.removeAttribute('data-hot'); current = row; row.setAttribute('data-hot', '');
     peek.querySelector('.pic').className = 'pic pal-' + row.dataset.pal;
     peek.querySelector('.cap').innerHTML = `${row.dataset.name}<small>${row.dataset.meta}</small>`;
-    peek.style.top = Math.max(0, row.offsetTop - 40) + 'px';
+    // Follows the row, but never past the demo's own edges: the tile clips whatever hangs out of it.
+    peek.style.top = Math.max(0, Math.min(row.offsetTop - 40, demo.offsetHeight - peek.offsetHeight)) + 'px';
     peek.toggleAttribute('data-instant', instant || reduceMotion);
     peek.setAttribute('data-open', '');
   };
