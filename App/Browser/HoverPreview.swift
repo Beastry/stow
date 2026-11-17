@@ -6,6 +6,9 @@ import SwiftUI
 @Observable
 final class HoverPreviewModel {
     private(set) var presented: ArchiveEntry.ID?
+    /// The open card's own window (#323). Presses and focus inside it are the person using the
+    /// player, not acting on files, so they don't close the preview.
+    @ObservationIgnored weak var cardWindow: NSWindow?
     @ObservationIgnored private let mouseButtons: () -> Int
     @ObservationIgnored private let isDragging: () -> Bool
 
@@ -69,6 +72,27 @@ final class HoverPreviewModel {
         }
     }
 
+    /// The pointer moved onto the open card (#323): it stays while the pointer is there, and goes
+    /// once it leaves, after the same grace as leaving a row.
+    func holdOpen(_ inside: Bool) {
+        guard presented != nil else { return }
+        closeTask?.cancel()
+        closeTask = nil
+        guard !inside else { return }
+        closeTask = Task { [weak self, closeGrace] in
+            try? await Task.sleep(for: closeGrace)
+            guard !Task.isCancelled else { return }
+            self?.close()
+        }
+    }
+
+    /// Whether a press or a change of key window means the person moved on (#167, #323): yes,
+    /// unless it happened in the open card itself.
+    func interrupts(in window: NSWindow?) -> Bool {
+        guard let cardWindow, presented != nil else { return true }
+        return window !== cardWindow
+    }
+
     /// Opens a preview straight away (design review runs have no pointer).
     func present(_ id: ArchiveEntry.ID) {
         openTask?.cancel()
@@ -101,6 +125,7 @@ final class HoverPreviewModel {
         closeTask?.cancel()
         closeTask = nil
         stopWatching()
+        cardWindow = nil
         if presented != nil { lastClosed = .now }
         withTransaction(Self.unanimated) { presented = nil }
     }
@@ -117,12 +142,28 @@ final class HoverPreviewModel {
         pressMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown,
                                                                   .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]) { [weak self] event in
             // Local monitors run on the main thread, inside event dispatch.
-            MainActor.assumeIsolated { self?.interrupt() }
+            MainActor.assumeIsolated {
+                guard let self, self.interrupts(in: event.window) else { return }
+                self.interrupt()
+            }
             return event
         }
         resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
-                                                                object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.interrupt() }
+                                                                object: nil, queue: .main) { [weak self] note in
+            let resigned = (note.object as AnyObject?).map(ObjectIdentifier.init)
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                // Clicking the card's player hands it the keyboard; the window it leaves resigns
+                // first, and the new key window is only known a moment later.
+                if let card = self.cardWindow, resigned != ObjectIdentifier(card) {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.interrupts(in: NSApp.keyWindow) else { return }
+                        self.interrupt()
+                    }
+                    return
+                }
+                self.interrupt()
+            }
         }
     }
 
@@ -160,6 +201,9 @@ private struct HoverPreviewModifier: ViewModifier {
                 HoverPreviewCard(entry: entry, browser: browser)
                     // The model closes it (see `HoverPreviewModel.presented`), so clicks reach the items.
                     .interactiveDismissDisabled()
+                    // #323: the pointer may rest on the card to use its player.
+                    .onHover { model.holdOpen($0) }
+                    .background { WindowReader { model.cardWindow = $0 } }
             }
     }
 
@@ -198,7 +242,7 @@ struct HoverPreviewCardBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
-            RichPreviewView(entry: entry, model: browser, preview: preview)
+            RichPreviewView(entry: entry, model: browser, preview: preview, playsMedia: true)
                 .frame(width: 300, height: 220)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.name)

@@ -14034,6 +14034,26 @@
           }
         }
       }
+    },
+    "Audio player": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频播放器"
+          }
+        }
+      }
+    },
+    "Video player": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "视频播放器"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
