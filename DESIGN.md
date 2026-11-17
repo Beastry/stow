@@ -685,6 +685,10 @@ transition frame by frame, by click and as after a key press, for review.
   to Stow with a caption that says the browser saves it and the ZIP is then opened normally. No
   ellipsis (nothing is asked before the browser takes over), no shortcut, no in-app progress or
   error: the browser shows both. It left the File menu, which holds commands that act here.
+- **Release notes** (#330) are a web page too: **Help › Release Notes**, under Welcome to Stow,
+  opens the GitHub release page of the version that is running (a build that was never published
+  opens the list of releases). No ellipsis and no shortcut, and nothing appears after an update:
+  the notes are there when someone looks for them.
 
 ## Not doing (on purpose)
 

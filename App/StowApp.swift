@@ -920,6 +920,8 @@ struct StowCommands: Commands {
         }
         CommandGroup(after: .help) {
             Button("Welcome to Stow") { OnboardingRouter.shared.open() }
+            // This version's notes on the web (#330). No ellipsis: the browser opens at once.
+            Button("Release Notes") { NSWorkspace.shared.open(ReleaseNotes.url()) }
             // The sample is a web download now, so it lives with the app's other web pages in Help,
             // not in File beside commands that open archives here. No ellipsis: nothing is asked
             // before the browser takes over.
