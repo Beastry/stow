@@ -84,11 +84,15 @@ struct PackingSettingsView: View {
                     ForEach(Audience.allCases) { item in Text(item.phrase.sentenceCased).tag(item.rawValue) }
                 }
             }
+            // One row per purpose (#319): its name, then the format and compression a new archive
+            // for it starts with. Ten stacked rows pushed the options below off the page.
             Section {
+                ForEach(Audience.allCases) { item in PackingDefaultSetting(audience: item) }
+            } header: {
+                Text("Format and compression")
+            } footer: {
                 Text("Changes in the Pack window apply only to that archive. Change defaults here.")
-                    .foregroundStyle(.secondary)
             }
-            ForEach(Audience.allCases) { item in PackingDefaultSetting(audience: item) }
             // What comes out, then how hard the Mac works on it: the order of the Pack sheet's More Options.
             Section {
                 Picker("Split archives", selection: volumeSelection) {
@@ -138,23 +142,30 @@ private struct PackingDefaultSetting: View {
     private var selectedFormat: PackFormat { PackFormat(rawValue: format) ?? .zip }
 
     var body: some View {
-        Section(audience.phrase.sentenceCased) {
-            Picker("Format", selection: Binding(get: { selectedFormat }, set: { format = $0.rawValue })) {
-                ForEach(PackFormat.allCases) { item in Text(item.displayName).tag(item) }
+        LabeledContent(audience.phrase.sentenceCased) {
+            HStack(spacing: Space.m) {
+                Picker("Format", selection: Binding(get: { selectedFormat }, set: { format = $0.rawValue })) {
+                    ForEach(PackFormat.allCases) { item in Text(item.displayName).tag(item) }
+                }
+                .fixedSize()
+                // A fixed column, so the format menus line up whatever each level is called.
+                Picker("Compression", selection: Binding(
+                    get: { selectedFormat.isCompressed ? CompressionLevel(rawValue: level) ?? .balanced : .store },
+                    set: { level = $0.rawValue }
+                )) {
+                    ForEach(CompressionLevel.allCases) { item in Text(item.title).tag(item) }
+                }
+                .fixedSize()
+                .frame(width: Self.levelWidth, alignment: .trailing)
+                .disabled(!selectedFormat.isCompressed)
+                // Dimmed on Store says it; the sentence is there for anyone who asks why.
+                .help(selectedFormat.isCompressed ? "" : String(localized: "A TAR collects files without compressing them."))
             }
-            Picker("Compression", selection: Binding(
-                get: { selectedFormat.isCompressed ? CompressionLevel(rawValue: level) ?? .balanced : .store },
-                set: { level = $0.rawValue }
-            )) {
-                ForEach(CompressionLevel.allCases) { item in Text(item.title).tag(item) }
-            }
-            .disabled(!selectedFormat.isCompressed)
-            if !selectedFormat.isCompressed {
-                Text("A TAR collects files without compressing them.")
-                    .foregroundStyle(.secondary)
-            }
+            .labelsHidden()
         }
     }
+
+    private static let levelWidth: CGFloat = 124
 }
 
 struct PreviewSettingsView: View {

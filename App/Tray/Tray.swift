@@ -50,6 +50,8 @@ final class TrayController {
     }
     /// The folder Collect just made, so the summary can say where it went; cleared by the next action.
     private(set) var collected: URL?
+    /// The `collected` note is about Save To, so it says "Saved in", not "Collected in".
+    private(set) var collectedBySaving = false
     private(set) var isSavingTemporaryResult = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var savePanel: NSOpenPanel?
@@ -587,6 +589,9 @@ final class TrayController {
     /// Design review: rows pointed out as if just dropped, held until the scene is captured.
     func showArrivalForDemo(_ ids: Set<UUID>) { arrived = ids }
 
+    /// Design review: the footer while Save To copies a temporary result.
+    func showSavingForDemo() { isSavingTemporaryResult = true }
+
     /// Design review: the folder-name question answered with a name that's taken.
     func showCollectProblemForDemo(_ name: String) {
         collectingName = name
@@ -889,6 +894,7 @@ final class TrayController {
         let made = TrayItem(url: destination, isTemporaryGroup: temporary)
         items.append(made)
         selection = []
+        collectedBySaving = false
         withAnimation(Motion.current(Motion.status)) { collected = destination }
         mark([made.id], announcing: Self.collectedTitle(destination, temporary: temporary))
     }
@@ -965,6 +971,7 @@ final class TrayController {
                 items[index] = saved
                 if selection.remove(item.id) != nil { selection.insert(saved.id) }
                 collected = result
+                collectedBySaving = true
                 mark([saved.id], announcing: String(localized: "Saved “\(saved.name)”."))
             }
             // A preview or an already-open Pack request can still own the temporary path.
@@ -983,9 +990,12 @@ final class TrayController {
     }
 
     /// "Collected in “Desktop”", or a temporary note when the group is app-owned (#179).
-    static func collectedTitle(_ made: URL, temporary: Bool = false) -> String {
+    static func collectedTitle(_ made: URL, temporary: Bool = false, saved: Bool = false) -> String {
         if temporary {
             return String(localized: "Collected for packing")
+        }
+        if saved {
+            return String(localized: "Saved in “\(FileManager.default.displayName(atPath: made.deletingLastPathComponent().path))”")
         }
         return String(localized: "Collected in “\(FileManager.default.displayName(atPath: made.deletingLastPathComponent().path))”")
     }
@@ -1548,9 +1558,12 @@ struct TrayView: View {
             .disabled(tray.targetURLs.isEmpty)
         }
         Section {
-            Button("Save To…") { tray.beginSavingTemporaryResult() }
-                .disabled(tray.temporaryResultToSave == nil || tray.isSavingTemporaryResult)
-                .help("Save the selected temporary result to a folder")
+            // Only a temporary result can be saved, so the command isn't a dimmed line everywhere else.
+            if tray.temporaryResultToSave != nil {
+                Button("Save To…") { tray.beginSavingTemporaryResult() }
+                    .disabled(tray.isSavingTemporaryResult)
+                    .help("Save the selected temporary result to a folder")
+            }
             Button("Share…") { tray.share(from: nil) }
             Button("Show in Finder") { tray.reveal() }
             Button(tray.mainWindowActionTitle) { tray.sendToMainWindow() }
@@ -1593,13 +1606,17 @@ struct TrayView: View {
     private var footer: some View {
         Group {
             if tray.isSavingTemporaryResult {
-                HStack {
-                    ProgressView().controlSize(.small)
+                HStack(spacing: Space.s) {
+                    ActivityGlyph(ActivityGlyph.State.running(0))
                     Text("Saving Tray result…")
-                    Spacer()
-                    Button("Cancel") { tray.cancelSavingTemporaryResult() }
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    Spacer(minLength: Space.xs)
+                    Button("Cancel", role: .cancel) { tray.cancelSavingTemporaryResult() }
                         .keyboardShortcut(.cancelAction)
                 }
+                .font(.callout)
+                .transition(.opacity)
             } else if let failure = tray.failure {
                 ActivityLabel(phase: .failed(failure), title: failure.title, dismiss: { tray.failure = nil })
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1788,7 +1805,7 @@ struct TrayView: View {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .accessibilityHidden(true)
-            Text(TrayController.collectedTitle(made, temporary: TrayTemporaryGroups.isOwned(made)))
+            Text(TrayController.collectedTitle(made, temporary: TrayTemporaryGroups.isOwned(made), saved: tray.collectedBySaving))
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .truncationMode(.middle)
