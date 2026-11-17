@@ -46,7 +46,7 @@ Scenes: `editing`, `readonly`, `welcome`, `grid`, `list`, `fonts`, `search`, `se
 (`-StowOpenPreferred YES` routes it as Finder does, into the window Settings › Glance picks) plus the flags listed in
 `App/Browser/BrowseDemo.swift`.
 `open -StowOpen <path> -StowRun extractAll|install|fonts|installer` runs a real step
-(`-StowInstallFolder`/`-StowExtractFolder` point it at scratch folders); with a locked screen,
+(`-StowInstallFolder`/`-StowExtractFolder` point it at scratch folders; with several archives `-StowCollectInFolder YES` also collects them in a new folder; `-StowScene batch-run -StowBatch "<path>|<path>"` runs File › Extract Archives… on those files, and `batch-collect` shows the panel's checkbox for review); with a locked screen,
 `-StowSnapshotMode view` draws the view tree instead of the composited window.
 Display preferences can't be turned on by a launch argument, so any scene takes debug-only overrides:
 `-StowReduceTransparency YES` (Stow's solid fallbacks for glass), `-StowIncreaseContrast YES` (Stow's

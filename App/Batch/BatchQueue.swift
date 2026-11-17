@@ -11,6 +11,9 @@ final class BatchQueue {
         let id = UUID()
         let url: URL
         var destination: URL
+        /// The destination is the batch's own new folder (#326, `ResultFolder`): recreated for a
+        /// retry, and removed again if nothing ends up in it.
+        var ownsDestination = false
         var phase: Phase = .waiting
         var placed: [URL] = []
 
@@ -81,9 +84,12 @@ final class BatchQueue {
 
     var summary: Summary { Summary(jobs) }
 
-    func enqueue(_ urls: [URL], into destination: URL) {
+    /// The same file chosen twice is extracted once.
+    func enqueue(_ urls: [URL], into destination: URL, ownsDestination: Bool = false) {
+        var seen = Set<String>()
+        let urls = urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
         for url in urls where url.startAccessingSecurityScopedResource() { scoped.append(url) }
-        jobs += urls.map { Job(url: $0, destination: destination) }
+        jobs += urls.map { Job(url: $0, destination: destination, ownsDestination: ownsDestination) }
         startWorker()
     }
 
@@ -133,7 +139,10 @@ final class BatchQueue {
         case .chooseFolder:
             Task {
                 guard let folder = await ExtractDestination.choose(count: 1, near: job.url) else { return }
-                update(id) { $0.destination = folder }
+                update(id) {
+                    $0.destination = folder
+                    $0.ownsDestination = false
+                }
                 retry(id)
             }
         case .showInFinder:
@@ -166,6 +175,7 @@ final class BatchQueue {
             if let source = await run(next, policy, session) { extracted.append(source) }
         }
         session.clear()
+        removeEmptyResultFolders()
         let count = extracted.count
         // A new enqueue during aftercare owns its own grants until its worker finishes.
         let completedScopes = scoped
@@ -175,9 +185,19 @@ final class BatchQueue {
         // Results remain available until Clear, including stopped jobs and offscreen rows.
     }
 
+    /// A batch's own folder goes when all its jobs are finished and nothing was placed in it.
+    private func removeEmptyResultFolders() {
+        let owned = Set(jobs.filter(\.ownsDestination).map(\.destination))
+        for folder in owned where !jobs.contains(where: { $0.destination == folder && !$0.isFinished }) {
+            ResultFolder.removeIfEmpty(folder)
+        }
+    }
+
     /// Only a complete extraction returns a source eligible for cleanup.
     private func run(_ job: Job, _ policy: ConflictPolicy, _ session: BatchPasswordSession) async -> ArchiveAftercare.Source? {
         update(job.id) { $0.phase = .running(0) }
+        // A retry after the batch removed its empty folder: make it again, at the same place.
+        if job.ownsDestination { _ = mkdir(job.destination.path, 0o755) }
         var source: ArchiveAftercare.Source?
         let passwords = passwords
         let task = Task<Extraction.Result, any Error> { [weak self] in

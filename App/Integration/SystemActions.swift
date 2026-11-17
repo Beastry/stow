@@ -47,8 +47,11 @@ final class SystemActions {
             launch { await self.extract(urls, to: nil) }
         case .extractTo:
             launch {
-                guard let destination = await self.chooseDestination(for: urls) else { return }
+                NSApp.activate()
+                guard let choice = await ExtractDestination.chooseBatch(count: urls.count, near: urls.first, sheet: false),
+                      let destination = await ResultFolder.destination(for: choice) else { return }
                 await self.extract(urls, to: destination)
+                if choice.collects { ResultFolder.removeIfEmpty(destination) }
             }
         case .compress:
             showPackSheet(urls)
@@ -148,20 +151,6 @@ final class SystemActions {
     private func showPackSheet(_ urls: [URL]) {
         app?.showMainWindow()
         app?.pack(urls)
-    }
-
-    private func chooseDestination(for archives: [URL]) async -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = String(localized: "Extract")
-        panel.message = archives.count == 1
-            ? String(localized: "Choose where to extract “\(archives[0].lastPathComponent)”.")
-            : String(localized: "Choose where to extract \(archives.count) archives.")
-        panel.directoryURL = archives[0].deletingLastPathComponent()
-        NSApp.activate()
-        return panel.runModal() == .OK ? panel.url : nil
     }
 
     // MARK: - Feedback

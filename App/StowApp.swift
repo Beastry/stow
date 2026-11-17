@@ -497,13 +497,15 @@ final class AppState {
         if let archiveWindow, archiveWindow !== glance.window { archiveWindow.performClose(nil) }
     }
 
-    /// Extracts several archives, one after another, into a folder chosen once.
+    /// Extracts several archives, one after another, into a folder chosen once; optionally a new
+    /// folder made there for this batch (#326).
     func extractArchives(_ urls: [URL]) {
         pendingCommands += 1
         Task {
             defer { pendingCommands -= 1 }
-            guard let destination = await ExtractDestination.choose(count: urls.count, near: urls.first) else { return }
-            batch.enqueue(urls, into: destination)
+            guard let choice = await ExtractDestination.chooseBatch(count: urls.count, near: urls.first),
+                  let destination = await ResultFolder.destination(for: choice) else { return }
+            batch.enqueue(urls, into: destination, ownsDestination: choice.collects)
         }
     }
 

@@ -14034,6 +14034,46 @@
           }
         }
       }
+    },
+    "Extracted Archives": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解压缩结果"
+          }
+        }
+      }
+    },
+    "Collect them in a new folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收集到一个新文件夹中"
+          }
+        }
+      }
+    },
+    "A new “%@” folder is made in the folder you choose. Each archive still gets its own folder inside it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会在你选择的文件夹中新建“%@”文件夹，每个压缩包在其中仍有自己的文件夹。"
+          }
+        }
+      }
+    },
+    "Couldn’t make a folder for the results.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法创建存放结果的文件夹。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -24,7 +24,7 @@ Functional implementation for the first wave is in this change, pending merge/re
 | Repaired; physical acceptance passed | [#317](https://github.com/Beastry/stow/issues/317): exFAT extraction and Tray export | Exclusive-copy publication preserves conflicts and metadata, rolls back owned output, and reports retained recovery paths. Sandboxed physical SSD matrix passed, including split archive creation. [Current evidence and limits](Handoff/exfat-publication-repair-2026-11-07.md) |
 
 Approved P2 backlog: count-based splitting, hover media playback, staged password-library
-improvements, multi-password archives, optional common batch-output folder, archive comments,
+improvements, multi-password archives, optional common batch-output folder (#326, implemented), archive comments,
 optional double-click extraction, and evidence-led compression/placement optimization.
 P3: release-note discoverability and demand-driven Traditional Chinese localization.
 Do not duplicate implemented multiwindow, draft, selected-path stripping or basic Keychain work.
