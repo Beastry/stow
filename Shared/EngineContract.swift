@@ -103,6 +103,8 @@ nonisolated struct ArchiveListing: Codable, Sendable {
     var startOffset: Int64? = nil
     /// Bytes after the archive ends that aren't part of it.
     var tailSize: Int64? = nil
+    /// A ZIP's archive comment as stored (`ZipComment`); the app decodes it for display.
+    var comment: Data? = nil
 }
 
 nonisolated struct ExtractRequest: Codable, Sendable {

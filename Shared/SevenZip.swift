@@ -71,6 +71,9 @@ nonisolated struct SevenZip: Sendable {
         guard var listing = fast?.listing ?? Self.parseListing(result.output) else {
             throw EngineError(.notAnArchive)
         }
+        if listing.type == "zip" {
+            listing.comment = ZipComment.read(atPath: input.path, tailSize: listing.tailSize ?? 0)
+        }
         if Self.isTarball(name: (input.path as NSString).lastPathComponent),
            let entries = try? await tarballEntries(path: input.path, descriptor: input.descriptor) {
             listing.entries = entries.map { entry in

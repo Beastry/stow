@@ -326,6 +326,7 @@ targets:
       - path: App/Model/Archive.swift
       - path: App/Model/Checkup.swift
       - path: App/Model/NameEncoding.swift
+      - path: App/Model/ArchiveComment.swift
       - path: App/Model/SearchIndex.swift
       - path: App/Model/DiskImage.swift
       - path: App/Engine/ArchiveEngine.swift
