@@ -162,6 +162,8 @@ nonisolated enum PackFormat: String, Codable, CaseIterable, Identifiable, Sendab
     var isCompressed: Bool { self != .tar }
     /// A disk image is always one file.
     var supportsSplit: Bool { self != .dmg }
+    /// Split into a number of parts (#322): ZIP and 7Z, whose parts any 7-Zip-style joiner reads.
+    var supportsPartCount: Bool { self == .zip || self == .sevenZip }
 }
 
 /// 7-Zip's `-mx` levels under names people understand.
@@ -206,6 +208,9 @@ nonisolated struct CreateRequest: Codable, Sendable {
     var password: String?
     /// Bytes per volume; nil for one file.
     var volumeSize: Int64?
+    /// ZIP and 7Z (#322): cut the finished archive into this many nearly equal parts, sized from
+    /// its final size rather than an estimate. Ignored when `volumeSize` is set.
+    var partCount: Int? = nil
     /// Adds `__MACOSX/…/._name` AppleDouble files carrying extended attributes (ZIP only).
     var keepsMacMetadata = false
     /// 7Z + password: encrypt the header/file list (`-mhe=on`). Ignored for ZIP/TAR/DMG. Default on (#152).

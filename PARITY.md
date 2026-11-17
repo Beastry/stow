@@ -125,6 +125,7 @@ Legend: ✅ verified within the stated scope · ❌ confirmed native failure · 
 | Windows filename check with editable suggested names | ✅ | ➕ clashes after renaming (incl. case-only) are numbered; edited names are made safe too |
 | AES encryption (ZIP), header/filename encryption (7Z), AES-256 disk images (DMG); ZIP passwords ASCII-only warning | ✅ ZIP/7Z · ⏳ DMG (#84) | Password goes to 7-Zip on stdin, never argv. DMG AES packing deferred: sandbox blocks MediaKit attach (#84, following #77) |
 | Split volumes, default volume size | ✅ 100 MB / 700 MB / 4 GB · 🧪 default in Settings (pending verification) | `Name.7z.001…`; Archive Utility can't open split ZIPs |
+| Split into a number of volumes (2–999) | ✅ ZIP and 7Z, Pack › Number of Parts… (#322) | Cut from the finished archive's real size into parts within one byte of each other, with or without a password; every part at least 1 KB, so a tiny archive gets fewer. Same `.001` parts as size splitting, so 7-Zip and Stow open them and joined plain ZIP parts pass `unzip -t` |
 | Verify integrity after creating | ✅ More Options | Failed test keeps nothing |
 | CPU core limit for compression | ✅ `PackCPUCores` key (0 = all) · 🧪 Settings UI (pending verification) | |
 | Replace / Keep Both when archive exists | ✅ | Replace moves the old archive and its volumes to the Trash |

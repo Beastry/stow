@@ -59,6 +59,7 @@ private func pack(_ tree: SourceTree, audience: Audience, format: PackFormat, pa
                                diskImageApplicationsLink: options.format == .dmg && options.diskImageApplicationsLink,
                                diskImageFinderChrome: options.format == .dmg && options.diskImageFinderChrome)
     create.encryptFilenames = options.format == .sevenZip && options.encryptFilenames
+    create.partCount = options.format.supportsPartCount ? options.partCount : nil
     let result = try await ArchiveCreation.run(report.items, totalBytes: report.totalBytes, attributes: metadata,
                                                request: create, named: "Project", in: destination,
                                                conflict: conflict) { _ in }
@@ -514,6 +515,56 @@ struct PackingTests {
         try #require(started.withLock { $0 }, "compression never started")
         task.cancel()
 
+        await expectEngineFailure(.cancelled) { try await task.value }
+        #expect(TemporaryFolder.contents(of: out).isEmpty)
+    }
+
+    /// #322: counted parts are published together, numbered alike when the name is taken.
+    @Test func countedPartsArePublishedAsOneSet() async throws {
+        let tree = try SourceTree()
+        defer { tree.cleanUp() }
+        var generator = SystemRandomNumberGenerator()
+        try Data((0..<60_000).map { _ in UInt8.random(in: 0...255, using: &generator) })
+            .write(to: tree.project.appending(path: "noise.bin"))
+        let out = tree.folder.url.appending(path: "Out", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: false)
+        let (first, _) = try await pack(tree, audience: .windows, format: .zip, password: "secret",
+                                        configure: { $0.setPartCount(3) }, into: out)
+        #expect(first.placed.map(\.lastPathComponent) == ["Project.zip.001", "Project.zip.002", "Project.zip.003"])
+        let (second, _) = try await pack(tree, audience: .general, format: .sevenZip,
+                                         configure: { $0.setPartCount(5) }, into: out)
+        #expect(second.placed.map(\.lastPathComponent) == (1...5).map { "Project.7z.00\($0)" })
+        let (third, _) = try await pack(tree, audience: .windows, format: .zip,
+                                        configure: { $0.setPartCount(3) }, into: out)
+        #expect(third.placed.map(\.lastPathComponent) == ["Project 2.zip.001", "Project 2.zip.002", "Project 2.zip.003"])
+        let listing = try await ArchiveEngine.shared.list(first.placed[0], password: "secret")
+        #expect(listing.entries.contains { $0.path.hasSuffix("noise.bin") })
+        #expect(TemporaryFolder.contents(of: out).count == 11)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func cancellingACountedSplitLeavesNothingBehind() async throws {
+        let tree = try SourceTree()
+        defer { tree.cleanUp() }
+        var bytes = [UInt8](repeating: 0, count: 64 << 20)
+        for index in stride(from: 0, to: bytes.count, by: 8) { bytes[index] = UInt8.random(in: 0...255) }
+        try Data(bytes).write(to: tree.project.appending(path: "noise.bin"))
+        let out = tree.folder.url.appending(path: "Out", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: false)
+        let report = Compatibility.report(for: PackRequest.collect([tree.project]).files, options: PackOptions())
+        var request = CreateRequest(operationID: UUID().uuidString, archiveName: "Project", format: .sevenZip, level: .smallest)
+        request.partCount = 4
+        let started = Mutex(false)
+        let task = Task {
+            try await ArchiveCreation.run(report.items, totalBytes: report.totalBytes, attributes: false,
+                                          request: request, named: "Project", in: out) { fraction in
+                if fraction > 0.25 { started.withLock { $0 = true } }
+            }
+        }
+        let deadline = ContinuousClock.now + .seconds(30)
+        while !started.withLock({ $0 }), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        try #require(started.withLock { $0 }, "compression never started")
+        task.cancel()
         await expectEngineFailure(.cancelled) { try await task.value }
         #expect(TemporaryFolder.contents(of: out).isEmpty)
     }
