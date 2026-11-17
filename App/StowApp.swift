@@ -415,11 +415,17 @@ final class AppState {
     }
 
     /// Every file in a Finder open request gets its own archive session.
-    func receive(_ urls: [URL]) {
+    /// `origin` is how a document open reached Stow; with Settings › Extraction › Double-click
+    /// extracts, archives opened from Finder are extracted instead (`QuickExtraction`).
+    func receive(_ urls: [URL], origin: QuickExtraction.Origin? = nil) {
         for url in urls where Handoff.isHandoff(url) {
             system.receive(url)
         }
-        for archive in urls.filter(\.isFileURL) {
+        let route = QuickExtraction.route(urls.filter(\.isFileURL), enabled: Preferences.current.quickExtractOnOpen,
+                                          origin: origin, isOpen: { [workspace] in workspace.hasArchiveSession(for: $0) })
+        // No window and no activation: the result is shown in Finder, where the open came from.
+        if !route.extract.isEmpty { system.quickExtract(route.extract) }
+        for archive in route.open {
             NSApp.activate()
             openPreferred(archive)
         }

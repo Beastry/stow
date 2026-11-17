@@ -686,6 +686,13 @@ transition frame by frame, by click and as after a key press, for review.
   ellipsis (nothing is asked before the browser takes over), no shortcut, no in-app progress or
   error: the browser shows both. It left the File menu, which holds commands that act here.
 
+- **Double-click in Finder extracts** (#328) is a switch on Settings › Extraction, off by default,
+  in its own group under Extract All's choices. It changes what a double-click does everywhere in
+  Finder, so its footer carries the ways back to browsing (hold Shift as you open, or Open in
+  Stow), the formats that always open, and what happens to the original. It never asks anything
+  after extracting: Ask each time keeps the archive. No window and no activation; the result is
+  selected in Finder, as Extract Here does.
+
 ## Not doing (on purpose)
 
 - No toolbar full of icons. Primary action (Extract) is prominent; the rest live in Actions and menus.
