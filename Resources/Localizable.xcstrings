@@ -13615,35 +13615,32 @@
         }
       }
     },
-    "Enter the password to extract this archive, or skip it and continue with the others.": {
-      "extractionState": "manual",
+    "Enter its password, or skip it and continue with the others.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "输入密码以解压此压缩包，或跳过它并继续处理其他压缩包。"
+            "value": "输入密码，或跳过它并继续处理其他压缩包。"
           }
         }
       }
     },
-    "Passwords that work are reused for this batch and saved in your Keychain.": {
-      "extractionState": "manual",
+    "Stow reuses it for this batch and saves it in your Keychain.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "验证成功的密码会在本批任务中复用，并保存到钥匙串。"
+            "value": "Stow 会在本批任务中复用此密码，并保存到你的钥匙串。"
           }
         }
       }
     },
-    "Passwords that work are reused only for this batch, then forgotten.": {
-      "extractionState": "manual",
+    "Stow reuses it for this batch, then forgets it.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "验证成功的密码仅在本批任务中复用，任务结束后即清除。"
+            "value": "Stow 会在本批任务中复用此密码，结束后即清除。"
           }
         }
       }
@@ -13654,7 +13651,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存到…"
+            "value": "存储到…"
           }
         }
       }
@@ -13665,7 +13662,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将选中的临时结果保存到文件夹"
+            "value": "将选中的临时结果存储到文件夹"
           }
         }
       }
@@ -13676,7 +13673,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已保存“%@”。"
+            "value": "已存储“%@”。"
           }
         }
       }
@@ -13687,7 +13684,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在保存托盘结果…"
+            "value": "正在存储托盘结果…"
           }
         }
       }
@@ -14014,6 +14011,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "隐藏此处的 %lld 个隐藏项目，例如磁盘映像的布局文件（⇧⌘.）"
+          }
+        }
+      }
+    },
+    "Format and compression": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "格式与压缩级别"
+          }
+        }
+      }
+    },
+    "Saved in “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已存储到“%@”"
           }
         }
       }

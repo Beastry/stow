@@ -25,7 +25,7 @@ import SwiftUI
 /// integration, advanced, licenses; `-StowLongLists YES` fills Passwords and Integration with made-up
 /// entries, in memory only; `-StowActionsExample app` picks the Actions preview's sample: photos, app,
 /// fonts, installer, archive, nothingInAppArchive),
-/// password (the sheet after a rejected password; `-StowPasswordPurpose unlock|open|extract`, `-StowPasswordRetry NO`),
+/// password (the sheet after a rejected password; `-StowPasswordPurpose unlock|open|extract|batch`, `-StowPasswordRetry NO`),
 /// encrypted (the sample marked encrypted; `-StowLock checking|available`, or `-StowEncrypted YES` on any scene;
 /// `-StowPreparing <name>` [`-StowPreparingProgress 0.42`] shows a preview being read for Quick Look,
 /// `-StowAsk YES` [`-StowPasswordRetry YES`] asks for its password), extract-options, install-options, batch, conflict, signature-warning, replace-app,
@@ -42,7 +42,7 @@ import SwiftUI
 /// pack-failed, pack-failed-dmg, empty-archive, empty-folder, search-empty, tray-empty.
 /// Editing states: editing, editing-saving (Save part-way), editing-refused (an edit Stow can't make), external, readonly,
 /// rename-archive (File › Rename Archive…), save-changes (closing with unsaved edits).
-/// Tray states: tray-collect (naming the folder for Collect into a Folder), tray-failed (a failure told inside the Tray).
+/// Tray states: tray-collect (naming the folder for Collect into a Folder), tray-failed (a failure told inside the Tray), tray-saving (Save To copying a temporary result).
 /// With `open`, `-StowRun extractAll|install|fonts|installer` runs that step once the archive is up
 /// (`-StowInstallFolder <path>` installs into a scratch folder instead of /Applications).
 /// glance (the compact window over the sample archive; `-StowGlanceEdge top|bottom|left|right|topLeft|…`
@@ -247,6 +247,7 @@ enum DemoScene {
             let purpose: PasswordPrompt.Question.Purpose = switch defaults.string(forKey: "StowPasswordPurpose") {
             case "unlock": .unlock
             case "open": .open
+            case "batch": .batchExtract
             default: .extract
             }
             let isRetry = defaults.object(forKey: "StowPasswordRetry") == nil || defaults.bool(forKey: "StowPasswordRetry")
@@ -624,6 +625,14 @@ enum DemoScene {
             ]
             app.tray.showArrivalForDemo(Set(app.tray.items.suffix(3).map(\.id)))
             app.tray.show()
+        case "tray-saving":
+            // Save To copying a temporary result: the footer's progress line and Cancel.
+            app.tray.items = [
+                TrayItem(name: "Kickoff", size: 0, isFolder: true),
+                TrayItem(name: "Invoice October.pdf", size: 182_000),
+            ]
+            app.tray.show()
+            app.tray.showSavingForDemo()
         case "tray-failed":
             app.tray.items = [
                 TrayItem(name: "Invoice October.pdf", size: 182_000),

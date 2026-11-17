@@ -62,7 +62,7 @@ struct PasswordSheet: View {
         switch question.purpose {
         case .open: String(localized: "Its list of files is encrypted. Enter the password to see what’s inside.")
         case .extract: String(localized: "Its files are encrypted. Enter the password to extract them.")
-        case .batchExtract: String(localized: "Enter the password to extract this archive, or skip it and continue with the others.")
+        case .batchExtract: String(localized: "Enter its password, or skip it and continue with the others.")
         // Asked from an archive whose file names are already showing: say they stay browsable.
         case .unlock: String(localized: "You can browse its file names. Enter the password to preview or extract the files.")
         }
@@ -79,8 +79,8 @@ struct PasswordSheet: View {
     private var footnote: String {
         if question.purpose == .batchExtract {
             return ArchivePasswordVault.isEnabled
-                ? String(localized: "Passwords that work are reused for this batch and saved in your Keychain.")
-                : String(localized: "Passwords that work are reused only for this batch, then forgotten.")
+                ? String(localized: "Stow reuses it for this batch and saves it in your Keychain.")
+                : String(localized: "Stow reuses it for this batch, then forgets it.")
         }
         if ArchivePasswordVault.isEnabled {
             return String(localized: "If this unlocks it, Stow saves the password in your Keychain for next time.")

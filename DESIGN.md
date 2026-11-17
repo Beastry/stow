@@ -341,6 +341,12 @@ takes no clicks and covers only the top of the first row. The help tags say the 
 length, and Settings › Tray explains it in the Showing and Hiding footer (no setting of its
 own any more). Chinese calls the Tray 托盘 everywhere and the pin 保持打开.
 
+**Save To (#319).** The command is listed in More and the context menu only while one temporary
+result is the target; it isn't a dimmed line for ordinary files. While it copies, the footer shows
+the progress ring, “Saving Tray result…” and Cancel in place of the summary; afterwards the note
+reads **Saved in “Folder”** with Show in Finder, like the note after Collect. In a batch, the
+password sheet's Cancel becomes **Skip Archive**, and its two sentences each fit one line.
+
 ## Glance layout (#159)
 
 Glance is the Browser made small: the same archive, folder, selection and history, the same
@@ -433,6 +439,11 @@ footer right under it, no boxes of our own. Plain sidebar symbols, no coloured t
   them. Recomputed from the toggles below. The drawing is flat (no glass), smaller than the real
   buttons and takes no clicks, so it reads as a picture, not a control; VoiceOver reads it as one
   sentence (what's in front, what's behind it).
+- **Packing** (#319) keeps **Pack for** first, then **Format and compression**: one row per
+  purpose, its name leading, the format menu and the compression menu trailing in two aligned
+  columns. The footer says changes in the Pack window stay with that archive. A format that
+  doesn't compress (TAR) shows Store, dimmed, with the reason as its help. Split, Verify and CPU
+  threads follow in their own group, on the page without scrolling.
 - **Installing** and **Finder & Permissions** show folder access the same way (#162): a folder
   symbol, the folder's name over its path (home as `~`), **Forget** on the trailing edge, and the
   same footer sentences about subfolders and what Forget does. **Passwords** lists saved passwords
