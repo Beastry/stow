@@ -50,8 +50,8 @@ final class SystemActions {
                 NSApp.activate()
                 guard let choice = await ExtractDestination.chooseBatch(count: urls.count, near: urls.first, sheet: false),
                       let destination = await ResultFolder.destination(for: choice) else { return }
-                await self.extract(urls, to: destination)
-                if choice.collects { ResultFolder.removeIfEmpty(destination) }
+                await self.extract(urls, to: destination.folder)
+                destination.claim?.removeIfEmpty()
             }
         case .compress:
             showPackSheet(urls)

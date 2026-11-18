@@ -511,7 +511,7 @@ final class AppState {
             defer { pendingCommands -= 1 }
             guard let choice = await ExtractDestination.chooseBatch(count: urls.count, near: urls.first),
                   let destination = await ResultFolder.destination(for: choice) else { return }
-            batch.enqueue(urls, into: destination, ownsDestination: choice.collects)
+            batch.enqueue(urls, into: destination.folder, collectedIn: destination.claim)
         }
     }
 

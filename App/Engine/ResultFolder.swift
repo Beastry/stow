@@ -6,7 +6,8 @@ import AppKit
 ///
 /// The folder is always new: a name already taken, by a folder or a file, gets the next number,
 /// so nothing that was there before ends up among the results. If nothing is extracted into it
-/// (every archive failed or was cancelled), it is removed again — only while it is empty.
+/// (every archive failed or was cancelled), it is removed again — only while it is empty, and only
+/// while it is still the folder the batch made (`Claim`).
 enum ResultFolder {
     static var defaultName: String { String(localized: "Extracted Archives") }
     /// The panel's last choice. Panel memory, like the last destination, not a Settings preference.
@@ -24,21 +25,92 @@ enum ResultFolder {
         throw POSIXError(.EEXIST)
     }
 
-    /// rmdir(2): removes the folder only when nothing is in it. True when it was removed.
-    @discardableResult
-    static func removeIfEmpty(_ folder: URL) -> Bool {
-        rmdir(folder.path) == 0
+    /// A directory's file identity. A path names whatever is there now; this names one folder.
+    struct Identity: Equatable {
+        let device: dev_t
+        let inode: ino_t
+
+        /// The directory at `url` itself (a symbolic link is not followed), or nil.
+        init?(_ url: URL) {
+            var info = stat()
+            guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else { return nil }
+            device = info.st_dev
+            inode = info.st_ino
+        }
     }
+
+    /// The folder one batch made, shared by that batch's jobs. It is known by identity, so a
+    /// folder somebody else puts at the same path later is never treated as the batch's own.
+    /// Ownership ends when the folder is removed or turns out to be gone or replaced.
+    final class Claim {
+        let parent: URL
+        let name: String
+        private(set) var folder: URL?
+        private var identity: Identity?
+
+        /// Makes a new folder in `parent` (see `create`).
+        init(in parent: URL, named name: String = ResultFolder.defaultName) throws {
+            self.parent = parent
+            self.name = name
+            try make()
+        }
+
+        /// The folder to extract into: the one made earlier while it is still that same folder,
+        /// otherwise a new numbered one made now. A retry never adopts an occupied path.
+        func current() throws -> URL {
+            if let folder, let identity, Identity(folder) == identity { return folder }
+            relinquish()
+            try make()
+            return folder!
+        }
+
+        /// rmdir(2) while it is still the batch's own folder: only an empty folder goes. True when
+        /// it was removed. Ownership ends then, and also when the folder was replaced meanwhile.
+        @discardableResult
+        func removeIfEmpty() -> Bool {
+            guard let folder, let identity else { return false }
+            guard Identity(folder) == identity else {
+                relinquish()
+                return false
+            }
+            guard rmdir(folder.path) == 0 else { return false }
+            relinquish()
+            return true
+        }
+
+        private func make() throws {
+            let made = try ResultFolder.create(in: parent, named: name)
+            guard let identity = Identity(made) else { throw POSIXError(.ENOENT) }
+            folder = made
+            self.identity = identity
+        }
+
+        private func relinquish() {
+            folder = nil
+            identity = nil
+        }
+    }
+
+    /// Where a batch goes: the chosen folder, or a new folder made in it with its claim.
+    struct Destination {
+        let folder: URL
+        let claim: Claim?
+    }
+}
+
+extension ResultFolder.Claim: Equatable {
+    static func == (lhs: ResultFolder.Claim, rhs: ResultFolder.Claim) -> Bool { lhs === rhs }
 }
 
 extension ResultFolder {
     /// The folder a batch extracts into: the chosen one, or a new one made in it. Explains and
     /// returns nil when the new folder can't be made.
     @MainActor
-    static func destination(for choice: ExtractDestination.BatchChoice) async -> URL? {
-        guard choice.collects else { return choice.folder }
+    static func destination(for choice: ExtractDestination.BatchChoice) async -> Destination? {
+        guard choice.collects else { return Destination(folder: choice.folder, claim: nil) }
         do {
-            return try create(in: choice.folder)
+            let claim = try Claim(in: choice.folder)
+            return Destination(folder: try claim.current(), claim: claim)
         } catch {
             _ = await Prompts.explain(Failure(
                 String(localized: "Couldn’t make a folder for the results."),

@@ -11,9 +11,9 @@ final class BatchQueue {
         let id = UUID()
         let url: URL
         var destination: URL
-        /// The destination is the batch's own new folder (#326, `ResultFolder`): recreated for a
-        /// retry, and removed again if nothing ends up in it.
-        var ownsDestination = false
+        /// The batch's own new folder (#326), shared by its jobs. A retry gets the folder from it,
+        /// and it is removed again if nothing ends up in it.
+        var resultFolder: ResultFolder.Claim?
         var phase: Phase = .waiting
         var placed: [URL] = []
 
@@ -31,6 +31,9 @@ final class BatchQueue {
     private var running: [Job.ID: Task<Extraction.Result, any Error>] = [:]
     /// Open-panel URLs need their scope claimed for reading — and for the Trash afterwards.
     private var scoped: [URL] = []
+    /// Batch folders (#326) with jobs enqueued or retried since the last cleanup. Only these are
+    /// looked at, so a drain never cleans up after an earlier, settled batch.
+    private var unsettled: [ResultFolder.Claim] = []
 
     /// Opens an archive in Stow's window (set by `AppState`), where its password can be entered.
     var onOpen: ((URL) -> Void)?
@@ -84,12 +87,14 @@ final class BatchQueue {
 
     var summary: Summary { Summary(jobs) }
 
-    /// The same file chosen twice is extracted once.
-    func enqueue(_ urls: [URL], into destination: URL, ownsDestination: Bool = false) {
+    /// The same file chosen twice is extracted once. `claim`: `destination` is a folder made for
+    /// this batch (`ResultFolder`).
+    func enqueue(_ urls: [URL], into destination: URL, collectedIn claim: ResultFolder.Claim? = nil) {
         var seen = Set<String>()
         let urls = urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
         for url in urls where url.startAccessingSecurityScopedResource() { scoped.append(url) }
-        jobs += urls.map { Job(url: $0, destination: destination, ownsDestination: ownsDestination) }
+        jobs += urls.map { Job(url: $0, destination: destination, resultFolder: claim) }
+        if let claim { unsettle(claim) }
         startWorker()
     }
 
@@ -141,7 +146,7 @@ final class BatchQueue {
                 guard let folder = await ExtractDestination.choose(count: 1, near: job.url) else { return }
                 update(id) {
                     $0.destination = folder
-                    $0.ownsDestination = false
+                    $0.resultFolder = nil
                 }
                 retry(id)
             }
@@ -159,6 +164,7 @@ final class BatchQueue {
         // The first run gave its scope back when the batch finished.
         if let url = jobs.first(where: { $0.id == id })?.url, url.startAccessingSecurityScopedResource() { scoped.append(url) }
         update(id) { $0.phase = .waiting }
+        if let claim = jobs.first(where: { $0.id == id })?.resultFolder { unsettle(claim) }
         startWorker()
     }
 
@@ -185,19 +191,30 @@ final class BatchQueue {
         // Results remain available until Clear, including stopped jobs and offscreen rows.
     }
 
+    private func unsettle(_ claim: ResultFolder.Claim) {
+        if !unsettled.contains(where: { $0 === claim }) { unsettled.append(claim) }
+    }
+
     /// A batch's own folder goes when all its jobs are finished and nothing was placed in it.
     private func removeEmptyResultFolders() {
-        let owned = Set(jobs.filter(\.ownsDestination).map(\.destination))
-        for folder in owned where !jobs.contains(where: { $0.destination == folder && !$0.isFinished }) {
-            ResultFolder.removeIfEmpty(folder)
-        }
+        let settled = unsettled.filter { claim in !jobs.contains { $0.resultFolder === claim && !$0.isFinished } }
+        for claim in settled { claim.removeIfEmpty() }
+        unsettled.removeAll { claim in settled.contains { $0 === claim } }
     }
 
     /// Only a complete extraction returns a source eligible for cleanup.
     private func run(_ job: Job, _ policy: ConflictPolicy, _ session: BatchPasswordSession) async -> ArchiveAftercare.Source? {
         update(job.id) { $0.phase = .running(0) }
-        // A retry after the batch removed its empty folder: make it again, at the same place.
-        if job.ownsDestination { _ = mkdir(job.destination.path, 0o755) }
+        // A retry after the batch removed its empty folder, or after somebody replaced it: a new
+        // numbered folder, never whatever is at the old path now.
+        let destination: URL
+        do {
+            destination = try job.resultFolder?.current() ?? job.destination
+        } catch {
+            update(job.id) { $0.phase = .failed(Failure(EngineError(error), .extract, name: job.name, destination: job.destination)) }
+            return nil
+        }
+        if destination != job.destination { update(job.id) { $0.destination = destination } }
         var source: ArchiveAftercare.Source?
         let passwords = passwords
         let task = Task<Extraction.Result, any Error> { [weak self] in
@@ -210,7 +227,7 @@ final class BatchQueue {
                 // Listing acquires any required split-folder grant. Capture before extraction,
                 // not afterward: replaced archives must never be mistaken for the extracted input.
                 source = ArchiveAftercare.Source.capture(job.url)
-                return try await Extraction.run(archive, selection: nil, to: job.destination,
+                return try await Extraction.run(archive, selection: nil, to: destination,
                                                 options: .current(resolve: policy.resolver)) { fraction in
                     Task { @MainActor in self?.advance(job.id, to: fraction) }
                 }
@@ -230,7 +247,7 @@ final class BatchQueue {
             return result.isComplete ? source : nil
         } catch {
             let error = EngineError(error)
-            let failure = Failure(error, .extract, name: job.name, destination: job.destination)
+            let failure = Failure(error, .extract, name: job.name, destination: destination)
             update(job.id) { $0.phase = error.failure == .cancelled ? .cancelled : .failed(failure) }
             return nil
         }
