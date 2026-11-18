@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import OSLog
 
 /// Publishes without replacing an existing name. The compatibility copy is visible while it is
 /// written; it is not an atomic publication. Source staging must remain private until commit.
@@ -75,7 +76,7 @@ nonisolated enum ExclusivePublication {
             self.source = source; self.target = target
             var parentStatus = stat()
             guard fstat(parentFD, &parentStatus) == 0 else {
-                close(parentFD); throw Failure.rollbackIncomplete([target])
+                close(parentFD); throw diagnosticRollback(#line, [target])
             }
             parentIdentity = Fingerprint(parentStatus)
             close(parentFD)
@@ -89,27 +90,27 @@ nonisolated enum ExclusivePublication {
             try lock.withLock {
                 guard !consumed else { return }
                 let parentFD = open(target.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-                guard parentFD >= 0 else { throw Failure.rollbackIncomplete([target]) }
+                guard parentFD >= 0 else { throw diagnosticRollback(#line, [target]) }
                 defer { close(parentFD) }
                 var parentStatus = stat()
                 guard fstat(parentFD, &parentStatus) == 0, parentIdentity.owns(parentStatus) else {
-                    throw Failure.rollbackIncomplete([target])
+                    throw diagnosticRollback(#line, [target])
                 }
                 if !usedCopyFallback {
                     let sourceParent = open(source.deletingLastPathComponent().path, O_SEARCH | O_NOFOLLOW | O_CLOEXEC)
-                    guard sourceParent >= 0 else { throw Failure.rollbackIncomplete([target]) }
+                    guard sourceParent >= 0 else { throw diagnosticRollback(#line, [target]) }
                     defer { close(sourceParent) }
                     var current = stat()
                     guard fstatat(parentFD, node.name, &current, AT_SYMLINK_NOFOLLOW) == 0,
                           node.fingerprint == Fingerprint(current),
                           ExclusivePublication.matchesManifest(node, parent: parentFD),
                           renameatx_np(parentFD, node.name, sourceParent, source.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
-                        throw Failure.rollbackIncomplete([target])
+                        throw diagnosticRollback(#line, [target])
                     }
                 } else {
                     var retained: [URL] = []
                     Self.remove(node, parent: parentFD, retained: &retained)
-                    guard retained.isEmpty else { throw Failure.rollbackIncomplete(retained) }
+                    guard retained.isEmpty else { throw diagnosticRollback(#line, retained) }
                 }
                 consumed = true
             }
@@ -144,7 +145,7 @@ nonisolated enum ExclusivePublication {
             if let companion = node.companion {
                 var value = stat()
                 let result = fstatat(parent, companion.name, &value, AT_SYMLINK_NOFOLLOW)
-                guard (result == 0 && companion.fingerprint == Fingerprint(value)) || (result != 0 && errno == ENOENT) else {
+                guard (result == 0 && diagnosticEqual(companion.fingerprint, Fingerprint(value), line: #line)) || (result != 0 && errno == ENOENT) else {
                     retained.append(companion.url); retained.append(node.url); return
                 }
             }
@@ -185,10 +186,10 @@ nonisolated enum ExclusivePublication {
             if renameatx_np(sourceParent, source.lastPathComponent, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 {
                 var status = stat()
                 guard fstatat(parent, target.lastPathComponent, &status, AT_SYMLINK_NOFOLLOW) == 0 else {
-                    throw Failure.rollbackIncomplete([target])
+                    throw diagnosticRollback(#line, [target])
                 }
                 guard (manifest?.fingerprint ?? Fingerprint(incoming)).matchesExceptChangeTime(status) else {
-                    throw Failure.rollbackIncomplete([target])
+                    throw diagnosticRollback(#line, [target])
                 }
                 let node = Node(name: target.lastPathComponent, url: target, fd: -1, status: status)
                 node.children = manifest?.children ?? []
@@ -211,7 +212,7 @@ nonisolated enum ExclusivePublication {
             if let root {
                 var retained: [URL] = []
                 Receipt.remove(root, parent: parent, retained: &retained)
-                if !retained.isEmpty { throw Failure.rollbackIncomplete(retained) }
+                if !retained.isEmpty { throw diagnosticRollback(#line, retained) }
             }
             throw error
         }
@@ -310,11 +311,11 @@ nonisolated enum ExclusivePublication {
             }
             var companionStatus = stat()
             guard fstat(companionFD, &companionStatus) == 0 else {
-                close(companionFD); throw Failure.rollbackIncomplete([companionURL])
+                close(companionFD); throw diagnosticRollback(#line, [companionURL])
             }
             close(companionFD)
             guard fstatat(destinationParent, companionName, &companionStatus, AT_SYMLINK_NOFOLLOW) == 0 else {
-                throw Failure.rollbackIncomplete([companionURL])
+                throw diagnosticRollback(#line, [companionURL])
             }
             let reservation = Node(name: companionName, url: companionURL, fd: -1, status: companionStatus)
             companion = reservation
@@ -330,11 +331,11 @@ nonisolated enum ExclusivePublication {
             output = openat(destinationParent, targetName, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         }
         guard output >= 0 else {
-            if kind == S_IFDIR { throw Failure.rollbackIncomplete([target]) }
+            if kind == S_IFDIR { throw diagnosticRollback(#line, [target]) }
             if errno == EEXIST { throw Failure.collision }; throw system("create output", target)
         }
         var initial = stat()
-        guard fstat(output, &initial) == 0 else { close(output); throw Failure.rollbackIncomplete([target]) }
+        guard fstat(output, &initial) == 0 else { close(output); throw diagnosticRollback(#line, [target]) }
         let node = Node(name: targetName, url: target, fd: output, status: initial)
         node.companion = companion
         created(node)
@@ -352,14 +353,14 @@ nonisolated enum ExclusivePublication {
             }
         }
         if let companion {
-            guard fsync(output) == 0 else { throw Failure.rollbackIncomplete([target, companion.url]) }
+            guard fsync(output) == 0 else { throw diagnosticRollback(#line, [target, companion.url]) }
             var value = stat()
             guard fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW) == 0 else {
-                throw Failure.rollbackIncomplete([target, companion.url])
+                throw diagnosticRollback(#line, [target, companion.url])
             }
             companion.fingerprint = Fingerprint(value)
             var stableOutput = stat()
-            guard fstat(output, &stableOutput) == 0 else { throw Failure.rollbackIncomplete([target]) }
+            guard fstat(output, &stableOutput) == 0 else { throw diagnosticRollback(#line, [target]) }
             node.fingerprint = Fingerprint(stableOutput)
         }
         if kind == S_IFDIR {
@@ -402,12 +403,12 @@ nonisolated enum ExclusivePublication {
         }
         var linked = stat()
         guard fstatat(destinationParent, targetName, &linked, AT_SYMLINK_NOFOLLOW) == 0,
-              node.fingerprint.owns(linked) else { throw Failure.rollbackIncomplete([target]) }
+              node.fingerprint.owns(linked) else { throw diagnosticRollback(#line, [target]) }
         if let companion {
             var value = stat()
             guard fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW) == 0,
-                  companion.fingerprint == Fingerprint(value) else {
-                throw Failure.rollbackIncomplete([target, companion.url])
+                  diagnosticEqual(companion.fingerprint, Fingerprint(value), line: #line) else {
+                throw diagnosticRollback(#line, [target, companion.url])
             }
         }
         // Includes modes, timestamps, ACLs, resource forks and extended attributes. Unsupported
@@ -606,4 +607,13 @@ nonisolated enum ExclusivePublication {
     private static func system(_ operation: String, _ url: URL, _ code: Int32 = errno) -> Failure {
         .system(operation: operation, path: url.path, code: code)
     }
+    private static func diagnosticRollback(_ line: Int, _ urls: [URL]) -> Failure {
+        Logger(subsystem: "app.stow.ExfatQA", category: "publication").notice("ROLLBACK line=\(line) errno=\(errno)")
+        return .rollbackIncomplete(urls)
+    }
+    private static func diagnosticEqual(_ before: Fingerprint, _ after: Fingerprint, line: Int) -> Bool {
+        if before != after { let details = "DIFFERENT line=\(line) before=\(before) after=\(after)"; Logger(subsystem: "app.stow.ExfatQA", category: "publication").notice("\(details, privacy: .public)") }
+        return before == after
+    }
+
 }
