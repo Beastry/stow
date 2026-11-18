@@ -283,6 +283,9 @@ nonisolated struct Archive: Identifiable, Sendable {
     /// canvas (#344); never browsed or extracted with the contents.
     var presentationFiles: [String: Int64] = [:]
 
+    /// The comment stored for the whole archive, as plain text (`ArchiveComment`); ZIP only.
+    var comment: String?
+
     var isDiskImage: Bool { format == .dmg || format == .iso }
 
     /// The single app or installer package at the top (a disk image's volume), if that's clearly

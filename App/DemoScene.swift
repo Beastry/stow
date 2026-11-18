@@ -271,6 +271,24 @@ enum DemoScene {
             showOptions(ExtractionOptionsView(), title: String(localized: "Extraction"))
         case "install-options":
             showOptions(InstallOptionsView(), title: String(localized: "Installing"))
+        case "batch-collect":
+            // Design review (#326): the batch panel's checkbox and note, as the panel shows them.
+            let option = ExtractDestination.CollectOption(remembered: defaults.bool(forKey: "StowCollectInFolder"))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 90), styleMask: [.titled], backing: .buffered, defer: false)
+            window.title = String(localized: "Extract")
+            window.contentView = option.view
+            window.setContentSize(option.view.fittingSize)
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            retained = window
+        case "batch-run":
+            // Verification (#326): File › Extract Archives… on `-StowBatch "<path>|<path>"`. With
+            // `-StowExtractFolder` (and `-StowCollectInFolder YES`) it runs without the panel.
+            let urls = (defaults.string(forKey: "StowBatch") ?? "").split(separator: "|").map { URL(filePath: String($0)) }
+            if !urls.isEmpty {
+                app.showMainWindow()
+                app.extractArchives(urls)
+            }
         case "batch":
             app.openArchive(named: SampleArchive.make().name)
             app.batch.preview([
@@ -425,6 +443,10 @@ enum DemoScene {
             case "details-clean": archive.checkup = archive.checkup.filter { !$0.needsAttention }
             case "details-planned": archive.checkup = archive.checkup.filter { $0.severity != .caution }
             default: ArchiveInfoView.disclosesForDemo = true
+            }
+            // `-StowComment <text>` gives the sample an archive comment ("\n" for a new line).
+            if let comment = defaults.string(forKey: "StowComment") {
+                archive.comment = ArchiveComment.text(from: Data(comment.replacingOccurrences(of: "\\n", with: "\n").utf8))
             }
             app.browser = BrowserModel(archive: archive)
             app.browser?.folder = "Photos"

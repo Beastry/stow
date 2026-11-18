@@ -354,6 +354,9 @@ nonisolated struct PackOptions: Equatable, Sendable {
     var hasCustomFormat = false
     var usesPassword = false
     var split: SplitSize = .none
+    /// ZIP and 7Z (#322): this many nearly equal parts, cut once the archive is made. Set, it
+    /// replaces `split`; a per-job choice, never a remembered default.
+    var partCount: Int? = nil
     var level: CompressionLevel = .balanced
     var verify = false
     /// DMG only (#77). HFS+ hybrid by default; APFS when the system allows.
@@ -415,9 +418,37 @@ nonisolated struct PackOptions: Equatable, Sendable {
         level = format.isCompressed ? PackPreferences.level(for: audience) : .store
         verify = PackPreferences.verify
         split = format.supportsSplit ? SettingsKeys.splitSize() : .none
+        partCount = nil
         diskImageFilesystem = .hfsPlus
         diskImageApplicationsLink = false
         diskImageFinderChrome = false
+    }
+
+    /// A part size from the menu or the size editor: the part count gives way.
+    mutating func setSplit(_ size: SplitSize) {
+        split = size
+        partCount = nil
+    }
+
+    /// A number of parts from its editor (#322): the part size gives way.
+    mutating func setPartCount(_ count: Int) {
+        guard format.supportsPartCount, SplitArchive.partCountRange.contains(count) else { return }
+        partCount = count
+        split = .none
+    }
+
+    /// The sentence's last words: "as one file", "in 700 MB parts", "in 5 equal parts".
+    var splitPhrase: String {
+        if let partCount { return String(localized: "in \(partCount) equal parts") }
+        return split.phrase
+    }
+
+    var isSplit: Bool { partCount != nil || !split.isNone }
+
+    /// About how many parts these items come out in, from the estimate.
+    func estimatedParts(for estimated: Int64) -> Int {
+        if let partCount { return SplitArchive.partCount(total: estimated, requested: partCount) }
+        return split.parts(for: estimated)
     }
 
     /// Keeps format and password consistent when the audience changes.
@@ -443,6 +474,7 @@ nonisolated struct PackOptions: Equatable, Sendable {
     mutating func reconcileCapabilities() {
         if !format.supportsPassword { usesPassword = false }
         if !format.supportsSplit { split = .none }
+        if !format.supportsPartCount { partCount = nil }
         if format != .dmg {
             diskImageFilesystem = .hfsPlus
             diskImageApplicationsLink = false
@@ -618,7 +650,7 @@ nonisolated enum Compatibility {
         default: 1.0
         }
         let estimated = Int64(Double(raw) * (options.level == .store ? 1 : factor))
-        let parts = options.split.parts(for: estimated)
+        let parts = options.estimatedParts(for: estimated)
 
         return PackReport(
             included: included,
@@ -635,8 +667,23 @@ nonisolated enum Compatibility {
     /// What a split archive comes out as (#153): its numbered names, and what opening it takes.
     /// Nothing for one file. `archiveName` is the archive's own name, without its extension.
     static func partsNote(for options: PackOptions, parts: Int, archiveName: String) -> PackReport.Note? {
-        guard options.format.supportsSplit, !options.split.isNone else { return nil }
+        guard options.format.supportsSplit, options.isSplit else { return nil }
         let names = partNames(archiveName: archiveName, format: options.format, parts: parts)
+        if let count = options.partCount {
+            // #322: parts are cut from the finished archive, so only a tiny one gets fewer.
+            guard parts < count else {
+                return .init(
+                    tone: .info,
+                    title: String(localized: "Comes out in \(count) parts"),
+                    detail: String(localized: "\(names), nearly equal in size, measured once the archive is made. Opening it needs every part in one folder, and an app that joins split archives, such as 7-Zip.")
+                )
+            }
+            return .init(
+                tone: .info,
+                title: String(localized: "Too small for \(count) parts"),
+                detail: String(localized: "Each part is at least 1 KB, so these items probably come out in \(parts == 1 ? String(localized: "one part") : String(localized: "\(parts) parts")): \(names).")
+            )
+        }
         guard parts > 1 else {
             return .init(
                 tone: .info,

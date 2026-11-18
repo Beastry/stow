@@ -59,6 +59,11 @@ nonisolated extension SevenZip {
         private var hasFields = false
         private var section = 0 // 0: preamble, 1: archive properties ("--"), 2: entries ("----------")
         private var rejected = false
+        /// Archive properties that hold several lines (a ZIP's comment) are printed between a "{"
+        /// line and a "}" line, as the archive wrote them: text an archive's author chose, not
+        /// 7-Zip's. See `HeaderBlocks`.
+        private var blocks = HeaderBlocks()
+        private var finished = false
         /// The end of the last chunk, up to its last newline: a line cut in two.
         private var carry: [UInt8] = []
 
@@ -94,6 +99,9 @@ nonisolated extension SevenZip {
         /// Drains completed entries without losing the authoritative listing or legacy indices.
         mutating func takeEntries(minimum: Int = 1) -> [ListedEntry] {
             precondition(minimum > 0)
+            // After a several-line property, what looks like entries may still be that property's
+            // text: nothing is handed over until the output has ended.
+            guard finished || !blocks.sealed else { return [] }
             guard entries.count - delivered >= minimum else { return [] }
             let end = minimum > 1 ? delivered + minimum : entries.count
             defer { delivered = end }
@@ -108,6 +116,7 @@ nonisolated extension SevenZip {
                 rest.withUnsafeBufferPointer { consumeLines($0) }
             }
             flush()
+            finished = true
             guard !rejected, let type, SevenZip.fastTypes.contains(type), section == 2 else { return nil }
             return (ArchiveListing(type: type, physicalSize: physicalSize, entries: entries,
                                    startOffset: SevenZip.startOffset(archiveFields),
@@ -140,6 +149,21 @@ nonisolated extension SevenZip {
             let line = !isPath && whole.last == 13 ? UnsafeBufferPointer(rebasing: whole.dropLast()) : whole
 
             if section == 0, SevenZip.matches(line, "--") { section = 1; return }
+            if section == 1 {
+                let isOpening = SevenZip.matches(line, "{"), isClosing = SevenZip.matches(line, "}")
+                if blocks.skips(isOpening: isOpening, isClosing: isClosing) { return }
+            } else if section == 2, SevenZip.matches(line, "}") || SevenZip.matches(line, "----------") {
+                // No entry prints either line, so the "----------" before these "entries" was text
+                // inside a several-line property that closed itself early: they were never listed.
+                guard delivered == 0 else { rejected = true; return }
+                entries.removeAll()
+                legacy.removeAll()
+                current = Fields()
+                hasFields = false
+                blocks.sealed = true
+                if SevenZip.matches(line, "}") { section = 1 }
+                return
+            }
             if section == 1, SevenZip.matches(line, "----------") {
                 guard let type, SevenZip.fastTypes.contains(type) else { rejected = true; return }
                 section = 2
@@ -151,6 +175,9 @@ nonisolated extension SevenZip {
             let key = UnsafeBufferPointer(rebasing: line[..<separator])
             let value = UnsafeBufferPointer(rebasing: line[min(separator + 3, line.count)...])
             if section == 1 {
+                blocks.sawProperty(isEmpty: value.isEmpty,
+                                   isDiagnostic: SevenZip.matches(key, "ERROR") || SevenZip.matches(key, "WARNING"))
+                if blocks.sealed { return }
                 if type == nil, SevenZip.matches(key, "Type") { type = SevenZip.string(value) }
                 if physicalSize == nil, SevenZip.matches(key, "Physical Size") { physicalSize = SevenZip.number(value) }
                 if SevenZip.matches(key, "Offset") || SevenZip.matches(key, "Embedded Stub Size") || SevenZip.matches(key, "Tail Size") || SevenZip.matches(key, "Solid") {
@@ -226,5 +253,45 @@ nonisolated extension SevenZip {
             modified: fields.modified,
             isEncrypted: fields.encrypted
         )
+    }
+}
+
+/// 7-Zip prints an archive property that holds several lines (a ZIP's or RAR's comment) as
+///
+///     Comment =
+///     {
+///     the lines, exactly as the archive wrote them
+///     }
+///
+/// Those lines are the archive author's, and can spell anything 7-Zip prints itself: a property, the
+/// "----------" that starts the entries, whole entries, or the closing "}". Both listing parsers
+/// skip the block, and once one has opened ("sealed") they take no further archive properties:
+/// the ones Stow reads (type, sizes, offsets) are all printed before a comment, and whatever
+/// follows an early "}" may be the comment going on. Entries never print a line that is just "}"
+/// or "----------", so meeting one among them shows the same thing there (see the parsers).
+/// 7-Zip's own several-line ERROR and WARNING come before the sizes and do not seal.
+nonisolated struct HeaderBlocks: Sendable {
+    private(set) var isInside = false
+    var sealed = false
+    /// Set when the last line was a property without a value, so a "{" line now opens its block:
+    /// whether that property is one of 7-Zip's own diagnostics.
+    private var mayOpen: Bool?
+
+    /// For each line of the archive properties, before it is read: true when it belongs to a block.
+    mutating func skips(isOpening: Bool, isClosing: Bool) -> Bool {
+        defer { mayOpen = nil }
+        if isInside {
+            if isClosing { isInside = false }
+            return true
+        }
+        guard isOpening, let isDiagnostic = mayOpen else { return false }
+        isInside = true
+        if !isDiagnostic { sealed = true }
+        return true
+    }
+
+    /// After a "key = value" line of the archive properties.
+    mutating func sawProperty(isEmpty: Bool, isDiagnostic: Bool) {
+        mayOpen = isEmpty ? isDiagnostic : nil
     }
 }

@@ -23,13 +23,20 @@ extension AppState {
 
     /// Resolve identity before starting asynchronous loading, so a multi-file open cannot
     /// replace an in-flight session or create competing editors for one source.
-    func sessionForOpening(_ url: URL) -> AppState {
-        let root = workspace
+    /// The window already showing (or opening) this archive, if any.
+    func archiveSession(for url: URL) -> AppState? {
         let key = RecentArchives.key(for: url)
-        if let existing = root.archiveSessions.first(where: {
+        return workspace.archiveSessions.first(where: {
             let source = $0.browser?.levels.first?.edits.url ?? $0.openingURL
             return source.map { RecentArchives.key(for: $0) == key } ?? false
-        }) { return existing }
+        })
+    }
+
+    func hasArchiveSession(for url: URL) -> Bool { archiveSession(for: url) != nil }
+
+    func sessionForOpening(_ url: URL) -> AppState {
+        let root = workspace
+        if let existing = archiveSession(for: url) { return existing }
         if !root.usesBrowserWindow && !root.glance.isShown { return root }
         let session = AppState(workspaceOwner: root)
         session.presentationDefaults = root.presentationDefaults

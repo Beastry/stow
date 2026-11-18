@@ -41,12 +41,12 @@ Scenes: `editing`, `readonly`, `welcome`, `grid`, `list`, `fonts`, `search`, `se
 `conflict`, `conflict-folder`, `signature-warning`, `replace-app`, `extract-options`, `install-options`,
 `packing`, `packed`, `packrun`, `checkup`, `install-preparing`, `install-done`, `open-unreadable`, Details and archive notices (`details-clean`, `details-planned`,
 `details-more`, `details-notices-open`, `details-folder`, `details-multi`, `details-edited`, `details-app`,
-`details-app-signed`, `details-long`; `-StowNoticesOpen YES` opens the notice card in any scene, `-StowArchiveInfoOpen YES` the title menu's Archive Info popover), `source-access`, `source-access-file` (both take `-StowSourcePath <file>` or
+`details-app-signed`, `details-long`; `-StowNoticesOpen YES` opens the notice card in any scene, `-StowArchiveInfoOpen YES` the title menu's Archive Info popover; `details-*` scenes take `-StowComment <text>` for an archive comment, `\n` for a new line), `source-access`, `source-access-file` (both take `-StowSourcePath <file>` or
 `-StowSourceName <name>`), `source-access-unsaved`, `browser-opening` and `glance-opening` (an archive still opening). Browsing scenes take `-StowOpen <path>`
 (`-StowOpenPreferred YES` routes it as Finder does, into the window Settings › Glance picks) plus the flags listed in
 `App/Browser/BrowseDemo.swift`.
 `open -StowOpen <path> -StowRun extractAll|install|fonts|installer` runs a real step
-(`-StowInstallFolder`/`-StowExtractFolder` point it at scratch folders); with a locked screen,
+(`-StowInstallFolder`/`-StowExtractFolder` point it at scratch folders; with several archives `-StowCollectInFolder YES` also collects them in a new folder; `-StowScene batch-run -StowBatch "<path>|<path>"` runs File › Extract Archives… on those files, and `batch-collect` shows the panel's checkbox for review); with a locked screen,
 `-StowSnapshotMode view` draws the view tree instead of the composited window.
 Display preferences can't be turned on by a launch argument, so any scene takes debug-only overrides:
 `-StowReduceTransparency YES` (Stow's solid fallbacks for glass), `-StowIncreaseContrast YES` (Stow's
@@ -78,6 +78,7 @@ Settings keys (UserDefaults; the resettable list and defaults are in `SettingsKe
 | `extract.folderConflict` | `ask` | `ask`, `merge`, `keepBoth` |
 | `extract.fileConflict` | `ask` | `ask`, `replace`, `keepBoth`, `skip` |
 | `extract.skipSystemFiles` | `true` | |
+| `extract.quickExtractOnOpen` | `false` | Archives opened from Finder are extracted next to themselves (#328, `QuickExtraction`); Debug builds take `-StowOpenSender com.apple.finder` to treat any open as Finder's |
 | `install.removeQuarantine` | `false` | |
 | `general.appearance` | `system` | `system`, `light`, `dark` |
 | `browse.defaultView` | `grid` | `grid`, `list`, `columns` |

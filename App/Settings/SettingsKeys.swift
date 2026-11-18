@@ -95,6 +95,7 @@ nonisolated enum SettingsKeys {
     // PreviousDefaultApps is restoration state, not a preference. Keep the switch-back memory.
     // onboarding.completed is first-run state, not a preference. Keep completion remembered.
     // destination.severalFolders is the last folder chosen for a mix (GatherDestination), not a preference.
+    // batch.collectsInNewFolder is the batch panel's last checkbox state (ResultFolder), not a preference.
     static let resettable: [Entry] = [
         .init(key: Preferences.Key.extractAllFolder, defaultValue: .string(Preferences.defaults.extractAllFolder.rawValue)),
         .init(key: Preferences.Key.afterExtractAll, defaultValue: .string(Preferences.defaults.afterExtractAll.rawValue)),
@@ -104,6 +105,7 @@ nonisolated enum SettingsKeys {
         .init(key: Preferences.Key.fileConflict, defaultValue: .string(Preferences.defaults.fileConflict.rawValue)),
         .init(key: Preferences.Key.skipSystemFiles, defaultValue: .bool(Preferences.defaults.skipSystemFiles)),
         .init(key: Preferences.Key.removeQuarantine, defaultValue: .bool(Preferences.defaults.removeQuarantine)),
+        .init(key: Preferences.Key.quickExtractOnOpen, defaultValue: .bool(Preferences.defaults.quickExtractOnOpen)),
         .init(key: "PackAudience", defaultValue: .string(Audience.windows.rawValue)),
         .init(key: "PackVerify", defaultValue: .bool(false)),
         .init(key: "PackCPUCores", defaultValue: .integer(0)),
@@ -162,7 +164,8 @@ nonisolated enum SettingsKeys {
             keys = [
                 Preferences.Key.extractAllFolder, Preferences.Key.afterExtractAll,
                 Preferences.Key.closeWindowAfter, Preferences.Key.folderConflict,
-                Preferences.Key.fileConflict, Preferences.Key.skipSystemFiles
+                Preferences.Key.fileConflict, Preferences.Key.skipSystemFiles,
+                Preferences.Key.quickExtractOnOpen
             ]
         case .installing:
             keys = [Preferences.Key.afterInstall, Preferences.Key.removeQuarantine]
