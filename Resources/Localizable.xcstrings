@@ -14094,6 +14094,26 @@
           }
         }
       }
+    },
+    "Double-click in Finder extracts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中双击即解压缩"
+          }
+        }
+      }
+    },
+    "An archive you open in Finder is extracted next to itself, without a window. To look inside first, hold Shift as you open it, or choose Open in Stow. Disk images and installer packages always open, and the archive stays where it is unless Afterwards is set to Moves to the Trash.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中打开的压缩包会直接解压缩到它所在的位置，不打开窗口。若想先查看内容，请在打开时按住 Shift 键，或选择“在 Stow 中打开”。磁盘映像和安装器软件包总是会打开；除非“解压缩后，压缩包”设为“移到废纸篓”，否则压缩包会留在原处。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

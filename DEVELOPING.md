@@ -78,6 +78,7 @@ Settings keys (UserDefaults; the resettable list and defaults are in `SettingsKe
 | `extract.folderConflict` | `ask` | `ask`, `merge`, `keepBoth` |
 | `extract.fileConflict` | `ask` | `ask`, `replace`, `keepBoth`, `skip` |
 | `extract.skipSystemFiles` | `true` | |
+| `extract.quickExtractOnOpen` | `false` | Archives opened from Finder are extracted next to themselves (#328, `QuickExtraction`); Debug builds take `-StowOpenSender com.apple.finder` to treat any open as Finder's |
 | `install.removeQuarantine` | `false` | |
 | `general.appearance` | `system` | `system`, `light`, `dark` |
 | `browse.defaultView` | `grid` | `grid`, `list`, `columns` |

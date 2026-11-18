@@ -25,7 +25,7 @@ Functional implementation for the first wave is in this change, pending merge/re
 
 Approved P2 backlog: count-based splitting, hover media playback, staged password-library
 improvements, multi-password archives, optional common batch-output folder, archive comments,
-optional double-click extraction, and evidence-led compression/placement optimization.
+optional double-click extraction (#328, implemented; real Finder double-click pending), and evidence-led compression/placement optimization.
 P3: release-note discoverability and demand-driven Traditional Chinese localization.
 Do not duplicate implemented multiwindow, draft, selected-path stripping or basic Keychain work.
 
