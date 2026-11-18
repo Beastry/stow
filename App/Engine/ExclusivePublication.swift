@@ -13,9 +13,13 @@ nonisolated enum ExclusivePublication {
 
     struct Options: Sendable {
         var forceCopy = false
+        /// Exercise the native companion protocol on a filesystem without AppleDouble storage.
+        var forceMetadataCompanions = false
         var checkCancellation: @Sendable () throws -> Void = { try Task.checkCancellation() }
         /// Deterministic test seam; called on the worker, after each bounded write.
         var didCopyChunk: (@Sendable (Int) throws -> Void)?
+        /// Filesystem-boundary test seam, before inspecting a newly created output's metadata.
+        var didCreateOutput: (@Sendable (URL) throws -> Void)?
     }
 
     fileprivate struct Fingerprint: Sendable, Equatable {
@@ -301,7 +305,7 @@ nonisolated enum ExclusivePublication {
         if fstatat(destinationParent, targetName, &existing, AT_SYMLINK_NOFOLLOW) == 0 { throw Failure.collision }
         if errno != ENOENT { throw system("inspect output name", target) }
         var companion: Node?
-        if isExFAT(destinationParent), !targetName.hasPrefix("._") {
+        if (isExFAT(destinationParent) || options.forceMetadataCompanions), !targetName.hasPrefix("._") {
             let companionName = "._" + targetName
             let companionURL = target.deletingLastPathComponent().appendingPathComponent(companionName)
             let companionFD = openat(destinationParent, companionName, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
@@ -339,6 +343,7 @@ nonisolated enum ExclusivePublication {
         node.companion = companion
         created(node)
         var metadataComplete = false
+        var companionWasConsumed = false
         defer {
             if isExFAT(destinationParent) { _ = fsync(output) }
             var latest = stat()
@@ -351,13 +356,19 @@ nonisolated enum ExclusivePublication {
                 }
             }
         }
+        try options.didCreateOutput?(target)
         if let companion {
             guard fsync(output) == 0 else { throw Failure.rollbackIncomplete([target, companion.url]) }
             var value = stat()
-            guard fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW) == 0 else {
+            if fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW) == 0 {
+                companion.fingerprint = Fingerprint(value)
+            } else if errno == ENOENT {
+                // FSKit may consume the empty reservation after creating the paired node.
+                // Keep expecting absence until our metadata copy; a new companion is foreign.
+                companionWasConsumed = true
+            } else {
                 throw Failure.rollbackIncomplete([target, companion.url])
             }
-            companion.fingerprint = Fingerprint(value)
             var stableOutput = stat()
             guard fstat(output, &stableOutput) == 0 else { throw Failure.rollbackIncomplete([target]) }
             node.fingerprint = Fingerprint(stableOutput)
@@ -405,8 +416,11 @@ nonisolated enum ExclusivePublication {
               node.fingerprint.owns(linked) else { throw Failure.rollbackIncomplete([target]) }
         if let companion {
             var value = stat()
-            guard fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW) == 0,
-                  companion.fingerprint == Fingerprint(value) else {
+            let result = fstatat(destinationParent, companion.name, &value, AT_SYMLINK_NOFOLLOW)
+            let unchanged = companionWasConsumed
+                ? result != 0 && errno == ENOENT
+                : result == 0 && companion.fingerprint == Fingerprint(value)
+            guard unchanged else {
                 throw Failure.rollbackIncomplete([target, companion.url])
             }
         }
