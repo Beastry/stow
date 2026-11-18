@@ -639,7 +639,14 @@ transition frame by frame, by click and as after a key press, for review.
   (the recipient may not be able to open it) comes before even that. Then what changes on the way:
   names adjusted for Windows (with Review names right under that line), Mac-only files left out (or
   kept, when More Options kept them), links left out; then what's simply true of the format.
-  "All names work there" is good news, so it stays, but last: never above a change (#153). The footer says the size as an estimate in words ("About 27.3 MB in 3 parts"), beside
+  "All names work there" is good news, so it stays, but last: never above a change (#153).
+  A ZIP or 7Z can also be split **in N equal parts** (#322): **Number of Parts…** sits under
+  Custom… in the sentence's split menu and the Split archives menu, and opens an editor built
+  like the part-size one (a number field with a stepper, one status line naming about how big
+  each part comes out and the part names, Cancel and Use). The parts are cut once the archive
+  is made, so the report says "Comes out in 5 parts … nearly equal in size", not "about"; an
+  archive too small for 1 KB parts says "Too small for 10 parts" with the likely count. A count
+  and a part size replace each other; the count is per job and never a Settings default. The footer says the size as an estimate in words ("About 27.3 MB in 3 parts"), beside
   Cancel and Pack, where it stays in view however far the middle scrolls. **More Options** is a full-strength heading
   that lists its current settings while closed, under the title and lined up with it, each fact
   whole and never cut off: compression, a planned check while it's on, then every choice changed

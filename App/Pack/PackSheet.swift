@@ -37,6 +37,8 @@ struct PackSheet: View {
     @State private var handedOffCleanup = false
     /// Which Custom… opened the part-size editor; it pops out of that control.
     @State private var editingSplit: SplitEditorAnchor?
+    /// Which Number of Parts… opened the part-count editor (#322).
+    @State private var editingCount: SplitEditorAnchor?
 
     private enum SplitEditorAnchor { case sentence, options }
 
@@ -228,21 +230,44 @@ struct PackSheet: View {
                 Button("With a password") { options.usesPassword = true }
             }
         case .split:
-            Token(title: options.split.phrase, suffix: suffix, isEnabled: options.format.supportsSplit,
+            Token(title: options.splitPhrase, suffix: suffix, isEnabled: options.format.supportsSplit,
                   disabledHelp: String(localized: "A \(options.format.displayName) is always one file")) {
                 ForEach(SplitSize.allCases) { split in
-                    Button(split.phrase.sentenceCased) { options.split = split }
+                    Button(split.phrase.sentenceCased) { options.setSplit(split) }
                 }
                 Divider()
                 Button("Custom…") { editingSplit = .sentence }
+                if options.format.supportsPartCount {
+                    Button("Number of Parts…") { editingCount = .sentence }
+                }
             }
             // Out of the words that were clicked, not down in More Options where it may be scrolled away.
             .popover(isPresented: isEditingSplit(from: .sentence), arrowEdge: .bottom) { splitEditor }
+            .popover(isPresented: isEditingCount(from: .sentence), arrowEdge: .bottom) { countEditor }
         }
     }
 
     private func isEditingSplit(from anchor: SplitEditorAnchor) -> Binding<Bool> {
         Binding(get: { editingSplit == anchor }, set: { if !$0, editingSplit == anchor { editingSplit = nil } })
+    }
+
+    private func isEditingCount(from anchor: SplitEditorAnchor) -> Binding<Bool> {
+        Binding(get: { editingCount == anchor }, set: { if !$0, editingCount == anchor { editingCount = nil } })
+    }
+
+    private var countEditor: some View {
+        let estimate = report.estimatedSize
+        let name = archiveName, format = options.format
+        return PartCountEditor(initial: options.partCount) { count in
+            let parts = SplitArchive.partCount(total: estimate, requested: count)
+            let names = Compatibility.partNames(archiveName: name, format: format, parts: parts)
+            guard parts == count else {
+                return String(localized: "Too small for \(count) parts: about \(parts).") + "\n" + names
+            }
+            return String(localized: "About \(SplitSize.formatBytes(max(1, estimate / Int64(count)))) each for these items.") + "\n" + names
+        } apply: { count in
+            options.setPartCount(count)
+        }
     }
 
     private var splitEditor: some View {
@@ -256,7 +281,7 @@ struct PackSheet: View {
             return (parts > 1 ? String(localized: "About \(parts) parts for these items.")
                               : String(localized: "These items probably fit in one part.")) + "\n" + names
         } apply: { size in
-            options.split = size
+            options.setSplit(size)
         }
     }
 
@@ -417,7 +442,11 @@ struct PackSheet: View {
         if options.format == .dmg {
             add(options.diskImageFilesystem.title, changed: options.diskImageFilesystem != defaults.diskImageFilesystem)
         }
-        if options.split != defaults.split { add(options.split.phrase.sentenceCased, changed: true) }
+        if options.partCount != nil {
+            add(options.splitPhrase.sentenceCased, changed: true)
+        } else if options.split != defaults.split {
+            add(options.split.phrase.sentenceCased, changed: true)
+        }
         if options.format == .dmg {
             if options.diskImageApplicationsLink != defaults.diskImageApplicationsLink {
                 add(options.diskImageApplicationsLink ? String(localized: "Applications shortcut")
@@ -474,6 +503,7 @@ struct PackSheet: View {
         return options.level != defaults.level
             || options.verify != defaults.verify
             || options.split != defaults.split
+            || options.partCount != nil
             || changesHelperFiles
             || changesMacMetadata
             || (options.format == .sevenZip && options.usesPassword && !options.encryptFilenames)
@@ -506,7 +536,11 @@ struct PackSheet: View {
         guard options.format.supportsSplit else {
             return String(localized: "A \(options.format.displayName) is always one file")
         }
-        guard options.split != .none else { return nil }
+        guard options.isSplit else { return nil }
+        if let count = options.partCount, report.parts < count {
+            return String(localized: "Too small for \(count) parts: about \(report.parts).")
+        }
+        if options.partCount != nil { return String(localized: "Cut once the archive is made, nearly equal in size.") }
         return report.parts > 1 ? String(localized: "About \(report.parts) parts for these items.")
                                 : String(localized: "These items probably fit in one part.")
     }
@@ -596,13 +630,20 @@ struct PackSheet: View {
                         if options.split.isCustom {
                             Text(options.split.phrase.sentenceCased).tag(options.split)
                         }
+                        if options.partCount != nil {
+                            Text(options.splitPhrase.sentenceCased).tag(Self.partCountTag)
+                        }
                         Divider()
                         Text("Custom…").tag(Self.customSplitTag)
+                        if options.format.supportsPartCount {
+                            Text("Number of Parts…").tag(Self.editCountTag)
+                        }
                     }
                     .labelsHidden()
                     .revealsKeyboardFocus()
                     .fixedSize()
                     .popover(isPresented: isEditingSplit(from: .options), arrowEdge: .trailing) { splitEditor }
+                    .popover(isPresented: isEditingCount(from: .options), arrowEdge: .trailing) { countEditor }
                 } else {
                     Text(SplitSize.none.phrase.sentenceCased)
                 }
@@ -946,13 +987,22 @@ struct PackSheet: View {
         default: break
         }
         // Design review: -StowPackMore YES opens More Options alone; -StowPackChanged YES changes two
-        // choices from the purpose (support files, CPU threads); -StowPackSplitEditor sentence|options
+        // choices from the purpose (support files, CPU threads); -StowPackParts 5 splits in five parts;
+        // -StowPackCountEditor sentence|options opens Number of Parts…; -StowPackSplitEditor sentence|options
         // opens the part-size editor from that control once the sheet is up.
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: "StowPackMore") { showMore = true }
         if defaults.bool(forKey: "StowPackChanged") {
             options.includeMacHelperFiles = options.audience.dropsMacHelperFiles
             options.threads = min(2, ProcessInfo.processInfo.activeProcessorCount)
+        }
+        // Design review (#322): `-StowPackParts 5` uses five parts; `-StowPackCountEditor sentence|options` opens its editor.
+        if defaults.integer(forKey: "StowPackParts") > 0 { options.setPartCount(defaults.integer(forKey: "StowPackParts")) }
+        if let anchor = defaults.string(forKey: "StowPackCountEditor") {
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                editingCount = anchor == "options" ? .options : .sentence
+            }
         }
         if let anchor = defaults.string(forKey: "StowPackSplitEditor") {
             Task {
@@ -968,14 +1018,22 @@ struct PackSheet: View {
 
     /// The Custom… item's tag: no real size is negative.
     private static let customSplitTag = SplitSize(rawValue: -1)
+    /// Number of Parts…'s tag, and the count in use (#322); no real size is negative.
+    private static let editCountTag = SplitSize(rawValue: -2)
+    private static let partCountTag = SplitSize(rawValue: -3)
 
     /// Presets and the custom size in use pick themselves; Custom… opens the editor beside the
     /// menu and leaves the menu showing what's in use until the editor's Use.
     private var splitPickerSelection: Binding<SplitSize> {
         Binding(
-            get: { options.split },
+            get: { options.partCount != nil ? Self.partCountTag : options.split },
             set: { chosen in
-                if chosen == Self.customSplitTag { editingSplit = .options } else { options.split = chosen }
+                switch chosen {
+                case Self.customSplitTag: editingSplit = .options
+                case Self.editCountTag: editingCount = .options
+                case Self.partCountTag: break
+                default: options.setSplit(chosen)
+                }
             }
         )
     }
@@ -1016,7 +1074,7 @@ struct PackSheet: View {
                 format: format,
                 level: options.level,
                 password: options.usesPassword ? password : nil,
-                volumeSize: options.split.isNone ? nil : options.split.rawValue,
+                volumeSize: options.split.isNone || options.partCount != nil ? nil : options.split.rawValue,
                 keepsMacMetadata: keepsMetadata,
                 verify: options.verify,
                 threads: options.effectiveThreads(global: inheritedThreadLimit),
@@ -1025,6 +1083,7 @@ struct PackSheet: View {
                 diskImageFinderChrome: format == .dmg && options.diskImageFinderChrome
             )
             request.encryptFilenames = options.format == .sevenZip && options.encryptFilenames
+            request.partCount = format.supportsPartCount ? options.partCount : nil
             guard !app.packing.isRunning else { return }
             handedOffCleanup = true
             if let draft {

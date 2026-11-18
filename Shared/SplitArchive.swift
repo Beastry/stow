@@ -4,6 +4,67 @@ import Darwin
 /// Stow writes byte-split archives (`name.zip.001`, `name.7z.001`). Reassemble only
 /// explicitly readable siblings; never pass a directory capability into the engine.
 nonisolated enum SplitArchive {
+    /// A number of parts people may ask for (#322): three-digit part names end at .999.
+    static let partCountRange = 2...999
+    /// No part is smaller than this, as with a custom part size: a tiny archive gets fewer parts.
+    static let minimumPartBytes: Int64 = 1_024
+
+    /// How many parts `count` gives an archive of `total` bytes: fewer when parts would fall
+    /// under `minimumPartBytes`, never fewer than one.
+    static func partCount(total: Int64, requested count: Int) -> Int {
+        let wanted = min(max(count, 1), partCountRange.upperBound)
+        return Int(min(Int64(wanted), max(1, total / minimumPartBytes)))
+    }
+
+    /// The parts' sizes, in order: as equal as bytes allow, the first ones one byte larger when
+    /// `total` doesn't divide evenly. They always add up to `total`.
+    static func partSizes(total: Int64, requested count: Int) -> [Int64] {
+        guard total > 0 else { return [] }
+        let parts = Int64(partCount(total: total, requested: count))
+        let base = total / parts, extra = total % parts
+        return (0..<parts).map { base + ($0 < extra ? 1 : 0) }
+    }
+
+    /// Cuts `archive` into "name.001", "name.002"… beside it and removes it (#322). The same byte
+    /// split 7-Zip's `-v` writes, so the parts open the same way. On failure or cancellation the
+    /// parts written so far are removed and the archive is left as it was.
+    @concurrent
+    static func split(_ archive: URL, into count: Int) async throws(EngineError) {
+        let path = archive.path
+        var info = stat()
+        guard stat(path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+            throw EngineError(.failed, String(localized: "7-Zip didn’t write an archive."))
+        }
+        let sizes = partSizes(total: Int64(info.st_size), requested: count)
+        var written: [URL] = []
+        do {
+            let input = try FileHandle(forReadingFrom: archive)
+            defer { try? input.close() }
+            for (index, size) in sizes.enumerated() {
+                let part = URL(filePath: path + "." + String(format: "%03d", index + 1))
+                let fd = Darwin.open(part.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o644)
+                guard fd >= 0 else { throw EngineError(.failed, String(cString: strerror(errno))) }
+                written.append(part)
+                let output = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+                defer { try? output.close() }
+                var remaining = size
+                while remaining > 0 {
+                    try Task.checkCancellation()
+                    let bytes = try input.read(upToCount: Int(min(remaining, 1024 * 1024))) ?? Data()
+                    guard !bytes.isEmpty else { throw EngineError(.failed, String(localized: "The archive ended early while it was being split.")) }
+                    try output.write(contentsOf: bytes)
+                    remaining -= Int64(bytes.count)
+                }
+            }
+            try Task.checkCancellation()
+            try FileManager.default.removeItem(at: archive)
+        } catch {
+            for part in written { try? FileManager.default.removeItem(at: part) }
+            if error is CancellationError { throw EngineError(.cancelled) }
+            throw error as? EngineError ?? EngineError(error)
+        }
+    }
+
     static func baseName(_ name: String) -> String? {
         let suffix = (name as NSString).pathExtension
         guard suffix.count >= 3, suffix.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
