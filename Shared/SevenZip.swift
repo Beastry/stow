@@ -231,6 +231,7 @@ nonisolated struct SevenZip: Sendable {
         var entries: [ListedEntry] = []
         var current: [String: String] = [:]
         var section = 0 // 0: preamble, 1: archive properties ("--"), 2: entries ("----------")
+        var blocks = HeaderBlocks()
 
         func flush() {
             // Single-stream formats (xz, gzip, bzip2…) list their one item without a name.
@@ -250,6 +251,17 @@ nonisolated struct SevenZip: Sendable {
                 section = 1
                 continue
             }
+            if section == 1 {
+                if blocks.skips(isOpening: line == "{", isClosing: line == "}") { continue }
+            } else if section == 2, line == "}" || line == "----------" {
+                // Not an entry's line: the entries so far were text inside a several-line archive
+                // property that closed itself early (`HeaderBlocks`).
+                entries = []
+                current = [:]
+                blocks.sealed = true
+                if line == "}" { section = 1 }
+                continue
+            }
             if line == "----------" && section == 1 {
                 section = 2
                 continue
@@ -265,6 +277,8 @@ nonisolated struct SevenZip: Sendable {
             let key = String(line[..<separator.lowerBound])
             let value = String(line[separator.upperBound...])
             if section == 1 {
+                blocks.sawProperty(isEmpty: value.isEmpty, isDiagnostic: key == "ERROR" || key == "WARNING")
+                if blocks.sealed { continue }
                 archiveFields[key] = archiveFields[key] ?? value
             } else {
                 if key == "Path" { flush() }
