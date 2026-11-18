@@ -33,6 +33,10 @@ extension SevenZip {
             done += weight
         }
         if let intermediate = steps.first?.intermediate { try? FileManager.default.removeItem(at: intermediate) }
+        // #322: the size is only known now, so the parts are cut from the finished archive.
+        if let count = request.partCount, request.volumeSize == nil, request.format.supportsPartCount {
+            try await SplitArchive.split(archive, into: count)
+        }
 
         let files = ((try? FileManager.default.contentsOfDirectory(atPath: output.path)) ?? []).sorted()
         guard let first = files.first else { throw EngineError(.failed, String(localized: "7-Zip didn’t write an archive.")) }
