@@ -82,6 +82,105 @@ struct ExclusivePublicationTests {
         }
     }
 
+    private nonisolated static func consumeCompanion(of output: URL) throws {
+        let companion = output.deletingLastPathComponent().appendingPathComponent("._" + output.lastPathComponent)
+        try FileManager.default.removeItem(at: companion)
+    }
+
+    @Test(arguments: [false, true])
+    func consumedEmptyCompanionsPermitCopyMetadataAndRollback(directory: Bool) throws {
+        try fixture { source, target in
+            let original = directory ? source.appendingPathComponent("nested/file") : source
+            let copied = directory ? target.appendingPathComponent("nested/file") : target
+            if directory {
+                try FileManager.default.createDirectory(at: original.deletingLastPathComponent(), withIntermediateDirectories: true)
+            }
+            let bytes = Data("payload with metadata".utf8)
+            try bytes.write(to: original)
+            let attribute = Array("preserved attribute".utf8)
+            #expect(attribute.withUnsafeBytes {
+                setxattr(original.path, "com.stow.consumed-companion", $0.baseAddress, attribute.count, 0, 0)
+            } == 0)
+            let options = ExclusivePublication.Options(forceCopy: true, forceMetadataCompanions: true,
+                                                       didCreateOutput: { try Self.consumeCompanion(of: $0) })
+            let receipt = try ExclusivePublication.publishSynchronously(source: source, to: target, options: options)
+            #expect(try Data(contentsOf: copied) == bytes)
+            #expect(try Data(contentsOf: original) == bytes)
+            var restored = [UInt8](repeating: 0, count: attribute.count)
+            #expect(getxattr(copied.path, "com.stow.consumed-companion", &restored, restored.count, 0, 0) == attribute.count)
+            #expect(restored == attribute)
+            try receipt.rollbackSynchronously()
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            #expect(try Data(contentsOf: original) == bytes)
+        }
+    }
+
+    @Test func foreignCompanionAppearingAfterConsumptionIsRetainedWithoutMetadataCopy() throws {
+        try fixture { source, target in
+            let bytes = Data(repeating: 3, count: 1_000)
+            let foreign = Data("foreign companion".utf8)
+            let companion = target.deletingLastPathComponent().appendingPathComponent("._" + target.lastPathComponent)
+            try bytes.write(to: source)
+            let options = ExclusivePublication.Options(forceCopy: true, forceMetadataCompanions: true,
+                                                       didCopyChunk: { _ in try foreign.write(to: companion, options: .withoutOverwriting) },
+                                                       didCreateOutput: { try Self.consumeCompanion(of: $0) })
+            do {
+                _ = try ExclusivePublication.publishSynchronously(source: source, to: target, options: options)
+                Issue.record("Expected refusal of a newly appearing companion")
+            } catch ExclusivePublication.Failure.rollbackIncomplete(let paths) {
+                #expect(paths.contains(companion))
+                #expect(paths.contains(target))
+            }
+            #expect(try Data(contentsOf: companion) == foreign)
+            #expect(try Data(contentsOf: target) == bytes)
+            #expect(try Data(contentsOf: source) == bytes)
+        }
+    }
+
+    @Test func disappearanceAfterAnObservedCompanionRemainsARefusal() throws {
+        try fixture { source, target in
+            let bytes = Data("unchanged source".utf8)
+            try bytes.write(to: source)
+            let options = ExclusivePublication.Options(forceCopy: true, forceMetadataCompanions: true,
+                                                       didCopyChunk: { _ in try Self.consumeCompanion(of: target) })
+            #expect(throws: ExclusivePublication.Failure.self) {
+                _ = try ExclusivePublication.publishSynchronously(source: source, to: target, options: options)
+            }
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            #expect(try Data(contentsOf: source) == bytes)
+        }
+    }
+
+    @Test func preexistingMetadataCompanionIsNeverOverwritten() throws {
+        try fixture { source, target in
+            let companion = target.deletingLastPathComponent().appendingPathComponent("._" + target.lastPathComponent)
+            let foreign = Data("existing metadata payload".utf8)
+            try Data("incoming".utf8).write(to: source)
+            try foreign.write(to: companion)
+            #expect(throws: ExclusivePublication.Failure.self) {
+                _ = try ExclusivePublication.publishSynchronously(source: source, to: target,
+                    options: .init(forceCopy: true, forceMetadataCompanions: true))
+            }
+            #expect(try Data(contentsOf: companion) == foreign)
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+        }
+    }
+
+    @Test func cancellationAfterCompanionConsumptionRemovesOwnedOutput() throws {
+        try fixture { source, target in
+            let bytes = Data(repeating: 5, count: 1_000)
+            try bytes.write(to: source)
+            let options = ExclusivePublication.Options(forceCopy: true, forceMetadataCompanions: true,
+                                                       didCopyChunk: { _ in throw CancellationError() },
+                                                       didCreateOutput: { try Self.consumeCompanion(of: $0) })
+            #expect(throws: CancellationError.self) {
+                _ = try ExclusivePublication.publishSynchronously(source: source, to: target, options: options)
+            }
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            #expect(try Data(contentsOf: source) == bytes)
+        }
+    }
+
     @Test func exclusiveCreationRefusesFileAndDirectoryCollisions() throws {
         for directory in [false, true] {
             try fixture { source, target in

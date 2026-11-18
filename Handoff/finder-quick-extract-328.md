@@ -70,11 +70,18 @@ have Simplified Chinese translations, and generated plists were unchanged.
 
 ## Remaining acceptance and cleanup
 
-- **Physical Shift override remains unverified.** CUA combination attempts produced
+- **Physical Shift follow-up passed on 2026-11-18.** The user held Shift through
+  Finder opening on signed/notarized 0.1.8 (756), both while running and after a
+  confirmed process-absent cold start on APFS. The exact archive opened in Browser,
+  source hashes stayed unchanged, and no output appeared. The cold document event
+  fell inside an independently observed physical Shift-down interval. Immediate
+  key release before a cold document event is not covered. See
+  [the signed acceptance follow-up](release-018-signed-acceptance.md) and #38.
+  The earlier CUA combination attempts produced
   extraction, but did not establish that the OS modifier state stayed active until
   the document event arrived. A modifier-only hold was rejected by the tool. No
   Shift pass or product failure is inferred from those attempts. The routing unit
-  tests pass; physical input, including cold-launch key-release timing, remains #38.
+  tests pass; those earlier attempts remain distinct from the later human pass.
 - Current signed/notarized release installation, registered extension handoff,
   Quick Look, and clean-account acceptance remain #38/#32. The isolated QA pass
   does not establish those results.
