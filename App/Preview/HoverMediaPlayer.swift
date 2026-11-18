@@ -33,7 +33,9 @@ struct HoverMediaPlayer: NSViewRepresentable {
         view.showsFullScreenToggleButton = false
         view.showsSharingServiceButton = false
         view.allowsPictureInPicturePlayback = false
-        view.videoGravity = .resizeAspect
+        // The card already gives the player the clip's own shape (from its still), so filling it
+        // only trims rounding: fitting left a hairline of the player's black background showing.
+        view.videoGravity = poster == nil ? .resizeAspect : .resizeAspectFill
         view.setAccessibilityLabel(kind == .audio ? String(localized: "Audio player") : String(localized: "Video player"))
         let player = AVQueuePlayer()
         // A hover glance never keeps the display awake, and never plays anywhere but here.
@@ -50,7 +52,7 @@ struct HoverMediaPlayer: NSViewRepresentable {
         view.player = player
         if let poster, kind == .video, let overlay = view.contentOverlayView {
             let still = NSImageView(image: poster)
-            still.imageScaling = .scaleProportionallyUpOrDown
+            still.imageScaling = .scaleAxesIndependently
             still.frame = overlay.bounds
             still.autoresizingMask = [.width, .height]
             overlay.addSubview(still)

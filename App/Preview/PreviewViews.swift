@@ -190,7 +190,11 @@ struct RichPreviewView: View {
                 if playsMedia, let media {
                     HoverMediaPlayer(url: media, kind: .audio, startsPlaying: false)
                         .frame(height: 30)
-                        .clipShape(.rect(cornerRadius: Radius.chip))
+                        // AVKit draws its bar as a full-height capsule inset 5.5 pt from each
+                        // side, over a black backing. Widen the player by that inset and keep
+                        // only the capsule, so the bar lines up with the artwork's edges.
+                        .padding(.horizontal, -5.5)
+                        .clipShape(.capsule)
                         .id(media)
                 }
             }
