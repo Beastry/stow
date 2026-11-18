@@ -54,6 +54,9 @@ struct RichPreviewView: View {
     /// filling a frame the caller sets — a few lines of text stay a few lines tall, a photo keeps its
     /// shape. Hover previews and the column view's preview keep their fixed frames.
     let fitsContent: Bool
+    /// Hover cards play audio and video in place (#323); Details shows the still and the length.
+    let playsMedia: Bool
+    @Environment(\.reducesMotion) private var reduceMotion
 
     /// What was read, and for which entry — a reused view never shows the last entry's content.
     @State private var loaded: (id: String, preview: RichPreview)?
@@ -65,10 +68,12 @@ struct RichPreviewView: View {
     private static let fittedMinHeight: CGFloat = 44
     private static let fittedPlaceholderHeight: CGFloat = 120
 
-    init(entry: ArchiveEntry, model: BrowserModel, preview: RichPreview? = nil, fitsContent: Bool = false) {
+    init(entry: ArchiveEntry, model: BrowserModel, preview: RichPreview? = nil, fitsContent: Bool = false,
+         playsMedia: Bool = false) {
         self.entry = entry
         self.model = model
         self.fitsContent = fitsContent
+        self.playsMedia = playsMedia
         _loaded = State(initialValue: preview.map { ("\(model.archive.id)\(entry.id)\(model.previewRevision)", $0) })
     }
 
@@ -161,7 +166,7 @@ struct RichPreviewView: View {
                 .padding(Space.m)
                 .frame(maxWidth: .infinity, maxHeight: fitsContent ? nil : .infinity)
             }
-        case .audio(let artwork, let title, let artist, let duration):
+        case .audio(let artwork, let title, let artist, let duration, let media):
             VStack(spacing: Space.s) {
                 Group {
                     if let artwork {
@@ -181,9 +186,28 @@ struct RichPreviewView: View {
                     Text([artist, duration.map(Self.clock)].compactMap(\.self).joined(separator: " · "))
                         .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
+                // Under the words, the system's own control bar: nothing plays until Play.
+                if playsMedia, let media {
+                    HoverMediaPlayer(url: media, kind: .audio, startsPlaying: false)
+                        .frame(height: 30)
+                        // AVKit draws its bar as a full-height capsule inset 5.5 pt from each
+                        // side, over a black backing. Widen the player by that inset and keep
+                        // only the capsule, so the bar lines up with the artwork's edges.
+                        .padding(.horizontal, -5.5)
+                        .clipShape(.capsule)
+                        .id(media)
+                }
             }
             .frame(height: fitsContent ? 180 : nil)
-        case .video(let frame, let duration):
+        case .video(let frame, _, let media?) where playsMedia:
+            // Muted and looping from the first frame; Reduce Motion leaves it on Play (#323).
+            HoverMediaPlayer(url: media, kind: .video, startsPlaying: !reduceMotion, poster: frame)
+                // The clip's own shape, as its still had: no black bars around a wide clip.
+                .aspectRatio(frame.map { $0.size.width / max($0.size.height, 1) } ?? 4 / 3, contentMode: .fit)
+                .clipShape(.rect(cornerRadius: Radius.chip))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(media)
+        case .video(let frame, let duration, _):
             ZStack(alignment: .bottomTrailing) {
                 if let frame {
                     Image(nsImage: frame).resizable().aspectRatio(contentMode: .fit)

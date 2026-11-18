@@ -14035,6 +14035,26 @@
         }
       }
     },
+    "Audio player": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频播放器"
+          }
+        }
+      }
+    },
+    "Video player": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "视频播放器"
+          }
+        }
+      }
+    },
     "Extracted Archives": {
       "localizations": {
         "zh-Hans": {

@@ -23,7 +23,7 @@ Functional implementation for the first wave is in this change, pending merge/re
 | P2 implementation review | [#316](https://github.com/Beastry/stow/issues/316): Zstd-coded 7Z | Minimal official-source decoder registration implemented with exact-byte/sandboxed acceptance, bounded per-window allocation and complete source packaging; see [handoff](Handoff/zstd-7z-decoder-316.md). Historical stock-engine gap remains recorded in #319; signed release acceptance is pending |
 | Repaired; physical acceptance passed | [#317](https://github.com/Beastry/stow/issues/317): exFAT extraction and Tray export | Exclusive-copy publication preserves conflicts and metadata, rolls back owned output, and reports retained recovery paths. Sandboxed physical SSD matrix passed, including split archive creation. [Current evidence and limits](Handoff/exfat-publication-repair-2026-11-07.md) |
 
-Approved P2 backlog: count-based splitting (#322, implemented), hover media playback, staged password-library
+Approved P2 backlog: count-based splitting (#322, implemented), hover media playback (#323, implemented), staged password-library
 improvements, multi-password archives, optional common batch-output folder (#326, implemented), archive comments,
 optional double-click extraction (#328, implemented; real Finder double-click pending), and evidence-led compression/placement optimization.
 P3: release-note discoverability and demand-driven Traditional Chinese localization.

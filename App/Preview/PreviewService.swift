@@ -10,8 +10,9 @@ enum RichPreview: @unchecked Sendable {
     case text(String, markdown: Bool)
     case table([[String]])
     case font(CTFont, name: String)
-    case audio(artwork: NSImage?, title: String?, artist: String?, duration: Double?)
-    case video(frame: NSImage?, duration: Double?)
+    /// `media`: the extracted file, when AVFoundation can play it (#323); hover cards play it.
+    case audio(artwork: NSImage?, title: String?, artist: String?, duration: Double?, media: URL? = nil)
+    case video(frame: NSImage?, duration: Double?, media: URL? = nil)
     case thumbnail(NSImage)
     case unavailable(String)
 }
@@ -292,9 +293,10 @@ final class PreviewService {
             artwork = NSImage(data: data)
         }
         let duration = try? await asset.load(.duration).seconds
+        let playable = (try? await asset.load(.isPlayable)) == true
         return .audio(artwork: artwork, title: await metadataString(.commonKeyTitle, in: metadata),
                       artist: await metadataString(.commonKeyArtist, in: metadata),
-                      duration: duration.flatMap { $0.isFinite ? $0 : nil })
+                      duration: duration.flatMap { $0.isFinite ? $0 : nil }, media: playable ? url : nil)
     }
 
     nonisolated private static func metadataString(_ key: AVMetadataKey, in metadata: [AVMetadataItem]) async -> String? {
@@ -314,6 +316,8 @@ final class PreviewService {
             frame = NSImage(cgImage: image, size: CGSize(width: CGFloat(image.width) / 2, height: CGFloat(image.height) / 2))
         }
         if frame == nil, let thumbnail = await quickLookThumbnail(of: url, side: 420) { frame = thumbnail }
-        return .video(frame: frame, duration: duration.flatMap { $0.isFinite ? $0 : nil })
+        var playable = (try? await asset.load(.isPlayable)) == true
+        if playable { playable = !((try? await asset.loadTracks(withMediaType: .video)) ?? []).isEmpty }
+        return .video(frame: frame, duration: duration.flatMap { $0.isFinite ? $0 : nil }, media: playable ? url : nil)
     }
 }

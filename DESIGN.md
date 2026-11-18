@@ -304,6 +304,15 @@ tile or row is a target of its own, a file is not (the surface or column around 
 instead). Peek stays away while files are being dragged and for 0.6 s after a drop lands, so a
 drop never opens a preview the pointer didn't ask for; the next hover waits the usual delay.
 
+**Hover media (#323).** A playable clip in a hover card plays at once, **muted and looping**, at its
+own shape (no letterbox), with AVKit's inline controls for pause, scrubbing and sound; its still
+frame stays under the controls until the video has moved, so the card never flashes black. Audio
+keeps its artwork, title and length, with the system's control bar underneath, and **waits for
+Play**: sound nobody asked for is never a glance. Under Reduce Motion a clip waits for Play too.
+The pointer may rest on the card (moving onto it no longer closes it), and presses inside it are
+the player's; leaving the card, or pressing anywhere else, closes it and stops playback. Details
+keeps the still and its length; Space still opens Quick Look.
+
 **Opening an archive (#265, user's choice 2026-11-02).** Finder, Quick Look, Recent and a drop on
 the welcome open an archive straight into its window, picked before anything shows: the window used
 last (the full Browser until someone switches to Glance, and still remembered after Stow quits), or
