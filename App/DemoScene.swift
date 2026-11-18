@@ -426,6 +426,10 @@ enum DemoScene {
             case "details-planned": archive.checkup = archive.checkup.filter { $0.severity != .caution }
             default: ArchiveInfoView.disclosesForDemo = true
             }
+            // `-StowComment <text>` gives the sample an archive comment ("\n" for a new line).
+            if let comment = defaults.string(forKey: "StowComment") {
+                archive.comment = ArchiveComment.text(from: Data(comment.replacingOccurrences(of: "\\n", with: "\n").utf8))
+            }
             app.browser = BrowserModel(archive: archive)
             app.browser?.folder = "Photos"
         case "details-notices-open":
