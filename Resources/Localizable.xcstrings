@@ -14074,6 +14074,256 @@
           }
         }
       }
+    },
+    "Release Notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发布说明"
+          }
+        }
+      }
+    },
+    "Comment": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "注释"
+          }
+        }
+      }
+    },
+    "Copy": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝"
+          }
+        }
+      }
+    },
+    "Copy Comment": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝注释"
+          }
+        }
+      }
+    },
+    "Copy the archive’s comment": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝压缩包的注释"
+          }
+        }
+      }
+    },
+    "Archive comment": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "压缩包注释"
+          }
+        }
+      }
+    },
+    "Double-click in Finder extracts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中双击即解压缩"
+          }
+        }
+      }
+    },
+    "An archive you open in Finder is extracted next to itself, without a window. To look inside first, hold Shift as you open it, or choose Open in Stow. Disk images and installer packages always open, and the archive stays where it is unless Afterwards is set to Moves to the Trash.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中打开的压缩包会直接解压缩到它所在的位置，不打开窗口。若想先查看内容，请在打开时按住 Shift 键，或选择“在 Stow 中打开”。磁盘映像和安装器软件包总是会打开；除非“解压缩后，压缩包”设为“移到废纸篓”，否则压缩包会留在原处。"
+          }
+        }
+      }
+    },
+    "%@, nearly equal in size, measured once the archive is made. Opening it needs every part in one folder, and an app that joins split archives, such as 7-Zip.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@，各分卷大小几乎相同，在压缩包生成后按实际大小切分。打开时需要把所有分卷放在同一文件夹中，并使用能合并分卷的应用，例如 7-Zip。"
+          }
+        }
+      }
+    },
+    "%lld parts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个分卷"
+          }
+        }
+      }
+    },
+    "About %@ each for these items.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些项目每个分卷约 %@。"
+          }
+        }
+      }
+    },
+    "Comes out in %lld parts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将生成 %lld 个分卷"
+          }
+        }
+      }
+    },
+    "Cut once the archive is made, nearly equal in size.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在压缩包生成后切分，各分卷大小几乎相同。"
+          }
+        }
+      }
+    },
+    "Each part is at least 1 KB, so these items probably come out in %@: %@.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个分卷至少 1 KB，因此这些项目大概只会生成%1$@：%2$@。"
+          }
+        }
+      }
+    },
+    "Enter a whole number from %lld to %lld.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入 %1$lld 到 %2$lld 之间的整数。"
+          }
+        }
+      }
+    },
+    "Number of Parts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分卷数量"
+          }
+        }
+      }
+    },
+    "Number of Parts…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分卷数量…"
+          }
+        }
+      }
+    },
+    "Parts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分卷数"
+          }
+        }
+      }
+    },
+    "Parts are cut once the archive is made, nearly equal in size.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分卷会在压缩包生成后切分，大小几乎相同。"
+          }
+        }
+      }
+    },
+    "The archive ended early while it was being split.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切分分卷时，压缩包意外结束。"
+          }
+        }
+      }
+    },
+    "Too small for %lld parts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不足以分成 %lld 个分卷"
+          }
+        }
+      }
+    },
+    "Too small for %lld parts: about %lld.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不足以分成 %1$lld 个分卷：约 %2$lld 个。"
+          }
+        }
+      }
+    },
+    "in %lld equal parts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平均分为 %lld 个分卷"
+          }
+        }
+      }
+    },
+    "one part": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一个分卷"
+          }
+        }
+      }
+    },
+    "parts": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "个分卷"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

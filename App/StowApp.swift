@@ -415,11 +415,17 @@ final class AppState {
     }
 
     /// Every file in a Finder open request gets its own archive session.
-    func receive(_ urls: [URL]) {
+    /// `origin` is how a document open reached Stow; with Settings › Extraction › Double-click
+    /// extracts, archives opened from Finder are extracted instead (`QuickExtraction`).
+    func receive(_ urls: [URL], origin: QuickExtraction.Origin? = nil) {
         for url in urls where Handoff.isHandoff(url) {
             system.receive(url)
         }
-        for archive in urls.filter(\.isFileURL) {
+        let route = QuickExtraction.route(urls.filter(\.isFileURL), enabled: Preferences.current.quickExtractOnOpen,
+                                          origin: origin, isOpen: { [workspace] in workspace.hasArchiveSession(for: $0) })
+        // No window and no activation: the result is shown in Finder, where the open came from.
+        if !route.extract.isEmpty { system.quickExtract(route.extract) }
+        for archive in route.open {
             NSApp.activate()
             openPreferred(archive)
         }
@@ -922,6 +928,8 @@ struct StowCommands: Commands {
         }
         CommandGroup(after: .help) {
             Button("Welcome to Stow") { OnboardingRouter.shared.open() }
+            // This version's notes on the web (#330). No ellipsis: the browser opens at once.
+            Button("Release Notes") { NSWorkspace.shared.open(ReleaseNotes.url()) }
             // The sample is a web download now, so it lives with the app's other web pages in Help,
             // not in File beside commands that open archives here. No ellipsis: nothing is asked
             // before the browser takes over.

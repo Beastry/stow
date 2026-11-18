@@ -215,7 +215,7 @@ ArcZip observations behind this.
 | Title bar | Leading: archive name/menu and subtitle, then the password control when encrypted. Trailing: **Search** (a button that opens leftward), view modes, **Delete · Save**. Narrow windows give up the view modes first (the View menu has them, ⌘1–3); Search, editing and password access stay |
 | Navigation, floating over the files | Back · Forward · Up and the path; a short path takes only its width, a deep path uses the whole row and folds its middle folders into a ⋯ menu |
 | Files | The main surface: grid, list or columns. In the list, the name takes the spare width before size, kind and date grow |
-| Details (always there, right) | An inset panel, not a strip of the window, 8 pt off the window's edges with an 18 pt radius. Its heading names the subject with a glyph and words: **Archive Info**, **File Info**, **Folder Info** or **Selection Info**. Then a content-sized preview, the name and kind, and properties as label ↔ value rows with hairlines (Size, Packed file data with the saving underneath, Modified, **Location in archive** stacked under its label at full width: “Showcase.zip › Showcase › Docs”). A note that qualifies a figure sits under that figure, in the accent when it counts unsaved changes. An app leads Developer Verification with the developer, then what was verified. **Archive Info** when nothing is selected: the three figures, the password control, then routine facts and ordinary notes behind More Archive Information. No toggle, no close button, no action buttons |
+| Details (always there, right) | An inset panel, not a strip of the window, 8 pt off the window's edges with an 18 pt radius. Its heading names the subject with a glyph and words: **Archive Info**, **File Info**, **Folder Info** or **Selection Info**. Then a content-sized preview, the name and kind, and properties as label ↔ value rows with hairlines (Size, Packed file data with the saving underneath, Modified, **Location in archive** stacked under its label at full width: “Showcase.zip › Showcase › Docs”). A note that qualifies a figure sits under that figure, in the accent when it counts unsaved changes. An app leads Developer Verification with the developer, then what was verified. **Archive Info** when nothing is selected: the three figures, the password control, then routine facts and ordinary notes behind More Archive Information. A ZIP's own **Comment** (#327) is one of those facts: its author's words as plain text (never Markdown, links or control codes) in a quiet inset under a secondary “Comment” label, scrolling past about six lines, with a small borderless **Copy** that says “Copied” for a moment. No comment, no row. No toggle, no close button, no action buttons |
 | Window switch, floating bottom leading | **Glance** in a glass circle of its own: switching windows isn't done to the archive. Glance has Open in Full Window among its window controls in the same corner |
 | Archive capsule, floating bottom trailing | **Quick Look** (eye, icon only) · **Extract All**, fixed and never changing, as in Glance (user's call, 2026-11-07: the full window follows Glance's layout). Quick Look is dimmed until items of this archive are selected, and gone only when hidden in Settings › Actions; Extract All keeps the accent until Actions shows, staying semibold so only its fill fades |
 | Actions, just before the capsule | ⋯ More, then the **stack**: the front action in the accent with the edges of the others showing behind it, easing out of the capsule. Quick Look isn't one of the stack's actions here or in Glance (it has the capsule's eye; ⋯ still lists it), so the next flow — Copy to, Open Inside, Install, Extract — takes its slot. No name or size: Details says what's selected. With nothing selected, **Install App** alone when the archive is one app |
@@ -639,7 +639,14 @@ transition frame by frame, by click and as after a key press, for review.
   (the recipient may not be able to open it) comes before even that. Then what changes on the way:
   names adjusted for Windows (with Review names right under that line), Mac-only files left out (or
   kept, when More Options kept them), links left out; then what's simply true of the format.
-  "All names work there" is good news, so it stays, but last: never above a change (#153). The footer says the size as an estimate in words ("About 27.3 MB in 3 parts"), beside
+  "All names work there" is good news, so it stays, but last: never above a change (#153).
+  A ZIP or 7Z can also be split **in N equal parts** (#322): **Number of Parts…** sits under
+  Custom… in the sentence's split menu and the Split archives menu, and opens an editor built
+  like the part-size one (a number field with a stepper, one status line naming about how big
+  each part comes out and the part names, Cancel and Use). The parts are cut once the archive
+  is made, so the report says "Comes out in 5 parts … nearly equal in size", not "about"; an
+  archive too small for 1 KB parts says "Too small for 10 parts" with the likely count. A count
+  and a part size replace each other; the count is per job and never a Settings default. The footer says the size as an estimate in words ("About 27.3 MB in 3 parts"), beside
   Cancel and Pack, where it stays in view however far the middle scrolls. **More Options** is a full-strength heading
   that lists its current settings while closed, under the title and lined up with it, each fact
   whole and never cut off: compression, a planned check while it's on, then every choice changed
@@ -685,6 +692,17 @@ transition frame by frame, by click and as after a key press, for review.
   to Stow with a caption that says the browser saves it and the ZIP is then opened normally. No
   ellipsis (nothing is asked before the browser takes over), no shortcut, no in-app progress or
   error: the browser shows both. It left the File menu, which holds commands that act here.
+- **Release notes** (#330) are a web page too: **Help › Release Notes**, under Welcome to Stow,
+  opens the GitHub release page of the version that is running (a build that was never published
+  opens the list of releases). No ellipsis and no shortcut, and nothing appears after an update:
+  the notes are there when someone looks for them.
+
+- **Double-click in Finder extracts** (#328) is a switch on Settings › Extraction, off by default,
+  in its own group under Extract All's choices. It changes what a double-click does everywhere in
+  Finder, so its footer carries the ways back to browsing (hold Shift as you open, or Open in
+  Stow), the formats that always open, and what happens to the original. It never asks anything
+  after extracting: Ask each time keeps the archive. No window and no activation; the result is
+  selected in Finder, as Extract Here does.
 
 - **A batch's own folder** (#326): the panel that asks where several archives go has one
   checkbox under the browser, **Collect them in a new folder**, with a line of secondary text saying

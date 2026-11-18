@@ -60,6 +60,15 @@ final class SystemActions {
         }
     }
 
+    /// Archives opened from Finder with Double-click extracts on (#328): Extract Here, except that
+    /// nothing stops to ask about the original afterwards (`QuickExtraction.afterwards`).
+    func quickExtract(_ archives: [URL]) {
+        guard !archives.isEmpty else { return }
+        Self.log.info("Quick extraction of \(archives.count) archives opened from Finder")
+        let afterwards = QuickExtraction.afterwards(Preferences.current.afterExtractAll)
+        launch { await self.extract(archives, to: nil, afterwards: afterwards) }
+    }
+
     /// Services › Send to Stow: archives open in the browser, everything else goes to the Tray.
     func send(_ urls: [URL]) {
         let archives = urls.filter { ArchiveTypes.type(forFileName: $0.lastPathComponent) != nil }
@@ -78,8 +87,9 @@ final class SystemActions {
 
     // MARK: - Actions
 
-    /// `destination` nil: next to each archive.
-    private func extract(_ archives: [URL], to destination: URL?) async {
+    /// `destination` nil: next to each archive. `afterwards` nil: Settings › Extraction's choice.
+    private func extract(_ archives: [URL], to destination: URL?,
+                         afterwards: Preferences.AfterwardsArchive? = nil) async {
         var placed: [URL] = []
         var completed: [ArchiveAftercare.Source] = []
         let session = BatchPasswordSession()
@@ -119,11 +129,11 @@ final class SystemActions {
                         code: ErrorCode(.extract, .unknown)))
                 }
             } catch {
-                await explain(EngineError(error), archive: url, destination: folder)
+                await explain(EngineError(error), archive: url, destination: folder, afterwards: afterwards)
             }
         }
         session.clear()
-        _ = await ArchiveAftercare.apply(Preferences.current.afterExtractAll, key: Preferences.Key.afterExtractAll,
+        _ = await ArchiveAftercare.apply(afterwards ?? Preferences.current.afterExtractAll, key: Preferences.Key.afterExtractAll,
                                          sources: completed, action: String(localized: "It was extracted."))
         Self.log.info("Extracted \(archives.count) archives into \(placed.count) items")
         if !placed.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(placed) }
@@ -155,7 +165,8 @@ final class SystemActions {
 
     // MARK: - Feedback
 
-    private func explain(_ error: EngineError, archive: URL?, destination: URL? = nil) async {
+    private func explain(_ error: EngineError, archive: URL?, destination: URL? = nil,
+                         afterwards: Preferences.AfterwardsArchive? = nil) async {
         guard error.failure != .cancelled else { return }
         let failure = if let archive {
             Failure(error, .extract, name: archive.lastPathComponent, destination: destination ?? archive.deletingLastPathComponent())
@@ -173,7 +184,7 @@ final class SystemActions {
         case .chooseFolder:
             perform(.extractTo, on: [archive])
         case .tryAgain:
-            await extract([archive], to: destination)
+            await extract([archive], to: destination, afterwards: afterwards)
         }
     }
 

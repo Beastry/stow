@@ -105,6 +105,7 @@ nonisolated enum SettingsKeys {
         .init(key: Preferences.Key.fileConflict, defaultValue: .string(Preferences.defaults.fileConflict.rawValue)),
         .init(key: Preferences.Key.skipSystemFiles, defaultValue: .bool(Preferences.defaults.skipSystemFiles)),
         .init(key: Preferences.Key.removeQuarantine, defaultValue: .bool(Preferences.defaults.removeQuarantine)),
+        .init(key: Preferences.Key.quickExtractOnOpen, defaultValue: .bool(Preferences.defaults.quickExtractOnOpen)),
         .init(key: "PackAudience", defaultValue: .string(Audience.windows.rawValue)),
         .init(key: "PackVerify", defaultValue: .bool(false)),
         .init(key: "PackCPUCores", defaultValue: .integer(0)),
@@ -163,7 +164,8 @@ nonisolated enum SettingsKeys {
             keys = [
                 Preferences.Key.extractAllFolder, Preferences.Key.afterExtractAll,
                 Preferences.Key.closeWindowAfter, Preferences.Key.folderConflict,
-                Preferences.Key.fileConflict, Preferences.Key.skipSystemFiles
+                Preferences.Key.fileConflict, Preferences.Key.skipSystemFiles,
+                Preferences.Key.quickExtractOnOpen
             ]
         case .installing:
             keys = [Preferences.Key.afterInstall, Preferences.Key.removeQuarantine]

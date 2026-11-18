@@ -16,7 +16,7 @@ struct SettingsTests {
         try withStore { store in
             let expected: Set<String> = [
                 "extract.allFolder", "extract.afterExtractAll", "extract.closeWindowAfter",
-                "extract.folderConflict", "extract.fileConflict", "extract.skipSystemFiles",
+                "extract.folderConflict", "extract.fileConflict", "extract.skipSystemFiles", "extract.quickExtractOnOpen",
                 "install.afterInstall", "install.removeQuarantine", "PackAudience", "PackVerify",
                 "PackCPUCores", "FinderMenuOnExternalDrives",
                 "general.appearance", "browse.defaultView", "PackVolumeSize",
