@@ -92,6 +92,9 @@ final class SystemActions {
                          afterwards: Preferences.AfterwardsArchive? = nil) async {
         var placed: [URL] = []
         var completed: [ArchiveAftercare.Source] = []
+        // Share conflict answers across this request, as the batch queue does.
+        let policy = ConflictPolicy()
+        let options = Extraction.Options.current(resolve: policy.resolver)
         let session = BatchPasswordSession()
         defer { session.clear() }
         let passwords = app.map { owner in
@@ -117,7 +120,8 @@ final class SystemActions {
                         archive = await DiskImageAliasLoader.prepare(archive, password: password)
                         if Task.isCancelled { throw EngineError(.cancelled) }
                         source = ArchiveAftercare.Source.capture(url)
-                        return try await Extraction.run(archive, selection: nil, to: folder, onProgress: report)
+                        return try await Extraction.run(archive, selection: nil, to: folder,
+                                                        options: options, onProgress: report)
                     }
                 }
                 placed += result.placed
