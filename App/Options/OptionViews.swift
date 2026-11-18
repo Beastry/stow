@@ -8,6 +8,7 @@ struct ExtractionOptionsView: View {
     @AppStorage(Preferences.Key.folderConflict) private var folderConflict = Preferences.defaults.folderConflict
     @AppStorage(Preferences.Key.fileConflict) private var fileConflict = Preferences.defaults.fileConflict
     @AppStorage(Preferences.Key.skipSystemFiles) private var skipSystemFiles = Preferences.defaults.skipSystemFiles
+    @AppStorage(Preferences.Key.quickExtractOnOpen) private var quickExtract = Preferences.defaults.quickExtractOnOpen
 
     var body: some View {
         Form {
@@ -20,6 +21,14 @@ struct ExtractionOptionsView: View {
                     AfterwardsLabels()
                 }
                 Toggle("Close the window after Extract All or an install", isOn: $closeWindow)
+            }
+            // #328: off by default. The footer carries the ways back to browsing, since the toggle
+            // changes what a double-click does everywhere in Finder.
+            Section {
+                Toggle("Double-click in Finder extracts", isOn: $quickExtract)
+            } footer: {
+                Text("An archive you open in Finder is extracted next to itself, without a window. To look inside first, hold Shift as you open it, or choose Open in Stow. Disk images and installer packages always open, and the archive stays where it is unless Afterwards is set to Moves to the Trash.")
+                    .foregroundStyle(.secondary)
             }
             Section {
                 Picker("Same-name folder", selection: $folderConflict) {

@@ -12,6 +12,7 @@ nonisolated enum Preferences {
         static let fileConflict = "extract.fileConflict"
         static let skipSystemFiles = "extract.skipSystemFiles"
         static let removeQuarantine = "install.removeQuarantine"
+        static let quickExtractOnOpen = "extract.quickExtractOnOpen"
     }
 
     /// Where Extract All puts things.
@@ -50,6 +51,8 @@ nonisolated enum Preferences {
         var skipSystemFiles = true
         /// Off by default: the quarantine flag is what makes Gatekeeper check an app on first open.
         var removeQuarantine = false
+        /// Off by default: archives opened from Finder are extracted next to themselves (#328).
+        var quickExtractOnOpen = false
     }
 
     static let defaults = Values()
@@ -71,7 +74,8 @@ nonisolated enum Preferences {
             folderConflict: value(Key.folderConflict, defaults.folderConflict),
             fileConflict: value(Key.fileConflict, defaults.fileConflict),
             skipSystemFiles: flag(Key.skipSystemFiles, defaults.skipSystemFiles),
-            removeQuarantine: flag(Key.removeQuarantine, defaults.removeQuarantine)
+            removeQuarantine: flag(Key.removeQuarantine, defaults.removeQuarantine),
+            quickExtractOnOpen: flag(Key.quickExtractOnOpen, defaults.quickExtractOnOpen)
         )
     }
 
