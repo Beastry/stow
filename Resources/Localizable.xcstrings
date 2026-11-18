@@ -14034,6 +14034,16 @@
           }
         }
       }
+    },
+    "Release Notes": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发布说明"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
