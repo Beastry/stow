@@ -704,6 +704,13 @@ transition frame by frame, by click and as after a key press, for review.
   after extracting: Ask each time keeps the archive. No window and no activation; the result is
   selected in Finder, as Extract Here does.
 
+- **A batch's own folder** (#326): the panel that asks where several archives go has one
+  checkbox under the browser, **Collect them in a new folder**, with a line of secondary text saying
+  what it makes. On, a new “Extracted Archives” folder (numbered when the name is taken) is made in
+  the chosen folder, and each archive keeps its own place inside it: archives never mix, unlike
+  ArcZip, which pours them together. The checkbox remembers its last state; it is absent for one
+  archive. A folder that ends up empty (everything failed or was cancelled) is removed again.
+
 ## Not doing (on purpose)
 
 - No toolbar full of icons. Primary action (Extract) is prominent; the rest live in Actions and menus.

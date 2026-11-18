@@ -112,6 +112,7 @@ Legend: ✅ verified within the stated scope · ❌ confirmed native failure · 
 | Unsafe paths, special files (FIFO, sockets, devices), links | ✅ containment | ➕ explained in Checkup |
 | Password archives (incl. RAR), incorrect-password retry, CJK passwords (show-password for IME) | ✅ sheet with retry for opening (encrypted 7z file lists), extracting and nested archives; password kept in memory while the archive is open · ✅ optional Keychain vault (off by default; Settings › Passwords) · 🧪 (pending verification) show-password-by-default setting | ZIP passwords outside ASCII get a warning when packing |
 | Batch extraction queue, stacked progress windows | ✅ File › Extract Archives… or drop several; compact progress stack | conflicts and keep/trash asked once per batch |
+| One result folder for a batch | ✅ **Collect them in a new folder** in the batch's destination panel (File › Extract Archives…, several dropped, Finder's Extract to… with several), off until chosen, remembered (#326) | ArcZip pours every archive's contents into one folder and numbers clashes; Stow makes a new “Extracted Archives” folder (numbered, never an existing one) and keeps each archive in its own place inside, so archives never mix. Removed again if nothing was extracted into it |
 | Staged writes, cleanup on cancel/failure | ✅ | |
 | Integrity check of disk images before browsing | ✅ in the background (browsing doesn’t wait) | |
 
