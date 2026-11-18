@@ -61,6 +61,9 @@ struct ArchiveInfoView: View {
                             }
                         }
                     }
+                    if let comment = archive.comment {
+                        ArchiveCommentView(text: comment)
+                    }
                     if !archive.checkup.isEmpty {
                         ArchiveFindingRows(findings: archive.checkup)
                     }
@@ -99,6 +102,65 @@ struct ArchiveInfoView: View {
             ? String(localized: "\(Int(((fraction - 1) * 100).rounded()))% larger")
             : String(localized: "\(Int(((1 - fraction) * 100).rounded()))% smaller")
         return (packed.bytes, change)
+    }
+}
+
+/// The comment its author stored in the archive (#327): their words, shown as plain text in a
+/// quiet inset that scrolls past a few lines, with a button that copies all of it. Says "Copied"
+/// for a moment, as the error details' button does; no animation.
+struct ArchiveCommentView: View {
+    let text: String
+    @State private var copied = false
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
+        VStack(alignment: .leading, spacing: Space.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Comment")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: Space.s)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    copied = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copied = false
+                    }
+                } label: {
+                    Label(copied ? String(localized: "Copied") : String(localized: "Copy"),
+                          systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .font(.caption)
+                .help("Copy the archive’s comment")
+                .accessibilityLabel(copied ? String(localized: "Copied") : String(localized: "Copy Comment"))
+            }
+            ScrollView {
+                Text(verbatim: text)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Space.s)
+                    .padding(.vertical, 6)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: 132)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(.quaternary.opacity(0.5), in: shape)
+            .overlay {
+                if ContrastStyle.resolve(contrast).increased {
+                    shape.strokeBorder(.primary.opacity(ContrastStyle(increased: true).borderOpacity))
+                        .allowsHitTesting(false)
+                }
+            }
+            .accessibilityLabel(String(localized: "Archive comment"))
+        }
     }
 }
 

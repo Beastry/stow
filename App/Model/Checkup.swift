@@ -330,6 +330,7 @@ nonisolated extension Archive {
         dropTargets = layout.dropTargets
         self.aliasDropTargets = aliasDropTargets
         self.presentationFiles = presentationFiles
+        comment = listing.comment.flatMap { ArchiveComment.text(from: $0, encoding: nameEncoding) }
     }
 
     /// The archive's own names for these entries; a folder stands for everything under it.
