@@ -120,6 +120,53 @@ struct HoverMediaTests {
         window.close()
     }
 
+    /// Review of #359: Reduce Motion switched on while a card is open pauses its video; switched
+    /// off again, the glance's own playback comes back. Play pressed meanwhile stays the person's.
+    @Test func reduceMotionChangesApplyToAnOpenCard() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let url = try await MediaFixture.clip(in: folder.url)
+        func card(_ startsPlaying: Bool) -> AnyView {
+            AnyView(HoverMediaPlayer(url: url, kind: .video, startsPlaying: startsPlaying).frame(width: 300, height: 200))
+        }
+        let host = NSHostingView(rootView: card(true))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { host.rootView = AnyView(EmptyView()); host.layoutSubtreeIfNeeded(); window.close() }
+        host.layoutSubtreeIfNeeded()
+        let player = try #require(Self.playerView(in: host)?.player)
+        #expect(player.rate > 0)
+        func show(_ startsPlaying: Bool) async throws {
+            host.rootView = card(startsPlaying)
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        // An unrelated update changes nothing.
+        try await show(true)
+        #expect(player.rate > 0)
+        try await show(false)
+        #expect(player.rate == 0)
+        #expect(Self.playerView(in: host)?.player === player)
+        try await show(true)
+        #expect(player.rate > 0)
+        // Paused by the person, then Reduce Motion on and off: it stays paused.
+        player.pause()
+        try await show(false)
+        try await show(true)
+        #expect(player.rate == 0)
+        // Under Reduce Motion the person presses Play: switching it off and on doesn't stop it…
+        try await show(false)
+        player.play()
+        try await Task.sleep(for: .milliseconds(100))
+        try await show(true)
+        #expect(player.rate > 0)
+        // …but switching it on again pauses automatic motion, as for any open card.
+        try await show(false)
+        #expect(player.rate == 0)
+    }
+
     private static func playerView(in view: NSView) -> AVPlayerView? {
         if let player = view as? AVPlayerView { return player }
         for child in view.subviews { if let found = playerView(in: child) { return found } }

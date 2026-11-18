@@ -5,7 +5,8 @@ import SwiftUI
 /// Playback inside a hover card (#323), with AVKit's own inline controls: play and pause, the
 /// scrubber for seeking, volume. A video starts at once, muted and looping, the way a glance at
 /// a clip should behave; sound is one click on the volume control away. Audio waits for Play,
-/// since sound nobody asked for is never a glance. Under Reduce Motion a video waits too.
+/// since sound nobody asked for is never a glance. Under Reduce Motion a video waits too, and
+/// turning Reduce Motion on while a card is open pauses its video.
 ///
 /// The player lives exactly as long as the card: closing it (any press elsewhere, the pointer
 /// leaving, another file, the archive closing) stops playback and lets the file go.
@@ -23,6 +24,40 @@ struct HoverMediaPlayer: NSViewRepresentable {
         var player: AVQueuePlayer?
         var looper: AVPlayerLooper?
         var timeObserver: Any?
+        /// The `startsPlaying` last applied, so only a change of it (Reduce Motion switched while
+        /// the card is open) touches playback, never an unrelated SwiftUI update.
+        var startsPlaying = false
+        /// Automatic playback is being held back (by Reduce Motion, or audio waiting for Play).
+        /// Pressing Play ends the hold: the person's own choice is never undone or redone.
+        var holdsAutoplay = false
+        var playing: NSKeyValueObservation?
+
+        func apply(startsPlaying: Bool) {
+            guard startsPlaying != self.startsPlaying, let player else { return }
+            self.startsPlaying = startsPlaying
+            if startsPlaying {
+                // Reduce Motion off again: back to the glance's own playback, unless the person
+                // has taken over since.
+                guard holdsAutoplay else { return }
+                holdsAutoplay = false
+                player.play()
+            } else {
+                // A video the person already paused stays theirs: no resume when this flips back.
+                holdsAutoplay = player.rate != 0
+                player.pause()
+            }
+        }
+
+        /// Play pressed while automatic playback is held: from here on playback is theirs.
+        /// Changes may arrive off the main thread; the rate is read again once there.
+        func watch(_ player: AVPlayer) {
+            playing = player.observe(\.rate) { [weak self] _, _ in
+                DispatchQueue.main.async {
+                    guard let self, self.holdsAutoplay, let player = self.player, player.rate != 0 else { return }
+                    self.holdsAutoplay = false
+                }
+            }
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -62,15 +97,22 @@ struct HoverMediaPlayer: NSViewRepresentable {
                 if time.seconds > 0.05 { still?.isHidden = true }
             }
         }
+        context.coordinator.startsPlaying = startsPlaying
+        context.coordinator.holdsAutoplay = !startsPlaying
         if startsPlaying { player.play() }
+        context.coordinator.watch(player)
         return view
     }
 
-    func updateNSView(_ view: AVPlayerView, context: Context) {}
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        context.coordinator.apply(startsPlaying: startsPlaying)
+    }
 
     static func dismantleNSView(_ view: AVPlayerView, coordinator: Coordinator) {
         if let observer = coordinator.timeObserver { coordinator.player?.removeTimeObserver(observer) }
         coordinator.timeObserver = nil
+        coordinator.playing?.invalidate()
+        coordinator.playing = nil
         coordinator.player?.pause()
         coordinator.looper?.disableLooping()
         coordinator.player?.removeAllItems()
