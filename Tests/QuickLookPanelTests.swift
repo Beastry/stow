@@ -6,6 +6,29 @@ import Testing
 /// or text file as a blank page, so no item may ever point at an empty stand-in.
 @Suite("Quick Look panel items")
 struct QuickLookPanelTests {
+    @Test func cachedItemsStayPinnedUntilThePanelCloses() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let zip = folder.url.appending(path: "pinned.zip")
+        try ZipFixture(entries: ["a", "b", "c", "d"].map { .file("\($0).txt", String(repeating: $0, count: 1_000)) })
+            .write(to: zip)
+        let archive = Archive(listing: try await ArchiveEngine.shared.list(zip), url: zip)
+        let cache = PreviewCache(budget: 2_000)
+        let a = try #require(archive.entry(at: "a.txt"))
+        let url = try await cache.file(for: a, in: archive)
+        let model = BrowserModel(archive: archive, previews: PreviewService(cache: cache))
+        model.select([a.id])
+        model.quickLook.reload(startLoading: false)
+        defer { model.quickLook.close() }
+        for path in ["b.txt", "c.txt"] {
+            _ = try await cache.file(for: #require(archive.entry(at: path)), in: archive)
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        model.quickLook.close()
+        _ = try await cache.file(for: #require(archive.entry(at: "d.txt")), in: archive)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
     private func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<800 where !condition() { try await Task.sleep(for: .milliseconds(25)) }
         #expect(condition())

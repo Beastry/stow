@@ -4,6 +4,12 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<!-- Office/HTML Quick Look previews launch WebKit in the host app. WebKit needs
+	     this entitlement even for local documents; without it its processes fail to
+	     launch and QLPreviewPanel waits before falling back to a file information card.
+	     The archive engine and its children remain without network access. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 	<!-- Only files and folders people choose (Open panel, drag and drop). -->
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
@@ -20,8 +26,8 @@
 		<string>YNQ2233752.app.stow.Stow</string>
 	</array>
 	<!-- Sparkle (#35): talks to its installer, which runs outside the sandbox. Xcode expands the
-	     bundle identifier (app.stow.Stow-spks / -spki). No network entitlement: Sparkle's
-	     downloader service fetches the appcast and the update. -->
+	     bundle identifier (app.stow.Stow-spks / -spki). Sparkle's downloader service
+	     still fetches the appcast and the update. -->
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>

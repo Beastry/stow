@@ -102,12 +102,20 @@ names = ents.get("com.apple.security.temporary-exception.mach-lookup.global-name
 bundle = info.get("CFBundleIdentifier", "")
 for suffix in ("-spks", "-spki"):
     if bundle + suffix not in names: problems.append(f"mach-lookup exception {bundle}{suffix} missing (has {names})")
-if ents.get("com.apple.security.network.client"):
-    problems.append("the app has com.apple.security.network.client; Sparkle's downloader service does the networking")
+if ents.get("com.apple.security.network.client") is not True:
+    problems.append("the app lacks com.apple.security.network.client; Office/HTML Quick Look needs WebKit to launch")
+# Network access belongs to the UI host's system renderer, never archive parsing.
+from pathlib import Path
+for engine in Path(app).rglob("StowEngine.xpc"):
+    for executable in (engine, engine / "Contents/MacOS/7zz"):
+        xml = subprocess.run(["codesign", "-d", "--entitlements", "-", "--xml", str(executable)], capture_output=True).stdout
+        engine_ents = plistlib.loads(xml) if xml.strip() else {}
+        if engine_ents.get("com.apple.security.network.client") or engine_ents.get("com.apple.security.network.server"):
+            problems.append(f"{executable}: archive parsing must not have network entitlements")
 for p in problems: print(p)
 sys.exit(1 if problems else 0)
 PY
-then ok "Sparkle: feed, public key, installer + downloader services, mach-lookup exceptions"
+then ok "Sparkle configuration; Quick Look host networking; archive engines without network entitlements"
 else fail "Sparkle configuration (see above)"
 fi
 

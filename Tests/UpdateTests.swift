@@ -24,7 +24,7 @@ struct UpdateTests {
         #expect(info["SUFeedURL"] as? String == UpdatePolicy.feedURL)
         let key = try #require(info["SUPublicEDKey"] as? String)
         #expect(Data(base64Encoded: key)?.count == 32)
-        // Sandboxed: the installer runs outside the sandbox; the downloader keeps Stow off the network.
+        // Sandboxed: the installer runs outside the sandbox; updates use Sparkle's downloader.
         #expect(info["SUEnableInstallerLauncherService"] as? Bool == true)
         #expect(info["SUEnableDownloaderService"] as? Bool == true)
         #expect(info["SUEnableAutomaticChecks"] as? Bool == true)

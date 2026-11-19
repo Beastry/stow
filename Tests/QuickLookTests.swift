@@ -2,6 +2,52 @@ import AppKit
 import Testing
 @testable import Stow
 
+@Suite("Thumbnail request lifetime")
+@MainActor
+struct ThumbnailLoadTests {
+    @Test func aStalledGeneratorStopsAtTheDeadline() async {
+        var cancelled = 0
+        let load = ThumbnailLoad(generate: { _ in }, cancel: { cancelled += 1 })
+        let start = ContinuousClock.now
+        let image = await load.image(timeout: .milliseconds(30))
+        #expect(image == nil)
+        #expect(cancelled == 1)
+        #expect(ContinuousClock.now - start < .seconds(2))
+    }
+
+    @Test func cancellationFinishesWithoutWaitingForTheGenerator() async {
+        var callback: (@Sendable (NSImage?) -> Void)?
+        var cancelled = 0
+        let load = ThumbnailLoad(generate: { callback = $0 }, cancel: { cancelled += 1 })
+        let task = Task { await load.image(timeout: .seconds(30)) }
+        while callback == nil { await Task.yield() }
+        task.cancel()
+        #expect(await task.value == nil)
+        #expect(cancelled == 1)
+        // A provider can finish after cancellation; the continuation must not resume twice.
+        callback?(NSImage(size: NSSize(width: 1, height: 1)))
+        await Task.yield()
+        #expect(cancelled == 1)
+    }
+
+    @Test func aCompletedRequestKeepsItsImage() async {
+        let expected = NSImage(size: NSSize(width: 1, height: 1))
+        var cancelled = 0
+        let load = ThumbnailLoad(generate: { $0(expected) }, cancel: { cancelled += 1 })
+        #expect(await load.image() === expected)
+        #expect(cancelled == 0)
+    }
+
+    @Test func cancellationBeforeStartingDoesNotLaunchTheGenerator() async {
+        var generated = false
+        let load = ThumbnailLoad(generate: { _ in generated = true }, cancel: {})
+        let task = Task { await load.image() }
+        task.cancel()
+        #expect(await task.value == nil)
+        #expect(!generated)
+    }
+}
+
 @Suite("Quick Look preview")
 struct QuickLookPreviewTests {
     private func archive(_ paths: [(String, Int64)], checkup: [CheckupFinding] = []) -> Archive {

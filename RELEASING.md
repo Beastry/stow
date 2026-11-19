@@ -158,7 +158,9 @@ Install from the tap: `brew install --cask Beastry/tap/stow`.
   re-building a draft, but a new release needs a new commit (or a higher *build-number*).
 - **In the app:** Sparkle 2.10 via Swift Package Manager. Sandboxed setup per Sparkle's guide:
   `SUEnableInstallerLauncherService` + the `-spks`/`-spki` mach-lookup exceptions in
-  `App/Stow.entitlements`; `SUEnableDownloaderService` so Stow itself has no network entitlement.
+  `App/Stow.entitlements`; `SUEnableDownloaderService` keeps update downloads in Sparkle's
+  service. The main app's network-client entitlement is required by WebKit for Office/HTML
+  Quick Look; the archive engines and their 7-Zip children must remain without network entitlements.
   Only Developer ID release builds start the updater (`App/Updates/UpdatePolicy.swift`); Debug,
   ad-hoc, tests and `-Stow…` demo scenes never do. Checks run daily (`SUEnableAutomaticChecks`), and
   installs ask first unless people turn on automatic installs in Settings › General › Updates.

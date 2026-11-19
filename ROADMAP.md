@@ -122,8 +122,8 @@ checks remain recorded in [PARITY.md](PARITY.md) and *Tests not yet conducted* b
 - First-run onboarding: what Stow does, file associations, Finder extension, Tray — skippable,
   re-openable from Help.
 - Updates with Sparkle (appcast on GitHub Releases); installs wait until running tasks finish.
-  Done in #35: Sparkle 2.10 (sandboxed: installer + downloader XPC services, no network
-  entitlement), Stow › Check for Updates…, General › Updates, relaunch held while busy, appcast
+  Done in #35: Sparkle 2.10 (sandboxed installer + downloader XPC services; the UI host
+  also has network-client access for system WebKit previews), Stow › Check for Updates…, General › Updates, relaunch held while busy, appcast
   signed by `scripts/generate-appcast.sh` in the Release workflow. Still to test: a real update
   between published releases, including busy-task/relaunch behavior (Tests #21).
 - Simplified Chinese localization via String Catalogs; remaining layout checks are tracked below.
