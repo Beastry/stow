@@ -1533,6 +1533,10 @@ final class BrowserModel {
                 findings.append(CheckupFinding(severity: .info, title: String(localized: "Quarantine flag kept"),
                                                detail: String(localized: "macOS doesn’t let a sandboxed app remove it, so Gatekeeper checks “\(Installer.displayName(entry.name))” the first time it opens.")))
             }
+            if !outcome.runInPlacePrepared {
+                findings.append(CheckupFinding(severity: .caution, title: String(localized: "Move the app in Finder"),
+                                               detail: String(localized: "“\(Installer.displayName(entry.name))” is installed, but macOS couldn’t prepare it to run from this folder. In Finder, move it to another folder and back before opening it.")))
+            }
             let folder = FileManager.default.displayName(atPath: grant.url.path)
             return Finished(placed: [outcome.app],
                             title: outcome.replaced ? String(localized: "Updated in \(folder)") : String(localized: "Installed in \(folder)"),

@@ -98,8 +98,13 @@ Stow stays sandboxed (user-selected files only) and asks for the narrowest acces
   folder you chose aren't quarantined by the sandbox, so — like Archive Utility — Stow carries a
   downloaded archive's quarantine over to what it installs or extracts (through Launch Services'
   quarantine properties; a raw `setxattr` is refused, and the flag is applied after the final move,
-  which would drop it). macOS then checks those apps on first launch. Not carrying it over is an
-  opt-in setting ("Remove the quarantine flag").
+  which would drop it). Explicit app installs then use Apple’s `fcopyfile` with
+  `COPYFILE_RUN_IN_PLACE` to keep quarantine while allowing the app to run from its installed
+  folder. Otherwise even an app in /Applications can run from a temporary read-only location,
+  preventing self-updates. Only the installed bundle’s quarantine is updated; ordinary extraction
+  keeps its usual translocation behavior. If preparation fails, Stow reports the Finder move
+  needed to finish. Gatekeeper still checks quarantined apps on first launch. Removing quarantine
+  entirely remains an opt-in setting ("Remove the quarantine flag").
 - **Disk images are never mounted.** The engine reads HFS+, APFS and ISO images directly, so a DMG
   is browsed read-only with nothing attached to detach.
 
