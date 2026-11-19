@@ -59,3 +59,13 @@ The current ChatGPT process still uses its existing translocation mount until th
 and relaunches `/Applications/ChatGPT.app`. A real ChatGPT update/relaunch and first-launch
 Gatekeeper behavior on a clean account are not claimed as tested. The installed signed Stow
 and registered Finder/Quick Look extensions are not replaced by the debug build.
+
+## Release 0.1.9 integration
+
+Ported onto main after PR #373 (`c2a1b4f`), preserving the newer installation completeness
+checks and already-shipped DMG recognition behavior. Older local design changes already
+superseded on main were not reapplied. The versioned HFS+ fixture adds regression coverage.
+
+The integrated build passed all 936 tests with no failures or skips and all 1,346 Simplified
+Chinese translations. XcodeGen produced no additional tracked plist changes. CI packaging,
+Universal 2 and snapshot checks are required before the release is merged and published.
