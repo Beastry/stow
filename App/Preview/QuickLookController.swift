@@ -92,6 +92,7 @@ final class QuickLookController: NSResponder, QLPreviewPanelDataSource, QLPrevie
         loads?.cancel()
         loads = nil
         if QLPreviewPanel.sharedPreviewPanelExists(), panel?.dataSource === self { panel?.orderOut(nil) }
+        releasePins()
     }
 
     /// The browser's selection changed while the panel is open.
@@ -105,14 +106,17 @@ final class QuickLookController: NSResponder, QLPreviewPanelDataSource, QLPrevie
         guard let model else { return }
         loads?.cancel()
         preparation.end()
-        pinned.forEach { model.previews.cache.unpin($0) }
-        pinned = []
+        releasePins()
         let order = Dictionary(model.visibleEntries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
         let selected = model.selectedEntries.sorted { (order[$0.id] ?? .max, $0.path) < (order[$1.id] ?? .max, $1.path) }
         let archive = model.archive
         let cache = model.previews.cache
         items = selected.map { entry in
-            if let url = cache.cachedFile(for: entry, in: archive) { return Item(entry: entry, url: url) }
+            if let url = cache.cachedFile(for: entry, in: archive) {
+                cache.pin(url)
+                pinned.append(url)
+                return Item(entry: entry, url: url)
+            }
             if entry.isNavigable { return Item(entry: entry, url: Self.folderPlaceholder(for: entry)) }
             // The sample archive is only a listing: its real files are in the app (Resources/Sample),
             // and an entry without one says so rather than opening blank.
@@ -169,6 +173,11 @@ final class QuickLookController: NSResponder, QLPreviewPanelDataSource, QLPrevie
         guard let panel, panel.dataSource === self else { return }
         guard panel.currentPreviewItem === item else { return }
         panel.refreshCurrentPreviewItem()
+    }
+
+    private func releasePins() {
+        if let model { pinned.forEach { model.previews.cache.unpin($0) } }
+        pinned = []
     }
 
     static func message(for error: EngineError) -> String {
@@ -241,8 +250,7 @@ final class QuickLookController: NSResponder, QLPreviewPanelDataSource, QLPrevie
             presentationRequested = false
             preparation.end()
             loads?.cancel()
-            if let model { pinned.forEach { model.previews.cache.unpin($0) } }
-            pinned = []
+            releasePins()
             if let panel = panel.panel, panel.dataSource === self {
                 panel.dataSource = nil
                 panel.delegate = nil

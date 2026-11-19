@@ -133,10 +133,20 @@ Stow updates itself with [Sparkle](https://sparkle-project.org) 2 (Stow › Chec
 Updates…, and General › Updates in Settings). The feed is the `appcast.xml` on the latest
 *published* GitHub release, and each update DMG is EdDSA-signed with Stow's own key (public half
 `SUPublicEDKey` in `project.yml`) as well as Developer ID–signed and notarized. Stow stays
-sandboxed and without network access: Sparkle's downloader service fetches the feed and the update,
+sandboxed: Sparkle's downloader service fetches the feed and the update,
 and its installer service replaces the app; a restart into an update waits until extracting,
 packing or opening finishes (`App/Updates`). Debug, ad-hoc, test and `-Stow…` demo runs never
-start Sparkle, so they never touch the network or show an update prompt.
+start Sparkle, so they never contact the update feed or show an update prompt.
+
+The main app has the network-client entitlement required to launch WebKit for system
+Quick Look Office/HTML previews, including local documents. Without it, the renderer fails
+to launch and a small DOCX can spend roughly a minute spinning before showing only file
+information. This permits network access in the UI host and its system web renderer;
+it is not a promise that previewed HTML or linked document resources stay offline.
+The archive engine, its 7-Zip child and the Finder/Quick Look extensions keep their
+existing sandbox and network restrictions. See the
+[preview investigation](Handoff/preview-performance-2026-11-18.md) for the controlled
+reproduction, remaining performance work and release integration.
 
 ## New archives and the sample
 
@@ -149,4 +159,4 @@ fixtures for tests and `scripts/snapshot.sh`; the source assets and licenses rem
 Help > Download Sample Archive (also in Welcome to Stow) is an explicit browser download of the genuine ZIP pinned to revision
 `33d533e7a74c0f6c862ce49a8d0fc72e93a71e90`; Help > Sample Credits and Licenses opens its source
 and license directory. Open the downloaded ZIP normally. No sample is fetched at launch, no
-network entitlement is added, and a missing fixture never becomes a fabricated production archive.
+network code is added for sample downloads, and a missing fixture never becomes a fabricated production archive.

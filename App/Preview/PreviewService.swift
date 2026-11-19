@@ -94,6 +94,7 @@ final class PreviewService {
         }
         guard let url, !Task.isCancelled else { return nil }
         let image = await Self.quickLookThumbnail(of: url, side: side)
+        guard !Task.isCancelled else { return nil }
         if let image {
             thumbnails.setObject(image, forKey: key as NSString)
         } else {
@@ -127,9 +128,8 @@ final class PreviewService {
 
     @concurrent
     static func quickLookThumbnail(of url: URL, side: CGFloat, scale: CGFloat = 2) async -> NSImage? {
-        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: side, height: side),
-                                                   scale: scale, representationTypes: .thumbnail)
-        return try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request).nsImage
+        let load = await ThumbnailLoad(url: url, side: side, scale: scale)
+        return await load.image()
     }
 
     // MARK: - App icons
@@ -319,5 +319,63 @@ final class PreviewService {
         var playable = (try? await asset.load(.isPlayable)) == true
         if playable { playable = !((try? await asset.loadTracks(withMediaType: .video)) ?? []).isEmpty }
         return .video(frame: frame, duration: duration.flatMap { $0.isFinite ? $0 : nil }, media: playable ? url : nil)
+    }
+}
+
+/// Quick Look callbacks can stall or arrive after cancellation. Finish the view's wait exactly
+/// once, even if the system generator never calls back, and stop work when a view disappears.
+final class ThumbnailLoad {
+    private let generate: (@escaping @Sendable (NSImage?) -> Void) -> Void
+    private let cancelGeneration: () -> Void
+    private var continuation: CheckedContinuation<NSImage?, Never>?
+    private var deadline: Task<Void, Never>?
+
+    init(generate: @escaping (@escaping @Sendable (NSImage?) -> Void) -> Void,
+         cancel: @escaping () -> Void) {
+        self.generate = generate
+        cancelGeneration = cancel
+    }
+
+    convenience init(url: URL, side: CGFloat, scale: CGFloat) {
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: side, height: side),
+                                                   scale: scale, representationTypes: .thumbnail)
+        let generator = QLThumbnailGenerator.shared
+        self.init(generate: { completion in
+            generator.generateBestRepresentation(for: request) { representation, _ in
+                completion(representation?.nsImage)
+            }
+        }, cancel: { generator.cancel(request) })
+    }
+
+    func image(timeout: Duration = .seconds(10)) async -> NSImage? {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                guard !Task.isCancelled else { finish(nil); return }
+                generate { [weak self] image in
+                    Task { @MainActor in self?.finish(image) }
+                }
+                deadline = Task { [weak self] in
+                    do { try await Task.sleep(for: timeout) } catch { return }
+                    self?.cancel()
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.cancel() }
+        }
+    }
+
+    private func cancel() {
+        guard continuation != nil else { return }
+        cancelGeneration()
+        finish(nil)
+    }
+
+    private func finish(_ image: NSImage?) {
+        deadline?.cancel()
+        deadline = nil
+        let waiting = continuation
+        continuation = nil
+        waiting?.resume(returning: image)
     }
 }

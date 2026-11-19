@@ -25,8 +25,9 @@ the sandboxed engine, verifies, reopens and extracts the numbered 7Z parts, chec
 refusal and payload/source integrity, and rejects failed, skipped or missing tests. Logs and
 result bundles are retained in the printed `build/packing-stress.*` directory.
 
-After each build, `scripts/register-extensions.sh` registers that build's Quick Look and Finder
-extensions (ad-hoc signatures change every build, and several worktrees may hold a Stow.app).
+For explicit Finder or Quick Look installation tests, run `scripts/register-extensions.sh` with
+the exact intended app path, normally `/Applications/Stow.app`. Routine builds/tests must not
+register temporary checkout copies: macOS retains those identities and can select stale extensions.
 
 `Stow.xcodeproj` is generated — edit `project.yml`, not the project.
 

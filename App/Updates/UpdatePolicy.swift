@@ -3,7 +3,7 @@ import Security
 
 /// When Stow may talk to its update feed (#35). Only a Developer ID–signed release build does:
 /// tests, snapshot and demo scenes, Debug builds and ad-hoc builds never start Sparkle, so they
-/// never touch the network and never show an update prompt.
+/// never contact the update feed and never show an update prompt.
 nonisolated enum UpdatePolicy {
     /// The appcast attached to the latest *published* GitHub release (drafts and pre-releases are
     /// never "latest"). Mirrors `SUFeedURL` in project.yml.

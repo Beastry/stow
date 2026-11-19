@@ -154,8 +154,9 @@ Stow does not create RAR files; RAR creation is licensed by its authors.
 
 ## Your files stay yours
 
-- **Everything happens on your Mac.** No accounts, no uploads, no analytics on what you open. The
-  app has no network access of its own; only the updater fetches releases.
+- **Archive work happens on your Mac.** No accounts, archive uploads or analytics on what you open.
+  The updater fetches releases. System document previews use WebKit in the UI host and may load
+  linked resources over the network; archive parsing remains in a helper without network access.
 - **Parsing runs in isolation.** Archives are read by a separate sandboxed helper that receives an
   open file handle and nothing else, so a malformed file cannot reach the rest of the app.
 - **Nothing changes until you save.** Extraction and edits are staged, checked and published in one
