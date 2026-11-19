@@ -101,6 +101,17 @@ click-and-observe call. These are observation bounds, not precise renderer bench
 
 ## Validation
 
+Current release-line validation:
+
+- Full local build/test passed: 941 tests, zero failures, zero skips. The result bundle was
+  checked with `scripts/ci-assert-tests.sh` and a minimum of 941.
+- All 1,346 user-facing strings have Simplified Chinese translations. Shell syntax and diff
+  whitespace checks pass. XcodeGen generated no committed plist changes.
+- Final signed/notarized artifact checks are performed by the release workflow and must pass
+  before publication; source or ad-hoc probes alone do not establish installed-release behavior.
+
+Earlier targeted investigation validation:
+
 - Build succeeded; 34 targeted Swift Testing tests passed in five suites: thumbnail lifecycle,
   preview cache, Quick Look panel items, encrypted archives and updates.
 - Added regression cases cover a stalled thumbnail provider, cancellation without a callback,
