@@ -193,6 +193,17 @@ so Details' rounded rim is its only outline: no square strip beside it, no doubl
 window's own background material, not a flat colour, so in dark mode it takes the same wallpaper
 tint as the files' side and the title bar reads as one surface from edge to edge.
 
+**Scrolled files under the title bar (#364, 2026-11-18).** The title bar stays the window's
+background with no bar or hairline at rest, but files scrolled under it no longer show sharp behind
+the archive's name and the window controls (`TitleBarBackdrop`). They blur, and the window's own
+material washes over the blur, nearly all of it at the window's top edge and 85 % at the title bar's
+bottom; both ease out over the top half of the path, so the files soften into the title bar as the
+system's soft scroll edge does (ArcZip shows its scrolled icons the same way, as soft colour behind
+its title). With nothing under it the band measures within 2 levels of the title bar over Details,
+so it can't be seen. Reduce Transparency: the solid window colour down to the title bar's bottom,
+fading over the same distance. Increase Contrast: the title bar opaque, with only a 4 pt fade under
+it. The same backdrop sits over the new-archive draft's files. No motion: it moves with the scroll.
+
 **Toolbar Search and editing (#215/#216, 2026-10-30).** Search moved from the navigation row to
 the title bar (where in the title bar is now #242's, above). The navigation row keeps its whole
 width for the path.
