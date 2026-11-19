@@ -30,6 +30,8 @@ struct ArchiveDraftView: View {
     @State private var isSearchExpanded = false
     @State private var searchFocusRequest = 0
     @State private var windowWidth: CGFloat = 980
+    /// The title bar's height, which `TitleBarBackdrop` keeps the files out from under.
+    @State private var titleBarHeight: CGFloat = 52
     /// Search's width as drawn: `titleBar.searchWidth`, stepped there while Search opens or closes.
     @State private var searchWidth = ToolbarWidthStep(TitleBarLayout.buttonWidth)
     @State private var searchWasOpen = false
@@ -48,6 +50,8 @@ struct ArchiveDraftView: View {
 
     var body: some View {
         files
+            // The title bar keeps scrolled files out from behind the name, as in the Browser (#364).
+            .overlay(alignment: .top) { TitleBarBackdrop(titleBarHeight: titleBarHeight) }
             .frame(minWidth: BrowserView.minFilesWidth)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -92,6 +96,7 @@ struct ArchiveDraftView: View {
                 return true
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { titleBarHeight = $0 }
             .onChange(of: titleBar.searchWidth, initial: true) { _, target in followSearchWidth(target) }
             .onChange(of: browsing.searchFocusRequest) { activateSearch() }
             .onChange(of: isSearchFocused) { _, focused in if !focused { isSearchExpanded = false } }

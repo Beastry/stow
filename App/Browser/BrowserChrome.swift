@@ -889,3 +889,93 @@ struct HiddenItemsSwitch: View {
         }
     }
 }
+
+/// The title bar's own surface over the files (#364). The title bar is the window's background
+/// (#242), with no bar or hairline, so at rest this band looks exactly like it and nothing seems to
+/// be there. Once the files scroll under it, they blur behind the archive's name, its subtitle and
+/// the window controls, and the window's own material washes over them, most at the window's top
+/// edge; both ease out over the top of the path, so the files soften into the title bar instead of
+/// being cut off at a line, the way the system's soft scroll edge does.
+///
+/// Reduce Transparency makes it the solid window colour; Increase Contrast makes the title bar
+/// opaque, with only a short fade under it.
+struct TitleBarBackdrop: View {
+    /// The title bar's height: the files are blurred all the way down to here.
+    let titleBarHeight: CGFloat
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// Down to the middle of the path capsule.
+    static let fade: CGFloat = FloatingGlass.topInset + FloatingGlass.barHeight / 2
+    static let firmFade: CGFloat = FloatingGlass.topInset
+    /// How much of the window's material lies over the blurred files: nearly all of it along the
+    /// window's top edge, where the name and controls sit, less toward the path.
+    static let topWash: Double = 0.95
+    static let wash: Double = 0.85
+
+    var body: some View {
+        let firm = ContrastStyle.resolve(contrast).increased
+        let solid = DisplayPreferences.reducesTransparency(reduceTransparency)
+        let fade = firm ? Self.firmFade : Self.fade
+        let height = titleBarHeight + fade
+        let bar = titleBarHeight / height
+        ZStack {
+            if solid || firm {
+                surface(solid: solid)
+                    .mask { edge([(1, 0), (1, bar), (0, 1)]) }
+            } else {
+                Rectangle().fill(.ultraThinMaterial)
+                    .mask { edge([(1, 0), (1, bar), (0, 1)]) }
+                // Enough of the window's own material over the blur that, with nothing under it, the
+                // band can't be told from the title bar beside Details: through the fade the wash
+                // eases out with the blur, so no more than the same small part of it shows anywhere.
+                surface(solid: false)
+                    .mask { edge(Self.washStops(bar: bar)) }
+            }
+        }
+        .frame(height: height)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(edges: .top)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// The wash: `topWash` at the window's top edge, `wash` at the title bar's bottom, then easing
+    /// out so that wherever the blur shows, no more than `1 - wash` of it is left uncovered.
+    static func washStops(bar: CGFloat) -> [(Double, CGFloat)] {
+        let fading: [(Double, CGFloat)] = [0.5, 0.25].map { blur in
+            (1 - (1 - wash) / blur, bar + (1 - bar) * CGFloat(1 - blur))
+        }
+        return [(topWash, 0), (wash, bar)] + fading + [(0, 1)]
+    }
+
+    /// A vertical mask through (opacity, location) stops.
+    private func edge(_ stops: [(Double, CGFloat)]) -> LinearGradient {
+        LinearGradient(stops: stops.map { .init(color: .black.opacity($0.0), location: $0.1) },
+                       startPoint: .top, endPoint: .bottom)
+    }
+
+    /// The window's background exactly as the title bar shows it: wallpaper tint in dark mode, the
+    /// inactive look when the window isn't key.
+    @ViewBuilder
+    private func surface(solid: Bool) -> some View {
+        if solid { Color(nsColor: .windowBackgroundColor) } else { WindowMaterial() }
+    }
+
+    /// The window's background material, never taking a click from the files.
+    private struct WindowMaterial: NSViewRepresentable {
+        func makeNSView(context: Context) -> PassThroughEffectView {
+            let view = PassThroughEffectView()
+            view.material = .windowBackground
+            view.blendingMode = .behindWindow
+            view.state = .followsWindowActiveState
+            return view
+        }
+
+        func updateNSView(_ view: PassThroughEffectView, context: Context) {}
+    }
+
+    final class PassThroughEffectView: NSVisualEffectView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+}

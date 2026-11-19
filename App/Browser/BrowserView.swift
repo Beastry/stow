@@ -24,6 +24,8 @@ struct BrowserView: View {
     @State private var floatingHeight: CGFloat = 62
     /// The window's width, which the title bar shares between the archive's name and Search.
     @State private var windowWidth: CGFloat = 1100
+    /// The title bar's height, which `TitleBarBackdrop` keeps the files out from under.
+    @State private var titleBarHeight: CGFloat = 52
     /// Search opened by its button or ⌘F; it closes again when it lets go of the keyboard empty.
     @State private var isSearchExpanded = false
     @State private var searchFocusRequest = 0
@@ -43,6 +45,9 @@ struct BrowserView: View {
         // Keep the navigation inset attached to one stable container as the file view changes.
         ZStack { content }
             .arriving(arrival)
+            // Over the files and under the path: the title bar keeps scrolled files out from
+            // behind the archive's name and the window controls (#364).
+            .overlay(alignment: .top) { TitleBarBackdrop(titleBarHeight: titleBarHeight) }
             // An encrypted preview being read before Quick Look can show it.
             .overlay(alignment: .top) { QuickLookPreparingCapsule(model: model, passwords: app.passwords) }
             .accessibilityElement(children: .contain)
@@ -97,13 +102,15 @@ struct BrowserView: View {
             .task { await arrival.play(reduceMotion: reduceMotion) }
             // The whole window's width, Details included: the title bar spans it (`TitleBarLayout`).
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { titleBarHeight = $0 }
             // The window keeps its title (Window menu, Mission Control); the title bar shows
             // it as the archive's menu instead (`ArchiveTitleMenu`), with a visible chevron.
             .navigationTitle(model.title)
             .navigationSubtitle(model.subtitle)
             .toolbar(removing: .title)
             // The title bar is the window's background, as the floating path and capsules assume
-            // (#242). macOS 27.2 started drawing a bar with a hairline under it by default.
+            // (#242). macOS 27.2 started drawing a bar with a hairline under it by default, at rest
+            // too; `TitleBarBackdrop` keeps scrolled files from behind the title instead (#364).
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             .toolbar { toolbar }
             // ⌘F (Edit › Find…) puts the keyboard in the search field.
