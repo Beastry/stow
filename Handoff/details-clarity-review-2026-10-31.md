@@ -25,13 +25,17 @@ grouping, hierarchy and motion. No Claude Code assignment, acceptance or review 
 
 ## Confirmed decisions and review inputs
 
+- Subsequent user decision, 2026-10-31: the
+  [floating-path and trailing-toolbar brief](browser-floating-toolbar-2026-10-31.md)
+  supersedes this review's central-search exploration. Keep Search at the leading edge
+  of the trailing view/edit group, with room to expand toward the archive title.
 - Confirmed in this conversation: keep the underlying archive checks, remove the permanent
   Checkup toolbar button and prominent all-clear explanation, keep ordinary findings in Archive
   Info, and surface concrete problems where relevant. Users should not have to learn Checkup
   as a separate feature. This supersedes historical always-visible shield requirements.
 - Existing confirmed direction: full Browser Details remains fixed and visible. This review
   does not reopen pane visibility or remove useful previews and file properties.
-- User suggestion for exploration: search in the middle, view/action controls on the right.
+- Superseded user suggestion for exploration: search in the middle, view/action controls on the right.
   The screenshot places search above Details, which can suggest the wrong search scope.
   Exact alignment, width and responsive treatment remain Claude Code's decision.
 - Details copy and grouping changes below are recommendations, not confirmed user decisions.
