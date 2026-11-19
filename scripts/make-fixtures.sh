@@ -40,6 +40,8 @@ xattr -cr "$work/vol"
 if [[ $mode == all ]]; then
   hdiutil create -quiet -ov -volname "Fixture Tool" -srcfolder "$work/vol" -fs HFS+ -format UDZO "$out/Fixture-HFS.dmg"
   hdiutil create -quiet -ov -volname "Fixture Tool" -srcfolder "$work/vol" -fs APFS -format ULFO "$out/Fixture-APFS.dmg"
+  # Real installers commonly put their dotted version in the HFS+ volume name.
+  hdiutil create -quiet -ov -volname "Fixture Tool-v2.7.1.2480" -srcfolder "$work/vol" -fs HFS+ -format UDZO "$out/Fixture-HFS-Versioned.dmg"
 fi
 
 # The authored window.

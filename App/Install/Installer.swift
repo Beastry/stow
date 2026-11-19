@@ -34,6 +34,7 @@ enum Installer {
         let quarantineRemoved: Bool?
         /// Source cleanup requires all requested payload to survive auditing and placement.
         let isComplete: Bool
+        let runInPlacePrepared: Bool
     }
 
     struct FontOutcome {
@@ -70,19 +71,27 @@ enum Installer {
             if answer == .alternate {
                 // Keep Both: the new copy gets a number, the installed one stays as it is.
                 let placement = try await Placement.place([(bundle, entry.name)], in: folder)
-                if !removeQuarantine, let source = archive.source?.url { Quarantine.inherit(from: source, to: placement.placed[0]) }
-                return AppOutcome(app: placement.placed[0], verdict: verdict, replaced: false,
-                                  quarantineRemoved: removeQuarantine ? Quarantine.remove(under: placement.placed[0]) : nil,
-                                  isComplete: Extraction.Result(placed: placement.placed, report: staged.report, placement: placement).isComplete)
+                return finishApp(placement.placed[0], verdict: verdict, replaced: false,
+                                 source: archive.source?.url, removeQuarantine: removeQuarantine,
+                                 isComplete: Extraction.Result(placed: placement.placed, report: staged.report, placement: placement).isComplete)
             }
         }
         let placement = try await Placement.place([(bundle, entry.name)], in: folder) { _ in .replace }
         guard let app = placement.placed.first else { throw EngineError(.failed, String(localized: "Nothing was installed.")) }
+        return finishApp(app, verdict: verdict, replaced: replacing,
+                         source: archive.source?.url, removeQuarantine: removeQuarantine,
+                         isComplete: Extraction.Result(placed: placement.placed, report: staged.report, placement: placement).isComplete)
+    }
+
+    private static func finishApp(_ app: URL, verdict: CodeSignature.Verdict, replaced: Bool,
+                                  source: URL?, removeQuarantine: Bool, isComplete: Bool) -> AppOutcome {
         // After the move: renaming into place drops a flag set in staging.
-        if !removeQuarantine, let source = archive.source?.url { Quarantine.inherit(from: source, to: app) }
-        return AppOutcome(app: app, verdict: verdict, replaced: replacing,
-                          quarantineRemoved: removeQuarantine ? Quarantine.remove(under: app) : nil,
-                          isComplete: Extraction.Result(placed: placement.placed, report: staged.report, placement: placement).isComplete)
+        if !removeQuarantine, let source { Quarantine.inherit(from: source, to: app) }
+        let removed = removeQuarantine ? Quarantine.remove(under: app) : nil
+        // A deliberate install must run from its destination, including when quarantine removal
+        // was requested but refused. Keeping quarantine still lets Gatekeeper assess first launch.
+        return AppOutcome(app: app, verdict: verdict, replaced: replaced, quarantineRemoved: removed,
+                          isComplete: isComplete, runInPlacePrepared: Quarantine.prepareInstalledApp(app))
     }
 
     @concurrent
@@ -189,6 +198,28 @@ enum Quarantine {
             try? target.setResourceValues(values)
         }
         return isQuarantined(root)
+    }
+
+    /// Records deliberate installation without removing quarantine or approving the app for
+    /// Gatekeeper. Apple's COPYFILE_RUN_IN_PLACE preserves quarantine and disables translocation.
+    /// With no data, xattr or stat copy flags, fcopyfile only updates quarantine on this directory;
+    /// it leaves the bundle's contents and other metadata alone. Ordinary extraction never uses it.
+    static func prepareInstalledApp(_ app: URL) -> Bool {
+        let descriptor = open(app.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { return false }
+        defer { close(descriptor) }
+        guard fgetxattr(descriptor, attribute, nil, 0, 0, 0) >= 0 else { return errno == ENOATTR }
+        guard let state = copyfile_state_alloc() else { return false }
+        defer { copyfile_state_free(state) }
+        // copyfile normally ignores quarantine-write errors. Refuse a false success instead.
+        let callback: copyfile_callback_t = { _, stage, _, _, _, _ in
+            stage == COPYFILE_ERR ? COPYFILE_QUIT : COPYFILE_CONTINUE
+        }
+        guard copyfile_state_set(state, UInt32(COPYFILE_STATE_STATUS_CB),
+                                 unsafeBitCast(callback, to: UnsafeRawPointer.self)) == 0,
+              fcopyfile(descriptor, descriptor, state, copyfile_flags_t(COPYFILE_RUN_IN_PLACE)) == 0 else { return false }
+        var quarantine: UnsafeMutableRawPointer?
+        return copyfile_state_get(state, UInt32(COPYFILE_STATE_QUARANTINE), &quarantine) == 0 && quarantine != nil
     }
 
     /// Archive Utility's rule for downloads: everything that came out of a quarantined archive is

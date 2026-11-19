@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Move the app in Finder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中移动 App"
+          }
+        }
+      }
+    },
+    "“%@” is installed, but macOS couldn’t prepare it to run from this folder. In Finder, move it to another folder and back before opening it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”已安装，但 macOS 未能完成准备，App 可能无法从当前文件夹运行。请先在访达中将它移到其他文件夹，再移回原处，然后打开。"
+          }
+        }
+      }
+    },
     "A file with that name appeared at the destination. Try again to choose another name.": {
       "localizations": {
         "zh-Hans": {

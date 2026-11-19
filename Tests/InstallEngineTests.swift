@@ -1,3 +1,4 @@
+import CoreServices
 import Foundation
 import Synchronization
 import Testing
@@ -78,6 +79,126 @@ struct InstallEngineTests {
                                                ask: questions.answer(.cancel), onProgress: { _ in })
         }
         #expect(Installer.version(of: applications.appending(path: "Tool.app")) == "2.0")
+    }
+
+    @Test(arguments: [false, true])
+    func downloadedAppRunsInPlaceAfterInstallAndConflict(keepBoth: Bool) async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        var image = folder.url.appending(path: "Downloaded.dmg")
+        try FileManager.default.copyItem(at: try Self.fixture("Fixture-HFS.dmg"), to: image)
+        var values = URLResourceValues()
+        values.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String]
+        try image.setResourceValues(values)
+        let sourceQuarantine = try quarantineValue(image)
+
+        let archive = Archive(listing: try await ArchiveEngine.shared.list(image), url: image)
+        let app = try #require(archive.installable)
+        let applications = folder.url.appending(path: "Applications", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: false)
+
+        for attempt in 0..<2 {
+            let outcome = try await Installer.installApp(app, from: archive, into: applications,
+                removeQuarantine: false, ask: { question in
+                    if case .replaceApp = question, keepBoth { return .alternate }
+                    return .proceed
+                }, onProgress: { _ in })
+            let quarantine = try quarantineValue(outcome.app)
+            let flags = try #require(UInt32(quarantine.split(separator: ";")[0], radix: 16))
+            // Apple's COPYFILE_RUN_IN_PLACE adds this bit while keeping Gatekeeper quarantine.
+            #expect(flags & 0x0100 != 0, "Installed app would still be eligible for translocation: \(quarantine)")
+            #expect(outcome.runInPlacePrepared)
+            #expect(outcome.isComplete)
+            #expect(outcome.quarantineRemoved == nil)
+            #expect(outcome.replaced == (attempt == 1 && !keepBoth))
+            #expect(outcome.app.lastPathComponent == (attempt == 1 && keepBoth ? "Fixture Tool 2.app" : "Fixture Tool.app"))
+            #expect(CodeSignature.assess(outcome.app) == .adHoc)
+            #expect(try quarantineValue(image) == sourceQuarantine)
+        }
+    }
+
+    private func quarantineValue(_ url: URL) throws -> String {
+        let count = getxattr(url.path, Quarantine.attribute, nil, 0, 0, XATTR_NOFOLLOW)
+        try #require(count > 0)
+        var bytes = [UInt8](repeating: 0, count: count)
+        try #require(getxattr(url.path, Quarantine.attribute, &bytes, count, 0, XATTR_NOFOLLOW) == count)
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
+    @Test func preparingInstalledAppPreservesQuarantineAndBundleMetadata() throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        var app = try makeApp(named: "Tool", version: "1.0", in: folder.url)
+        var values = URLResourceValues()
+        values.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String]
+        try app.setResourceValues(values)
+        let before = try quarantineValue(app).split(separator: ";", omittingEmptySubsequences: false)
+        let flags = try #require(UInt32(before[0], radix: 16))
+        let metadata = Data("keep this metadata".utf8)
+        try #require(metadata.withUnsafeBytes {
+            setxattr(app.path, "app.stow.tests.metadata", $0.baseAddress, metadata.count, 0, XATTR_NOFOLLOW)
+        } == 0)
+        let permissions = try FileManager.default.attributesOfItem(atPath: app.path)[.posixPermissions] as? NSNumber
+
+        #expect(Quarantine.prepareInstalledApp(app))
+
+        let after = try quarantineValue(app).split(separator: ";", omittingEmptySubsequences: false)
+        #expect(UInt32(after[0], radix: 16) == flags | 0x0100)
+        #expect(Array(after.dropFirst()) == Array(before.dropFirst()))
+        var bytes = [UInt8](repeating: 0, count: metadata.count)
+        #expect(getxattr(app.path, "app.stow.tests.metadata", &bytes, bytes.count, 0, XATTR_NOFOLLOW) == metadata.count)
+        #expect(Data(bytes) == metadata)
+        #expect(try FileManager.default.attributesOfItem(atPath: app.path)[.posixPermissions] as? NSNumber == permissions)
+        #expect(CodeSignature.assess(app) == .adHoc)
+        #expect(Quarantine.prepareInstalledApp(app))
+        #expect(try quarantineValue(app).split(separator: ";", omittingEmptySubsequences: false) == after)
+    }
+
+    @Test func preparingInstalledAppRefusesSymlinksAndMissingBundles() throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let app = try makeApp(named: "Tool", version: "1.0", in: folder.url)
+        let before = try quarantineValue(app)
+        let link = folder.url.appending(path: "Link.app")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: app)
+
+        #expect(!Quarantine.prepareInstalledApp(link))
+        #expect(try quarantineValue(app) == before)
+        #expect(!Quarantine.prepareInstalledApp(folder.url.appending(path: "Missing.app")))
+    }
+
+    @Test func ordinaryAppExtractionKeepsItsTranslocationPolicy() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let image = folder.url.appending(path: "Downloaded.dmg")
+        try FileManager.default.copyItem(at: try Self.fixture("Fixture-HFS.dmg"), to: image)
+        let archive = Archive(listing: try await ArchiveEngine.shared.list(image), url: image)
+        let app = try #require(archive.installable)
+        let result = try await Extraction.run(archive, selection: [app], to: folder.url) { _ in }
+        let installed = try #require(result.placed.first)
+        let flags = try #require(UInt32(try quarantineValue(installed).split(separator: ";")[0], radix: 16))
+
+        #expect(flags & 0x0100 == 0)
+        #expect(CodeSignature.assess(installed) == .adHoc)
+    }
+
+    @Test func requestedQuarantineRemovalStillPreparesTheInstalledApp() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let image = folder.url.appending(path: "Downloaded.dmg")
+        try FileManager.default.copyItem(at: try Self.fixture("Fixture-HFS.dmg"), to: image)
+        let archive = Archive(listing: try await ArchiveEngine.shared.list(image), url: image)
+        let app = try #require(archive.installable)
+        let outcome = try await Installer.installApp(app, from: archive, into: folder.url,
+            removeQuarantine: true, ask: { _ in .proceed }, onProgress: { _ in })
+
+        #expect(outcome.runInPlacePrepared)
+        if outcome.quarantineRemoved == true {
+            #expect(!Quarantine.isQuarantined(outcome.app))
+        } else {
+            let flags = try #require(UInt32(try quarantineValue(outcome.app).split(separator: ";")[0], radix: 16))
+            #expect(flags & 0x0100 != 0)
+        }
     }
 
     @Test func installsFontsAndSkipsOnesAlreadyThere() async throws {
@@ -215,7 +336,7 @@ struct InstallEngineTests {
         return folder.appending(path: name)
     }
 
-    @Test(arguments: ["Fixture-HFS.dmg", "Fixture-APFS.dmg"])
+    @Test(arguments: ["Fixture-HFS.dmg", "Fixture-APFS.dmg", "Fixture-HFS-Versioned.dmg"])
     func diskImageAppKeepsItsSealAndLeavesTheLayoutBehind(fixture: String) async throws {
         let folder = try TemporaryFolder()
         defer { folder.cleanUp() }
@@ -230,6 +351,10 @@ struct InstallEngineTests {
         let model = BrowserModel(archive: archive)
         #expect(model.folder == archive.volumeRoot)
         #expect(model.selectedEntries.map(\.name) == ["Fixture Tool.app"])
+        #expect(archive.installable?.name == "Fixture Tool.app")
+        if fixture == "Fixture-HFS-Versioned.dmg" {
+            #expect(archive.volumeRoot == "Fixture Tool-v2.7.1.2480")
+        }
         let app = try #require(model.selectedEntries.first)
         #expect(NextStep.suggestions(for: model.selectedEntries, dropTargets: archive.dropTargets).first == .moveToApplications)
 
