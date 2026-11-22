@@ -15057,20 +15057,20 @@
         }
       }
     },
-    "sentence.separator": {
-      "comment": "Between sentences (none in Chinese).",
+    "import.conflict.message": {
+      "comment": "Three sentences in a row (Chinese has no space between them).",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": " "
+            "value": "%1$@ %2$@ %3$@"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": ""
+            "value": "%1$@%2$@%3$@"
           }
         }
       }

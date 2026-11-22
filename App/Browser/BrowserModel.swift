@@ -556,8 +556,8 @@ final class BrowserModel {
                 details.append((String(localized: "Adding"), Self.describeIncoming(incoming)))
             }
             return Prompt(symbol: symbol, title: title,
-                          message: [keepBoth, replace, undo].joined(separator: String(localized: "sentence.separator", defaultValue: " ",
-                                                                                         comment: "Between sentences (none in Chinese).")),
+                          message: String(localized: "import.conflict.message", defaultValue: "\(keepBoth) \(replace) \(undo)",
+                                           comment: "Three sentences in a row (Chinese has no space between them)."),
                           details: details, choices: choices)
         }
 
