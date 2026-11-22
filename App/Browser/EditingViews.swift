@@ -428,8 +428,12 @@ extension BrowserModel {
         guard pasteboard.availableType(from: [NSPasteboard.PasteboardType(ArchiveTransfer.typeIdentifier)]) == nil,
               let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
               !urls.isEmpty else { return false }
-        Task { await importFiles(urls, into: folder, level: destination) }
-        return true
+        guard !isClosed, !resolvingImport else { return false }
+        if destination.edits.importHasConflicts(urls, into: folder) {
+            Task { await importFiles(urls, into: folder, level: destination) }
+            return true
+        }
+        return stageImport(urls, into: folder, level: destination, resolution: .keepBoth)
     }
 }
 

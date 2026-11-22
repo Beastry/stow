@@ -483,7 +483,7 @@ final class BrowserModel {
         }
     }
 
-    private var resolvingImport = false
+    private(set) var resolvingImport = false
 
     @discardableResult
     func importFiles(_ urls: [URL], into folder: String, level target: Level,
@@ -511,9 +511,14 @@ final class BrowserModel {
             }
         }
 
+        return stageImport(urls, into: folder, level: target, resolution: resolution)
+    }
+
+    @discardableResult
+    func stageImport(_ urls: [URL], into folder: String, level target: Level, resolution: EditSession.ImportResolution) -> Bool {
         let previousFolder = self.folder
         let previousSelection = selection
-        return edits.add(urls, into: folder, resolving: resolution, select: { [weak self, weak target] paths in
+        return target.edits.add(urls, into: folder, resolving: resolution, select: { [weak self, weak target] paths in
             guard let self, let target, self.level === target, self.folder == folder else { return }
             self.selection = paths.filter { target.archive.entry(at: $0) != nil }
         }, undoSelection: { [weak self, weak target] in
