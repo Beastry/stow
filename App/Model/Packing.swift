@@ -52,6 +52,16 @@ nonisolated struct PackRequest: Identifiable, Sendable {
         return isFolder || stem.isEmpty ? root : stem
     }
 
+    /// What separate packing names each input's archive, in order, without building the reports:
+    /// the Pack sheet lists these where the single name field was.
+    func separateNames(audience: Audience) -> [String] {
+        roots.enumerated().map { index, root in
+            let sourceName = origins.indices.contains(index) ? origins[index].lastPathComponent : root
+            let folder = files.first { $0.path == root }?.isFolder == true
+            return Self.separateName(sourceName, isFolder: folder, audience: audience)
+        }
+    }
+
     /// Each top-level input keeps its own tree and gets its own compatibility pass.
     func separateReports(options: PackOptions, password: String, overrides: [String: String]) -> [(String, PackReport)] {
         let grouped = Dictionary(grouping: files) { $0.path.split(separator: "/", maxSplits: 1).first.map(String.init) ?? "" }

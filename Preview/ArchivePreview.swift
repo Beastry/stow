@@ -79,7 +79,8 @@ private struct ListedPreview: View {
                         }
                     }
                     if visible.hiddenRowCount > 0 {
-                        Text("and \(visible.hiddenRowCount.formatted()) more — open in Stow to see everything")
+                        // Names what's missing: rows past what Quick Look lists, not files left out of the archive.
+                        Text("Plus \(visible.hiddenRowCount.formatted()) more not listed here. Open in Stow to see everything.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
@@ -232,10 +233,15 @@ private struct TreeRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if row.hasChildren {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                    .accessibilityHidden(true)
-            }
+            // A disclosure column on every row, so files and folders at one depth line up whether or
+            // not a folder can open. Finder's turn: right when closed, down when open, at once.
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(expanded ? 90 : 0))
+                .opacity(row.hasChildren ? 1 : 0)
+                .frame(width: 10)
+                .accessibilityHidden(true)
             Image(nsImage: Self.icon(for: row))
                 .resizable()
                 .frame(width: 16, height: 16)
@@ -251,7 +257,7 @@ private struct TreeRow: View {
             }
         }
         .font(.callout)
-        .padding(.leading, 16 + CGFloat(min(row.depth, 12)) * 16)
+        .padding(.leading, 10 + CGFloat(min(row.depth, 12)) * 16)
         .padding(.trailing, 16)
         .frame(height: 22)
         .contentShape(Rectangle())

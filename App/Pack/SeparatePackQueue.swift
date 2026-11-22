@@ -27,6 +27,26 @@ final class SeparatePackQueue {
     private var completion: ((Result<[URL], Error>) -> Void)?
 
     var isRunning: Bool { worker != nil }
+    /// Something is still waiting or packing: what the results panel offers Stop All for.
+    var isActive: Bool {
+        isRunning || rows.contains {
+            switch $0.phase {
+            case .waiting, .running: true
+            default: false
+            }
+        }
+    }
+
+    /// Design review only: shows rows without packing anything.
+    func preview(_ planned: [(name: String, phase: Phase, verified: Bool)]) {
+        guard !isRunning else { return }
+        let folder = URL(filePath: "/Users/Shared/Downloads", directoryHint: .isDirectory)
+        rows = planned.map { name, phase, verified in
+            var row = Row(name: name, phase: phase)
+            if phase == .completed { row.placed = [folder.appending(path: name)]; row.verified = verified }
+            return row
+        }
+    }
 
     func start(_ planned: [PackController.Job], cleanupDirectory: URL?, cleanupOnlyOnSuccess: Bool,
                cleaned: @escaping (URL) -> Void, completion: @escaping (Result<[URL], Error>) -> Void) {

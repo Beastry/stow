@@ -384,7 +384,8 @@ and retain the archive level and Browser view preference.
 | Region | Holds |
 | --- | --- |
 | Header (no title bar) | The archive's format badge (32 pt), its name semibold with “ZIP archive · 17 files” under it, wherever you are inside it; when encrypted, a 20 pt lock badge right after the name: accent-filled while locked, a spinner while a password is checked, a quiet open lock once one has worked. Dragging the header moves the window; the window keeps its title for the Window menu |
-| Navigation, floating under the header | The Browser's capsule: Back · Forward · Up │ the path from the archive down, running the window's width (no Search beside it); a deep path folds its middle folders into a ⋯ menu and keeps where you are in view (#242) |
+| Navigation, floating under the header | The Browser's capsule: Back · Forward · Up │ the path from the archive down, running the window's width (no Search beside it); a deep path folds its middle folders into a ⋯ menu and keeps where you are in view (#242). After it, in their own glass: the hidden-items switch when there are any, and **Icons · List** (#370), the Browser's two symbols as a segmented switch (⌘1 / ⌘2; not over a laid-out installer window, which has its own layout). Settings › Glance sets the default for new archives |
+| Icons | Compact tiles, not the Browser's: 100–132 pt wide, 124 pt tall with a 60 pt thumbnail, 12 pt apart and a 16 pt margin, so a 440 pt Glance shows three across where the Browser's tiles fit two |
 | Files | Name and size, straight on the window's one surface: Liquid Glass with a wash of the window colour for legibility, or classic frosted (Settings › Glance); solid under Reduce Transparency. No card, no frame. The badge and the rows' icons share the 16 pt margin |
 | Window controls, floating bottom leading | **Close** · **Pin on Top** · **Open in Full Window** in one glass capsule of icon buttons, like the navigation capsule's. Pinned: the pin fills in the accent with a ring round it |
 | Archive capsule, floating bottom trailing | **Quick Look** (eye, icon only) · **Extract All**, in one glass capsule that never moves or changes (user's call, 2026-11-07, after ArcZip's Mini, whose Preview · Extract All capsule stays put and dims Preview with nothing selected). Quick Look is dimmed until items of this archive are selected; its help tag names them. Extract All carries the accent until a selection's action shows, or while changes are pending or saving (the bar's Save is then the one); it stays semibold either way, so only the fill fades and the capsule keeps its width. Without room for its words, Extract All keeps its icon alone. File › Extract All is ⇧⌘E (#249) |
@@ -537,6 +538,47 @@ composition and its separate Save form are superseded.
 Preserve file selection, add/remove/undo, source safety, keyboard routing and system
 display/motion preferences.
 
+## Archive workflows (#366, #367, #377)
+
+**One archive or one per item (#366).** Said in the Pack sentence, not by a checkbox beside it:
+with several items the subject is a token, “Pack **7 items** as a ZIP…” (the default, one archive)
+or “Pack **each of the 7 items** as a ZIP…” (zh “将**这 7 个项目分别**压缩为…”); its menu says
+*All in One Archive* / *Each in Its Own Archive*. Separate packing has no one name to type, so the
+Save as row lists the names the archives will take (the first two, then “and 5 more”; all of them
+in the help tag) at the field's height, and the footer says “7 archives, about 27.3 MB in all”.
+
+**Separate packing's results.** The batch panel's form (`BatchStack`), centred where the pack
+capsule sits and lifted over an open archive's bottom row: a headline in words (“Packing 2 of 5
+archives”, “3 archives packed”, “1 archive needs attention”, “Packing stopped”), a tally under it
+once anything stopped or failed, then a row per archive with the shared glyphs: its name, and
+“Waiting”, the percentage, “Saved in Downloads · verified” (“3 parts in Downloads” when split), the
+failure's few words, or “Stopped”. Each row keeps its own control as an icon: Stop (×) while
+waiting or packing, Try Again (↻) once failed or stopped, Show in Finder (folder) once packed;
+each is named for its archive for VoiceOver and the pointer, and the real paths are in the help tag
+and Copy Path. Four rows show, failures and the running one first; Show All opens a short scrolling
+list. **Stop All** sits in the header while anything runs; **Done** at the foot once nothing does
+(it returns a draft with unfinished rows to editing). Rises in and leaves as the batch panel does.
+
+**Same names when adding files (#367).** The extraction conflict prompt's form: the title names
+what collides and where (““README.md” is already in “Harbor Handoff.zip”.”, two names, or the first
+and a count), the message that either choice can be undone and nothing is written until Save, and
+a row per choice saying what it does, so the consequence is read before confirming: *Keep Both* adds
+numbered names; *Replace* takes the existing item's place, and says so plainly when a folder's
+whole contents go with it (the prompt then shows a folder symbol). Cancel · Replace · **Keep Both**
+(default).
+
+**Signed JAR edits (#329).** The signature warning's form: caution yellow, and Cancel is the
+default, so Return alone never writes an archive Java may refuse.
+
+**Passwords (#324).** Saving and using are separate switches in Settings › Passwords, each with its
+own footer: *Remember passwords in Keychain* (what is kept, and where) and *Unlock archives
+automatically* (a saved password opens only the archive it was saved for; Pack uses one only when
+it's chosen from *Use Saved Password*).
+
+**Quick Look folders (#369).** Every row has a disclosure column, so files and folders at one depth
+line up; a folder that can open shows Finder's chevron, turned down when open, at once. Past the
+display budget the last line says “Plus 1,204 more not listed here. Open in Stow to see everything.”
+
 ## Color
 
 - **Accent — Amber** `#D97B2B` (light) / `#B85E1C` (dark). Warm, like kraft paper and parcel tape;
@@ -586,7 +628,7 @@ Values from Apple's fluid-interface guidance and Emil Kowalski's design-engineer
 | --- | --- | --- |
 | Actions region appears or goes (full window and Glance) | Eases out of the archive capsule beside it: from 14 pt to the right, scale 0.94 → 1 from its trailing edge + opacity; back 6 pt with scale 0.97, quicker (`AnyTransition.emerge`). The capsule never moves; Extract All's accent fades across. **None** for arrow keys, ⌘A and Esc | `appear` in, `exit` out; accent `status` 200 ms |
 | Actions content changes on selection | **None** (frequent) — numbers use numeric text transition | — |
-| Floating chrome leaves (Actions, pack capsule, batch panel) | Ease-out fade with a smaller drop — faster than it came | 180 ms |
+| Floating chrome leaves (Actions, pack capsule, batch panel, separate-pack panel) | Ease-out fade with a smaller drop — faster than it came | 180 ms |
 | A step finishes or fails on its own | Ease-out, never a spring (nobody touched it) | 200 ms |
 | A step has started but measured nothing yet | A quarter arc turns in the progress ring; it stands still under Reduce Motion | 1 turn/s, linear |
 | Actions shown/hidden or its stack opened/closed by a key (arrows, ⌘A, Esc) | **None** | — |

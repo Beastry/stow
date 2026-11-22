@@ -236,6 +236,23 @@ enum DemoScene {
             app.packing.preview(name: "Harbor Handoff.zip", phase: .running(0.42))
         case "packed":
             app.packing.preview(name: "Harbor Handoff.zip", phase: .done, verified: true)
+        case "pack-queue", "pack-queue-mixed", "pack-queue-done":
+            // Separate packing's results (#366); nothing is packed.
+            app.openArchive(named: SampleArchive.make().name)
+            let failed = demoFailure("pack-failed", name: "Field Recordings.zip")
+            let rows: [(name: String, phase: SeparatePackQueue.Phase, verified: Bool)] = switch scene {
+            case "pack-queue-mixed":
+                [("Brand Kit.zip", .completed, true), ("Field Recordings.zip", .failed(failed), false),
+                 ("Fonts 2026.zip", .cancelled, false), ("server-logs.zip", .completed, false)]
+            case "pack-queue-done":
+                [("Brand Kit.zip", .completed, true), ("Field Recordings.zip", .completed, true),
+                 ("Fonts 2026.zip", .completed, true)]
+            default:
+                [("Brand Kit.zip", .completed, true), ("Field Recordings.zip", .running(0.42), false),
+                 ("Fonts 2026.zip", .waiting, false), ("server-logs.zip", .waiting, false),
+                 ("A rather long folder name from a camera export 2026-10-31.zip", .waiting, false)]
+            }
+            app.packing.separate.preview(rows)
         case "packrun":
             runPack(defaults)
             return
@@ -344,6 +361,18 @@ enum DemoScene {
             Task {
                 try? await Task.sleep(for: .milliseconds(300))
                 _ = await Prompts.resolve(Placement.Conflict(name: name, existing: existing, incoming: incoming, canMerge: isFolder))
+            }
+        case "import-conflict", "import-conflict-folder", "import-conflict-many":
+            // Files added to an archive meet the same names (#367); nothing is added.
+            app.openArchive(named: SampleArchive.make().name)
+            let conflicts: (names: [String], replacesFolder: Bool) = switch scene {
+            case "import-conflict-folder": (["Fonts"], true)
+            case "import-conflict-many": (["README.md", "Logo", "Brand Guidelines.pdf", "Notes.txt"], true)
+            default: (["README.md"], false)
+            }
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                _ = await Prompts.present(BrowserModel.importConflictPrompt(conflicts, in: SampleArchive.make().name))
             }
         case "signature-warning", "replace-app":
             app.openDemo(SampleArchive.prototypeBuild())

@@ -884,7 +884,9 @@ struct PackActivityAccessory: View {
     @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
-        let nextSteps = app.browser.map { !$0.selection.isEmpty || $0.activity != nil } ?? false
+        // The separate-pack panel is as wide as the batch panel: over an archive it clears the
+        // bottom row (Extract All's capsule is always there) instead of sliding under it.
+        let nextSteps = app.browser.map { !$0.selection.isEmpty || $0.activity != nil || !app.packing.separate.rows.isEmpty } ?? false
         ZStack {
             if app.packing.hasActivity {
                 PackActivityBar(packing: app.packing)

@@ -226,6 +226,28 @@ final class EditSession {
         return roots
     }
 
+    /// For the collision prompt's words: the incoming names that collide, in order and once each,
+    /// and whether Replace would swap out a whole folder (an existing one, or one coming in).
+    func importConflicts(_ urls: [URL], into folder: String) -> (names: [String], replacesFolder: Bool) {
+        let roots = importRoots(in: folder)
+        var seen = Set(roots.keys), reported = Set<String>()
+        var names: [String] = [], replacesFolder = false
+        for url in urls {
+            let key = Self.nameKey(url.lastPathComponent)
+            guard !seen.insert(key).inserted else { continue }
+            if reported.insert(key).inserted { names.append(url.lastPathComponent) }
+            if url.hasDirectoryPath || (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                replacesFolder = true
+            }
+            for path in roots[key] ?? [] where pending.entries.contains(where: {
+                ($0.path == path && $0.isFolder) || $0.path.hasPrefix(path + "/")
+            }) {
+                replacesFolder = true
+            }
+        }
+        return (names, replacesFolder)
+    }
+
     func importHasConflicts(_ urls: [URL], into folder: String) -> Bool {
         var names = Set(importRoots(in: folder).keys)
         return urls.map { Self.nameKey($0.lastPathComponent) }.filter { !names.insert($0).inserted }.count > 0

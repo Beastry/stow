@@ -496,12 +496,8 @@ final class BrowserModel {
             let archiveID = target.archive.id
             resolvingImport = true
             defer { resolvingImport = false }
-            let prompt = Prompt(symbol: "doc.on.doc.fill",
-                                title: String(localized: "Some items have the same name"),
-                                message: String(localized: "Keep Both gives incoming items unique names. Replace swaps in the last incoming item with each name, removing all contents of any folder it replaces."),
-                                choices: [.init(title: String(localized: "Cancel"), role: .cancel),
-                                          .init(title: String(localized: "Replace")),
-                                          .init(title: String(localized: "Keep Both"), role: .primary)])
+            let prompt = Self.importConflictPrompt(edits.importConflicts(urls, into: folder),
+                                                   in: folder.isEmpty ? target.archive.name : (folder as NSString).lastPathComponent)
             let answer = await present(prompt, editingWindow)
             guard !isClosed, level === target, target.archive.id == archiveID else { return false }
             resolution = switch answer.choice {
@@ -512,6 +508,35 @@ final class BrowserModel {
         }
 
         return stageImport(urls, into: folder, level: target, resolution: resolution)
+    }
+
+    /// Names what collides and where, as the extraction conflict prompt does, and says what each
+    /// choice does to it: what Keep Both calls the new ones, that Replace takes a whole folder's
+    /// contents with it, and that either one is an edit (one Undo, nothing written until Save).
+    static func importConflictPrompt(_ conflicts: (names: [String], replacesFolder: Bool), in place: String) -> Prompt {
+        let names = conflicts.names
+        let title = switch names.count {
+        case 0, 1: String(localized: "“\(names.first ?? "")” is already in “\(place)”.")
+        case 2: String(localized: "“\(names[0])” and “\(names[1])” are already in “\(place)”.")
+        default: String(localized: "“\(names[0])” and \(names.count - 1) other items are already in “\(place)”.")
+        }
+        // One row per choice, so its consequence sits beside its name before anyone confirms.
+        let many = names.count > 1
+        let keepBoth = many ? String(localized: "Adds the new ones with a number after each name")
+                            : String(localized: "Adds the new one with a number after its name")
+        let replace = switch (many, conflicts.replacesFolder) {
+        case (true, true): String(localized: "Takes the place of the existing items, and of everything inside a replaced folder")
+        case (true, false): String(localized: "Takes the place of the existing items")
+        case (false, true): String(localized: "Takes the place of the existing folder and everything in it")
+        case (false, false): String(localized: "Takes the place of the existing item")
+        }
+        return Prompt(symbol: conflicts.replacesFolder ? "folder.fill" : "doc.on.doc.fill",
+                      title: title,
+                      message: String(localized: "You can undo either one. Nothing changes on disk until you save."),
+                      details: [(String(localized: "Keep Both"), keepBoth), (String(localized: "Replace"), replace)],
+                      choices: [.init(title: String(localized: "Cancel"), role: .cancel),
+                                .init(title: String(localized: "Replace")),
+                                .init(title: String(localized: "Keep Both"), role: .primary)])
     }
 
     @discardableResult
@@ -565,11 +590,13 @@ final class BrowserModel {
         confirmingJARSave = true
         defer { confirmingJARSave = false }
         let archiveID = target.archive.id
-        let prompt = Prompt(symbol: "exclamationmark.shield.fill",
+        // The signature warning's form: caution yellow, and Cancel is the default, so Return
+        // alone never writes an archive Java may refuse; Escape answers it too.
+        let prompt = Prompt(symbol: "exclamationmark.shield.fill", tint: .yellow,
                             title: String(localized: "Save changes to a signed JAR?"),
                             message: String(localized: "Editing a signed JAR can invalidate its signature. Java may reject the edited archive."),
                             choices: [.init(title: title),
-                                      .init(title: String(localized: "Cancel"), role: .cancel)])
+                                      .init(title: String(localized: "Cancel"), role: .primary)])
         let answer = await present(prompt, editingWindow)
         return answer.choice == 0 && !Task.isCancelled && !isClosed
             && level === target && target.archive.id == archiveID

@@ -298,7 +298,9 @@ struct EditingTests {
         var prompted: [String] = []
         let cancel: (Prompt, NSWindow?) async -> Prompt.Answer = { prompt, _ in
             prompted.append(prompt.choices[0].title)
-            #expect(prompt.choices[1].role == .cancel)
+            // Cancel is the default (Return) and, with no other cancel choice, answers Escape too.
+            #expect(prompt.choices[1].role == .primary)
+            #expect(!prompt.choices.contains { $0.role == .cancel })
             return .init(choice: 1, suppress: false)
         }
         #expect(!(await model.saveEdits(present: cancel)))

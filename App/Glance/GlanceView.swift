@@ -162,6 +162,7 @@ struct GlanceView: View {
                 HStack(spacing: Space.s) {
                     NavigationCapsule(model: model, fillsWidth: true)
                     HiddenItemsSwitch(model: model)
+                    GlanceViewSwitch(model: model)
                 }
                 .padding(.horizontal, GlanceLayout.inset)
                 .arriving(arrival)
@@ -191,7 +192,7 @@ struct GlanceView: View {
                 .safeAreaPadding(.bottom, 56)
                 .transition(.opacity)
         } else if model.glanceViewMode == .icons {
-            ContentGrid(model: model, isSearchFocused: .constant(false))
+            ContentGrid(model: model, isSearchFocused: .constant(false), density: .compact)
                 .safeAreaPadding(.bottom, 56)
         } else {
             GlanceList(model: model)
@@ -412,6 +413,35 @@ private struct ColourfulWindowControl: ButtonStyle {
 }
 
 /// Name and size only — what fits a small window — with the full list's keys, menus and previews.
+/// Icons or List for this Glance (#370), beside the path the way the Browser's view picker sits
+/// in its title bar: the same two symbols, each segment named for VoiceOver and the pointer, and
+/// the View menu's ⌘1 / ⌘2 still work. The switch is instant (DESIGN.md › Motion: view-mode
+/// switches never animate). The installer window has its own layout, so it isn't offered there.
+private struct GlanceViewSwitch: View {
+    @Bindable var model: BrowserModel
+
+    var body: some View {
+        if !model.showsInstallerCanvas {
+            Picker("View", selection: $model.glanceViewMode) {
+                Label("Icons", systemImage: "square.grid.2x2")
+                    .help("View as Icons (⌘1)")
+                    .tag(SettingsKeys.GlanceViewMode.icons)
+                Label("List", systemImage: "list.bullet")
+                    .help("View as List (⌘2)")
+                    .tag(SettingsKeys.GlanceViewMode.list)
+            }
+            .pickerStyle(.segmented)
+            .labelStyle(.iconOnly)
+            .labelsHidden()
+            .controlSize(.large)
+            .fixedSize()
+            .padding(.horizontal, FloatingGlass.barInset)
+            .frame(height: FloatingGlass.barHeight)
+            .accessibleGlass(in: .capsule)
+        }
+    }
+}
+
 private struct GlanceList: View {
     @Bindable var model: BrowserModel
     @State private var hover = HoverPreviewModel()

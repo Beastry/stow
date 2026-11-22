@@ -242,15 +242,21 @@ struct PasswordSettingsView: View {
             } footer: {
                 Text("Visible passwords support Chinese and Japanese input methods. You can hide a password in the password sheet.")
             }
+            // Saving and using are separate choices (#324): each switch with its own footer, so
+            // what one does is never read as the other's.
             Section {
                 Toggle("Remember passwords in Keychain", isOn: Binding(
                     get: { remember }, set: { SettingsKeys.setRememberPasswords($0) }
                 ))
+            } footer: {
+                Text("A password that opens an archive is saved in your Keychain, where only Stow can read it. Off, Stow keeps it only while the archive is open.")
+            }
+            Section {
                 Toggle("Unlock archives automatically", isOn: Binding(
                     get: { automaticUnlock ?? remember }, set: { automaticUnlock = $0 }
                 ))
             } footer: {
-                Text("Remembering saves passwords that unlock archives. Automatic unlock uses passwords already saved in Keychain.")
+                Text("Opens an archive with the password saved for that archive, without asking. Off, Stow asks each time. Pack can use a saved password only when you choose it.")
             }
             if remember || !entries.isEmpty {
                 Section {
