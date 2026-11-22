@@ -1018,7 +1018,7 @@ final class BrowserModel {
         apply(target)
     }
 
-    private func apply(_ target: Location, fallbackSelection: Set<ArchiveEntry.ID> = []) {
+    private func apply(_ target: Location, fallbackSelection: Set<ArchiveEntry.ID> = [], restoringHistory: Bool = false) {
         searchTask?.cancel()
         pendingSearchRestore = nil
         searchScrollAnchor = nil
@@ -1031,7 +1031,9 @@ final class BrowserModel {
         // A saved inner level is only reachable while its container remains in its parent.
         var reachable = [target.levels[0]]
         for child in target.levels.dropFirst() {
-            guard let path = child.entryPath, reachable.last?.archive.entry(at: path) != nil else { break }
+            if restoringHistory {
+                guard let path = child.entryPath, reachable.last?.archive.entry(at: path) != nil else { break }
+            }
             reachable.append(child)
         }
         let levelChanged = reachable.map(\.id) != levels.map(\.id)
@@ -1063,7 +1065,7 @@ final class BrowserModel {
         rememberLocation()
         historyIndex = index
         let target = history[index]
-        apply(target, fallbackSelection: cameFrom(from, to: target))
+        apply(target, fallbackSelection: cameFrom(from, to: target), restoringHistory: true)
     }
 
     func goBack() {
