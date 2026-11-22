@@ -55,21 +55,45 @@ struct ArchivePerformanceTests {
         print("STOW_BENCHMARK tray-copy files=1000 elapsed_ms=\(milliseconds(trayStart.duration(to: .now)))")
         let mounted = FileManager.default.temporaryDirectory.appending(path: "StowBenchmarkVolume", directoryHint: .isDirectory)
         if FileManager.default.fileExists(atPath: mounted.appending(path: ".stow-benchmark-volume").path) {
-            var originalDevice = stat()
-            var mountedDevice = stat()
-            try #require(stat(small.path, &originalDevice) == 0 && stat(mounted.path, &mountedDevice) == 0)
-            try #require(originalDevice.st_dev != mountedDevice.st_dev)
-            let run = try directory(UUID().uuidString, under: mounted)
-            defer { try? FileManager.default.removeItem(at: run) }
-            let copyStart = ContinuousClock.now
-            let copied = try TrayCollection.copy([small], named: "Collection", into: run)
-            let copyTime = copyStart.duration(to: .now)
-            #expect(try FileManager.default.contentsOfDirectory(atPath: copied.appending(path: "Small").path).count == 1_000)
-            print("STOW_BENCHMARK cross-volume-tray-copy files=1000 elapsed_ms=\(milliseconds(copyTime))")
-            try await measure("cross-volume-small-zip", source: small, packed: run, scratch: run)
+            try await measureAcrossVolumes(source: small, destination: mounted, label: "cross-volume")
         }
+        if let encoded = ProcessInfo.processInfo.environment["STOW_BENCHMARK_DESTINATION"] {
+            struct Destination: Decodable {
+                let name: String
+                let bookmark: Data
+            }
+            let destination = try JSONDecoder().decode(Destination.self, from: Data(encoded.utf8))
+            var stale = false
+            let folder = try URL(resolvingBookmarkData: destination.bookmark, options: [.withoutUI],
+                                 relativeTo: nil, bookmarkDataIsStale: &stale)
+            let scoped = folder.startAccessingSecurityScopedResource()
+            defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+            try #require(destination.name.hasPrefix("Stow-Benchmark-") && folder.lastPathComponent == destination.name)
+            let marker = try String(contentsOf: folder.appending(path: ".fixture-id"), encoding: .utf8)
+            try #require(marker == destination.name)
+            try await measureAcrossVolumes(source: small, destination: folder, label: "physical-cross-device")
+        }
+    }
 
-
+    private func measureAcrossVolumes(source: URL, destination: URL, label: String) async throws {
+        var originalDevice = stat()
+        var destinationDevice = stat()
+        try #require(stat(source.path, &originalDevice) == 0 && stat(destination.path, &destinationDevice) == 0)
+        try #require(originalDevice.st_dev != destinationDevice.st_dev)
+        let run = try directory(UUID().uuidString, under: destination)
+        defer { try? FileManager.default.removeItem(at: run) }
+        let copyStart = ContinuousClock.now
+        let copied = try TrayCollection.copy([source], named: "Collection", into: run)
+        let copyTime = copyStart.duration(to: .now)
+        let output = copied.appending(path: source.lastPathComponent)
+        let files = try FileManager.default.contentsOfDirectory(atPath: source.path)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: output.path).count == files.count)
+        for file in files {
+            #expect(FileManager.default.contentsEqual(atPath: output.appending(path: file).path,
+                                                      andPath: source.appending(path: file).path))
+        }
+        print("STOW_BENCHMARK \(label)-tray-copy files=\(files.count) elapsed_ms=\(milliseconds(copyTime))")
+        try await measure(label + "-small-zip", source: source, packed: run, scratch: run)
     }
 
     private func measure(_ label: String, source: URL, packed: URL, scratch: URL,

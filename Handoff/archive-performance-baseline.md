@@ -107,5 +107,28 @@ reported progress until it returns. The test also checks that no archive was pub
 the three runs, sampled peak combined RSS was 346,512–440,880 KiB, sampled peak allocated
 engine staging was 78,660–126,160 KiB from a zero-block baseline, and cancellation took 3–9 ms.
 
-True cold launch through the first rendered listing, a second physical storage device,
-candidate engine comparisons and the remaining compatibility corpus entries are still open.
+True cold launch through the first rendered listing, candidate engine comparisons,
+and the remaining compatibility corpus entries are still open.
+
+## Physical cross-device result
+
+After building the opt-in harness, run
+`scripts/check-archive-benchmark-volume.swift /Volumes/DataHouse /private/tmp/Stow-329-build`
+from the checkout. The launcher creates a unique fixture directory on the specified volume
+and passes its implicit bookmark to the sandboxed test host. The test validates its marker
+and checks that its device ID differs from the source. After checking every copied and extracted
+file against the original, the test removes its outputs. The launcher verifies that only the
+marker remains, then removes the fixture directory.
+
+One run on 2026-11-21 targeted the external DataHouse USB SSD formatted as APFS. The source
+and benchmark build were on the Mac's internal PCIe APFS SSD. Tray Collect copied the 1,000
+files in 221 ms. Packing the same 22,890-byte corpus took 185 ms and produced a 170,816-byte
+ZIP. First and repeated listings took 43 ms each. Selected extraction took 12 ms and full
+extraction took 290 ms. All payload and cleanup checks passed.
+
+The source and newly written archive may be in macOS's file cache. The test performs regular
+transactional publication and does not measure flushed-to-device durability or sustained
+physical throughput. Whole-benchmark sampled peaks were 404,192 KiB combined RSS and
+81,088 KiB allocated in engine staging. The sampler covers all phases, including preceding
+local runs. It does not measure an isolated physical-device phase, app-side temporary
+allocation, or filesystem-cache memory. Repeat this measurement before comparing devices.
