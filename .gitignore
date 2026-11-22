@@ -15,3 +15,6 @@ DerivedData/
 /Vendor/
 /build-release/
 /_site/
+
+# Generated locally by scripts/make-benchmark-corpus.sh.
+/Tests/Fixtures/BenchmarkCorpus/
