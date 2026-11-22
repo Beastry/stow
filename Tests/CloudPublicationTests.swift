@@ -3,9 +3,10 @@ import Synchronization
 import Testing
 @testable import Stow
 
+#if STOW_CLOUD_OUTPUT
 /// Run with scripts/check-icloud-output.swift. The test host receives implicit security-scoped
 /// bookmarks to fresh fixture directories, just as one process can hand a file to another.
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["STOW_CLOUD_FIXTURES"] != nil))
+@Suite
 @MainActor
 struct CloudPublicationTests {
     @Test func publishesToCloudLocations() async throws {
@@ -80,6 +81,8 @@ struct CloudPublicationTests {
         #expect(try Data(contentsOf: ownedExport) == bytes)
     }
 }
+
+#endif
 
 @Suite @MainActor
 struct PackDestinationMutationTests {

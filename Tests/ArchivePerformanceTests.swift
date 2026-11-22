@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import Stow
 
-@Suite("Sandboxed archive performance",
-       .enabled(if: ProcessInfo.processInfo.environment["STOW_ARCHIVE_BENCHMARK"] == "1"))
+#if STOW_ARCHIVE_BENCHMARK
+@Suite("Sandboxed archive performance")
 @MainActor
 struct ArchivePerformanceTests {
     @Test(.timeLimit(.minutes(2)))
@@ -99,3 +99,4 @@ struct ArchivePerformanceTests {
         elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000
     }
 }
+#endif

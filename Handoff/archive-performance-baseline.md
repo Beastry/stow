@@ -10,9 +10,10 @@ file count and sizes before reporting measurements.
 ```sh
 scripts/fetch-7zip.sh
 xcodegen generate
-TEST_RUNNER_STOW_ARCHIVE_BENCHMARK=1 xcodebuild -project Stow.xcodeproj -scheme Stow \
+xcodebuild -project Stow.xcodeproj -scheme Stow \
   -derivedDataPath /tmp/stow-archive-benchmark -parallel-testing-enabled NO \
-  -only-testing:StowTests/ArchivePerformanceTests test
+  -only-testing:StowTests/ArchivePerformanceTests \
+  'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG STOW_ARCHIVE_BENCHMARK' test
 ```
 
 Search for `STOW_BENCHMARK` in the output. The test creates and removes its fixture and

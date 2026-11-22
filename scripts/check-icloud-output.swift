@@ -27,6 +27,7 @@ do {
     let process = Process()
     process.executableURL = URL(filePath: "/usr/bin/xcodebuild")
     process.arguments = ["-project", "Stow.xcodeproj", "-scheme", "Stow", "-derivedDataPath", CommandLine.arguments.dropFirst().first ?? "build",
+                         "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG STOW_CLOUD_OUTPUT",
                          "-parallel-testing-enabled", "NO", "-only-testing:StowTests/CloudPublicationTests", "test"]
     var environment = ProcessInfo.processInfo.environment
     environment["TEST_RUNNER_STOW_CLOUD_FIXTURES"] = String(decoding: try JSONEncoder().encode(bookmarks), as: UTF8.self)
