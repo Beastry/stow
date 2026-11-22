@@ -568,7 +568,10 @@ and a count), the message that either choice can be undone and nothing is writte
 a row per choice saying what it does, so the consequence is read before confirming: *Keep Both* adds
 numbered names; *Replace* takes the existing item's place, and says so plainly when a folder's
 whole contents go with it (the prompt then shows a folder symbol). Cancel · Replace · **Keep Both**
-(default).
+(default). ArcZip, checked natively 2026-11-21 with a real Finder drop onto an open archive: the
+drop lights the whole window's edge in its accent, then the free version stops at a Pro paywall
+(“Modify Existing Archive” requires ArcZip Pro), so its same-name prompt couldn't be observed.
+Stow's prompt follows its own extraction conflict prompt.
 
 **Signed JAR edits (#329).** The signature warning's form: caution yellow, and Cancel is the
 default, so Return alone never writes an archive Java may refuse.
