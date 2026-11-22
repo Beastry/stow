@@ -1,5 +1,4 @@
 import Foundation
-import Synchronization
 
 /// What the Quick Look extension shows for an archive in Finder: a header, a one-line Checkup and
 /// the file tree. Built from the same `Archive` the browser uses, so names, sizes and findings match.
@@ -164,32 +163,33 @@ nonisolated enum ArchivePreviewLoader {
     static let timeout: Duration = .seconds(3)
 
     static func load(_ url: URL, timeout: Duration = Self.timeout,
-                     list: @escaping @Sendable (URL) async throws -> ArchiveListing) async -> ArchivePreviewContent {
+                     list: @escaping @Sendable (URL) async throws -> ArchiveListing) async throws(CancellationError) -> ArchivePreviewContent {
+        if Task.isCancelled { throw CancellationError() }
         let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
         let format = ArchiveFormat.infer(fromName: url.lastPathComponent) ?? .other
         func fallback(_ reason: ArchivePreviewFallback.Reason) -> ArchivePreviewContent {
             .fallback(ArchivePreviewFallback(name: url.lastPathComponent, format: format, size: size, reason: reason))
         }
-        // A race rather than a task group: a group would wait for a listing that can't be cancelled.
-        let listing = Task { () -> Result<ArchiveListing, EngineError> in
-            do { return .success(try await list(url)) } catch { return .failure(EngineError(error)) }
+        // A provider can reply after the extension switches archives. AsyncStream lets the
+        // waiting consumer leave on cancellation even when that provider is still running.
+        let (responses, reply) = AsyncStream<Result<ArchiveListing, EngineError>>.makeStream(bufferingPolicy: .bufferingOldest(1))
+        let listing = Task {
+            do { reply.yield(.success(try await list(url))) }
+            catch { reply.yield(.failure(EngineError(error))) }
+            reply.finish()
         }
-        let result = await withTaskCancellationHandler {
-            await withCheckedContinuation { (continuation: CheckedContinuation<Result<ArchiveListing, EngineError>?, Never>) in
-                let once = ContinuationBox(continuation)
-                Task {
-                    let value = await listing.value
-                    once.resume(returning: value)
-                }
-                Task {
-                    try? await Task.sleep(for: timeout)
-                    once.resume(returning: nil)
-                }
-            }
-        } onCancel: {
+        let deadline = Task {
+            try await Task.sleep(for: timeout)
+            reply.finish()
+        }
+        defer {
             listing.cancel()
+            deadline.cancel()
+            reply.finish()
         }
-        if result == nil { listing.cancel() }
+        var iterator = responses.makeAsyncIterator()
+        let result = await iterator.next()
+        if Task.isCancelled { throw CancellationError() }
         switch result {
         case nil:
             return fallback(.tooSlow)
@@ -199,18 +199,6 @@ nonisolated enum ArchivePreviewLoader {
             return fallback(.unreadable(error.message))
         case .success(let listing):
             return .listed(ArchivePreviewModel(archive: Archive(listing: listing, url: url)))
-        }
-    }
-
-    private nonisolated final class ContinuationBox: Sendable {
-        private let lock: Mutex<CheckedContinuation<Result<ArchiveListing, EngineError>?, Never>?>
-
-        init(_ continuation: CheckedContinuation<Result<ArchiveListing, EngineError>?, Never>) {
-            lock = Mutex(continuation)
-        }
-
-        func resume(returning result: Result<ArchiveListing, EngineError>?) {
-            lock.withLock { $0.take() }?.resume(returning: result)
         }
     }
 }

@@ -103,9 +103,9 @@ struct QuickLookPreviewTests {
         #expect(ArchivePreviewModel.packedSummary(packed: 50, total: 100) == "50 bytes packed · 50% smaller")
     }
 
-    @Test func slowListingFallsBackInTime() async {
+    @Test func slowListingFallsBackInTime() async throws {
         let start = ContinuousClock.now
-        let content = await ArchivePreviewLoader.load(URL(filePath: "/nonexistent/big.tar.xz"), timeout: .milliseconds(100)) { _ in
+        let content = try await ArchivePreviewLoader.load(URL(filePath: "/nonexistent/big.tar.xz"), timeout: .milliseconds(100)) { _ in
             try await Task.sleep(for: .seconds(30))
             throw EngineError(.failed)
         }
@@ -115,8 +115,40 @@ struct QuickLookPreviewTests {
         #expect(fallback.format == .tarXz)
     }
 
-    @Test func encryptedNamesFallBack() async {
-        let content = await ArchivePreviewLoader.load(URL(filePath: "/x/secret.7z")) { _ in
+    @Test func switchingArchivesReleasesAStalledPreviewAtCancellation() async throws {
+        let started = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        // The old provider ignores cancellation until its external operation delivers a reply.
+        let provider = Task {
+            for await _ in release.stream { break }
+            return ArchiveListing(type: "zip", entries: [.init(path: "old.txt", isFolder: false, size: 7)])
+        }
+        defer { release.continuation.finish() }
+        let old = Task {
+            try await ArchivePreviewLoader.load(URL(filePath: "/old.zip"), timeout: .seconds(4)) { _ in
+                started.continuation.finish()
+                return await provider.value
+            }
+        }
+        for await _ in started.stream {}
+        let start = ContinuousClock.now
+        old.cancel()
+
+        let next = try await ArchivePreviewLoader.load(URL(filePath: "/next.zip")) { _ in
+            ArchiveListing(type: "zip", entries: [.init(path: "Empty", isFolder: true, size: 0)])
+        }
+        guard case .listed(let model) = next else { Issue.record("Expected the new archive"); return }
+        let rows = model.visible(expanded: ["Empty"]).rows
+        #expect(rows.map(\.id) == ["Empty"])
+        #expect(rows.first?.isFolder == true && rows.first?.hasChildren == false)
+        await #expect(throws: CancellationError.self) { try await old.value }
+        #expect(ContinuousClock.now - start < .seconds(2))
+        release.continuation.finish()
+        _ = await provider.value
+    }
+
+    @Test func encryptedNamesFallBack() async throws {
+        let content = try await ArchivePreviewLoader.load(URL(filePath: "/x/secret.7z")) { _ in
             throw EngineError(.passwordRequired)
         }
         guard case .fallback(let fallback) = content else { Issue.record("expected a fallback"); return }
@@ -128,7 +160,7 @@ struct QuickLookPreviewTests {
         defer { folder.cleanUp() }
         let zip = folder.url.appending(path: "t.zip")
         try ZipFixture(entries: [.file("Docs/a.txt", "hi"), .file("b.txt", "yo")]).write(to: zip)
-        let content = await ArchivePreviewLoader.load(zip) { try await ArchiveEngine.shared.list($0) }
+        let content = try await ArchivePreviewLoader.load(zip) { try await ArchiveEngine.shared.list($0) }
         guard case .listed(let model) = content else { Issue.record("expected a listing, got \(content)"); return }
         #expect(model.visible(expanded: ["Docs"]).rows.map(\.id) == ["Docs", "Docs/a.txt", "b.txt"])
         #expect(model.headline == nil)
