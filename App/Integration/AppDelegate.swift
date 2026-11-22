@@ -112,8 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let forced = UserDefaults.standard.string(forKey: "StowOpenSender") { sender = forced }
         #endif
         if let sender { Self.log.info("Open from \(sender, privacy: .public)") }
-        // Read now, while the open is arriving: Shift held then means "browse this one".
-        let origin = QuickExtraction.Origin(sender: sender, browseHeld: NSEvent.modifierFlags.contains(.shift))
+        // Capture both values at document-event delivery, before a cold start queues the request.
+        let origin = QuickExtraction.Origin(sender: sender, shiftHeld: NSEvent.modifierFlags.contains(.shift))
         receivedExternalRequest = true
         enqueue { $0.receive(urls, origin: origin) }
     }

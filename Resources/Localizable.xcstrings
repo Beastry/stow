@@ -14215,12 +14215,12 @@
         }
       }
     },
-    "An archive you open in Finder is extracted next to itself, without a window. To look inside first, hold Shift as you open it, or choose Open in Stow. Disk images and installer packages always open, and the archive stays where it is unless Afterwards is set to Moves to the Trash.": {
+    "Hold Shift while opening an archive in Finder to extract it beside the original when this setting is off, or browse it when this setting is on. Disk images and installer packages always open. Quick extraction keeps the archive unless Afterwards is set to Moves to the Trash.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在访达中打开的压缩包会直接解压缩到它所在的位置，不打开窗口。若想先查看内容，请在打开时按住 Shift 键，或选择“在 Stow 中打开”。磁盘映像和安装器软件包总是会打开；除非“解压缩后，压缩包”设为“移到废纸篓”，否则压缩包会留在原处。"
+            "value": "在访达中打开压缩包时按住 Shift 键，可临时切换操作。此设置关闭时，压缩包会就地解压；开启时，则会打开以供浏览。磁盘映像和安装器软件包始终会打开。除非将“解压缩后，压缩包”设为“移到废纸篓”，否则快速解压会保留原件。"
           }
         }
       }

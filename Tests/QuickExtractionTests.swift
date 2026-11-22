@@ -46,9 +46,16 @@ struct QuickExtractionTests {
         #expect(route.extract.isEmpty && route.open == [zip])
     }
 
-    @Test func shiftBrowses() {
-        let origin = QuickExtraction.Origin(sender: QuickExtraction.finder, browseHeld: true)
+    @Test func shiftTogglesOnlyEligibleFinderDocuments() {
+        let origin = QuickExtraction.Origin(sender: QuickExtraction.finder, shiftHeld: true)
         #expect(QuickExtraction.route([zip], enabled: true, origin: origin) { _ in false }.open == [zip])
+        let route = QuickExtraction.route([zip, rar, dmg, pkg], enabled: false, origin: origin) { $0 == rar }
+        #expect(route.extract == [zip])
+        #expect(route.open == [rar, dmg, pkg])
+        for sender in [nil, "com.apple.dock", "pid 123"] {
+            let unknown = QuickExtraction.Origin(sender: sender, shiftHeld: true)
+            #expect(QuickExtraction.route([zip], enabled: false, origin: unknown) { _ in false }.extract.isEmpty)
+        }
     }
 
     /// Disk images, installer packages and files Stow doesn't list as archives open; the rest of

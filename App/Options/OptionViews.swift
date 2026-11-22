@@ -27,7 +27,7 @@ struct ExtractionOptionsView: View {
             Section {
                 Toggle("Double-click in Finder extracts", isOn: $quickExtract)
             } footer: {
-                Text("An archive you open in Finder is extracted next to itself, without a window. To look inside first, hold Shift as you open it, or choose Open in Stow. Disk images and installer packages always open, and the archive stays where it is unless Afterwards is set to Moves to the Trash.")
+                Text("Hold Shift while opening an archive in Finder to extract it beside the original when this setting is off, or browse it when this setting is on. Disk images and installer packages always open. Quick extraction keeps the archive unless Afterwards is set to Moves to the Trash.")
                     .foregroundStyle(.secondary)
             }
             Section {

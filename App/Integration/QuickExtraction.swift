@@ -7,10 +7,10 @@ import Foundation
 /// Launch Services parameter) whether Finder opened the file by double-click, Open With or a drop
 /// on the app; nothing in it says which. What differs is the process that asked: the event's
 /// sender. So the rule is about where the open came from, not how:
-/// - Finder: extracts. The folder the archive sits in is the one the person is looking at.
+/// - Finder follows the preference. Holding Shift at open time temporarily reverses it.
 /// - Anything else (Quick Look's Open in Stow, the Dock, Mail, WeChat, `open`): opens as usual.
 ///   Those files often sit in another app's container, where a result next to them would be lost.
-/// - Shift held as the open arrives, Finder's own Open in Stow (a `stow://` hand-off), File ›
+/// - Finder's own Open in Stow (a `stow://` hand-off), File ›
 ///   Open and Open Recent: open as usual.
 /// - Disk images and installer packages always open, as do files Stow doesn't list as archives
 ///   (an .exe tried with Open With) and archives already open in a window (it comes forward).
@@ -21,16 +21,14 @@ nonisolated enum QuickExtraction {
     struct Origin: Equatable, Sendable {
         /// The sender's bundle identifier, when macOS says.
         var sender: String?
-        /// Shift was held: browse this time.
-        var browseHeld = false
-
-        var isFinder: Bool { sender == QuickExtraction.finder && !browseHeld }
+        /// Captured before the open is queued during launch.
+        var shiftHeld = false
     }
 
     /// Which archives to extract right away, and which to open as before, in the order given.
     static func route(_ urls: [URL], enabled: Bool, origin: Origin?,
                       isOpen: (URL) -> Bool) -> (extract: [URL], open: [URL]) {
-        guard enabled, origin?.isFinder == true else { return ([], urls) }
+        guard let origin, origin.sender == finder, enabled != origin.shiftHeld else { return ([], urls) }
         var extract: [URL] = [], open: [URL] = []
         for url in urls {
             if extracts(url), !isOpen(url) { extract.append(url) } else { open.append(url) }
