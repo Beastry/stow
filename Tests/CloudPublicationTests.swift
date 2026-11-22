@@ -24,11 +24,86 @@ struct CloudPublicationTests {
             let marker = try String(contentsOf: folder.appending(path: ".fixture-id"), encoding: .utf8)
             try #require(marker == name)
             try #require(FileManager.default.isUbiquitousItem(at: folder))
+            if ProcessInfo.processInfo.environment["STOW_CLOUD_TRANSITIONS"] == "1" {
+                do { try await exerciseProviderTransitions(folder) }
+                catch { Issue.record("Provider transition at \(folder.deletingLastPathComponent().lastPathComponent): \(error)") }
+                continue
+            }
             try await exercise(folder)
             try await packThroughResolvedAlias(in: folder)
             for recreate in [false, true] {
                 try await expectPackToRejectMovedDestination(in: folder, recreate: recreate)
             }
+        }
+    }
+
+    private func exerciseProviderTransitions(_ folder: URL) async throws {
+        let local = try TemporaryFolder()
+        defer { local.cleanUp() }
+        let bytes = Data((0..<1_048_576).map { UInt8(truncatingIfNeeded: $0) })
+        let source = local.url.appending(path: "source.bin")
+        try bytes.write(to: source)
+        let request = CreateRequest(operationID: UUID().uuidString, archiveName: "provider",
+                                    format: .zip, level: .store, verify: true)
+        let clock = ContinuousClock()
+        let start = clock.now
+        let result = try await ArchiveCreation.run([.init(source: source, path: "source.bin")],
+                                                    totalBytes: Int64(bytes.count), attributes: false,
+                                                    request: request, named: "provider", in: folder) { _ in }
+        let published = try #require(result.placed.first)
+        let reference = local.url.appending(path: "reference.zip")
+        try FileManager.default.copyItem(at: published, to: reference)
+        defer { try? FileManager.default.removeItem(at: published) }
+        let referenceBytes = try Data(contentsOf: reference)
+        let location = folder.deletingLastPathComponent().lastPathComponent
+        print("iCloud \(location) published \(start.duration(to: clock.now)); \(referenceBytes.count) bytes")
+
+        try await waitForProvider("upload", at: published) { url in
+            let values = try url.resourceValues(forKeys: [.ubiquitousItemIsUploadedKey, .ubiquitousItemUploadingErrorKey])
+            if let error = values.ubiquitousItemUploadingError { throw error }
+            return values.ubiquitousItemIsUploaded == true
+        }
+        print("iCloud \(location) reported uploaded \(start.duration(to: clock.now))")
+        try FileManager.default.evictUbiquitousItem(at: published)
+        try await waitForProvider("eviction", at: published) { CloudPlaceholder.state(of: $0) == .placeholder }
+        print("iCloud \(location) reported placeholder \(start.duration(to: clock.now))")
+
+        // Cancel Stow's wait once the live probe initiates a download. The provider may keep downloading.
+        let opened = Task { @MainActor in
+            var cancel = false
+            try await CloudPlaceholder.waitForDownload(published, isCancelled: { cancel }) { _ in cancel = true }
+        }
+        await expectEngineFailure(.cancelled) { try await opened.value }
+        try await waitForProvider("redownload", at: published) { url in
+            let values = try url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey, .ubiquitousItemDownloadingErrorKey])
+            if let error = values.ubiquitousItemDownloadingError { throw error }
+            return values.ubiquitousItemDownloadingStatus == .current && CloudPlaceholder.state(of: url) == .local
+        }
+        defer { DownloadPercent.shared.stop() }
+        #expect(try Data(contentsOf: published) == referenceBytes)
+        let listing = try await ArchiveEngine.shared.list(published)
+        let reopened = Archive(listing: listing, url: published)
+        let extracted = try await Extraction.run(reopened, selection: nil, to: local.url) { _ in }
+        #expect(extracted.isComplete)
+        let materialized = try #require(extracted.placed.first)
+        #expect(try Data(contentsOf: materialized) == bytes)
+        #expect(try Data(contentsOf: source) == bytes)
+        try FileManager.default.removeItem(at: published)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == [".fixture-id"])
+        print("iCloud \(location) redownloaded, compared bytes and cleaned up \(start.duration(to: clock.now))")
+    }
+
+    private func waitForProvider(_ phase: String, at url: URL, until ready: (URL) throws -> Bool) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(30))
+        while true {
+            // A fresh URL avoids reading Foundation's cached resource values from an earlier phase.
+            if try ready(URL(filePath: url.path)) { return }
+            guard clock.now < deadline else {
+                throw NSError(domain: "StowCloudTests", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: "iCloud did not report \(phase) within 30 seconds"])
+            }
+            try await Task.sleep(for: .milliseconds(250))
         }
     }
 

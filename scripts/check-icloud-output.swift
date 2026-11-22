@@ -24,13 +24,16 @@ do {
         try url.lastPathComponent.write(to: url.appending(path: ".fixture-id"), atomically: true, encoding: .utf8)
         bookmarks[url.lastPathComponent] = try url.bookmarkData()
     }
+    let transitions = CommandLine.arguments.contains("--transitions")
+    let derivedData = CommandLine.arguments.dropFirst().first { !$0.hasPrefix("--") } ?? "build"
     let process = Process()
     process.executableURL = URL(filePath: "/usr/bin/xcodebuild")
-    process.arguments = ["-project", "Stow.xcodeproj", "-scheme", "Stow", "-derivedDataPath", CommandLine.arguments.dropFirst().first ?? "build",
+    process.arguments = ["-project", "Stow.xcodeproj", "-scheme", "Stow", "-derivedDataPath", derivedData,
                          "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG STOW_CLOUD_OUTPUT",
                          "-parallel-testing-enabled", "NO", "-only-testing:StowTests/CloudPublicationTests", "test"]
     var environment = ProcessInfo.processInfo.environment
     environment["TEST_RUNNER_STOW_CLOUD_FIXTURES"] = String(decoding: try JSONEncoder().encode(bookmarks), as: UTF8.self)
+    if transitions { environment["TEST_RUNNER_STOW_CLOUD_TRANSITIONS"] = "1" }
     process.environment = environment
     try process.run()
     process.waitUntilExit()
