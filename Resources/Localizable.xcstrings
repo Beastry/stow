@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Collapse %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "折叠 %@"
+          }
+        }
+      }
+    },
+    "Expand %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展开 %@"
+          }
+        }
+      }
+    },
     "Move the app in Finder": {
       "localizations": {
         "zh-Hans": {

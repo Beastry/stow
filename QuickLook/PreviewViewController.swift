@@ -9,6 +9,9 @@ import SwiftUI
 final class PreviewViewController: NSViewController, QLPreviewingController {
     nonisolated private static let log = Logger(subsystem: "app.stow.Stow.QuickLook", category: "preview")
 
+    private var preparation: Task<ArchivePreviewContent, Never>?
+    private var generation = UUID()
+
     override func loadView() {
         view = NSView()
         preferredContentSize = CGSize(width: 640, height: 480)
@@ -16,7 +19,16 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
 
     func preparePreviewOfFile(at url: URL) async throws {
         let start = ContinuousClock.now
-        let content = await ArchivePreviewLoader.load(url) { try await ArchiveEngine.shared.list($0) }
+        preparation?.cancel()
+        view.subviews.forEach { $0.removeFromSuperview() }
+        let token = UUID()
+        generation = token
+        let task = Task { await ArchivePreviewLoader.load(url) { try await ArchiveEngine.shared.list($0) } }
+        preparation = task
+        let content = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        guard generation == token else { throw CancellationError() }
+        preparation = nil
+        try Task.checkCancellation()
         switch content {
         case .listed(let model):
             Self.log.info("Listed \(url.lastPathComponent, privacy: .public): \(model.fileCount) files in \(ContinuousClock.now - start, privacy: .public)")
@@ -27,7 +39,6 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
             { Self.open(url, with: app) }
         }))
         host.translatesAutoresizingMaskIntoConstraints = false
-        view.subviews.forEach { $0.removeFromSuperview() }
         view.addSubview(host)
         NSLayoutConstraint.activate([
             host.leadingAnchor.constraint(equalTo: view.leadingAnchor),
