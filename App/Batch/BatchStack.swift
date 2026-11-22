@@ -194,8 +194,8 @@ struct BatchStack: View {
     }
 }
 
-/// A tally entry: a small glyph hugging its count.
-private struct TallyLabelStyle: LabelStyle {
+/// A tally entry: a small glyph hugging its count. The separate-pack panel shares it.
+struct TallyLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 3) {
             configuration.icon.imageScale(.small).accessibilityHidden(true)
@@ -205,7 +205,7 @@ private struct TallyLabelStyle: LabelStyle {
 }
 
 /// Words first, then a chevron that turns over when the list is open.
-private struct DisclosureLabelStyle: LabelStyle {
+struct DisclosureLabelStyle: LabelStyle {
     let isExpanded: Bool
 
     func makeBody(configuration: Configuration) -> some View {

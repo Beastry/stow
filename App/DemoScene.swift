@@ -236,6 +236,23 @@ enum DemoScene {
             app.packing.preview(name: "Harbor Handoff.zip", phase: .running(0.42))
         case "packed":
             app.packing.preview(name: "Harbor Handoff.zip", phase: .done, verified: true)
+        case "pack-queue", "pack-queue-mixed", "pack-queue-done":
+            // Separate packing's results (#366); nothing is packed.
+            app.openArchive(named: SampleArchive.make().name)
+            let failed = demoFailure("pack-failed", name: "Field Recordings.zip")
+            let rows: [(name: String, phase: SeparatePackQueue.Phase, verified: Bool)] = switch scene {
+            case "pack-queue-mixed":
+                [("Brand Kit.zip", .completed, true), ("Field Recordings.zip", .failed(failed), false),
+                 ("Fonts 2026.zip", .cancelled, false), ("server-logs.zip", .completed, false)]
+            case "pack-queue-done":
+                [("Brand Kit.zip", .completed, true), ("Field Recordings.zip", .completed, true),
+                 ("Fonts 2026.zip", .completed, true)]
+            default:
+                [("Brand Kit.zip", .completed, true), ("Field Recordings.zip", .running(0.42), false),
+                 ("Fonts 2026.zip", .waiting, false), ("server-logs.zip", .waiting, false),
+                 ("A rather long folder name from a camera export 2026-10-31.zip", .waiting, false)]
+            }
+            app.packing.separate.preview(rows)
         case "packrun":
             runPack(defaults)
             return
@@ -344,6 +361,41 @@ enum DemoScene {
             Task {
                 try? await Task.sleep(for: .milliseconds(300))
                 _ = await Prompts.resolve(Placement.Conflict(name: name, existing: existing, incoming: incoming, canMerge: isFolder))
+            }
+        case "import-conflict", "import-conflict-folder", "import-conflict-many":
+            // Files added to an archive meet the same names (#367); nothing is added.
+            app.openArchive(named: SampleArchive.make().name)
+            // A real incoming file or folder, so the prompt can describe it.
+            let incoming = FileManager.default.temporaryDirectory.appending(path: "Demo Import")
+            try? FileManager.default.createDirectory(at: incoming.appending(path: "Fonts"), withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: incoming.appending(path: "README.md").path, contents: Data(count: 6_200))
+            for font in ["Display.otf", "Text.otf"] {
+                FileManager.default.createFile(atPath: incoming.appending(path: "Fonts/" + font).path, contents: Data(count: 90_000))
+            }
+            let week = Date(timeIntervalSinceNow: -86_400 * 9)
+            let conflicts: EditSession.ImportConflicts = switch scene {
+            case "import-conflict-folder":
+                .init(names: ["Fonts"], keptNames: ["Fonts 2"], replacesFolder: true,
+                      existing: .init(isFolder: true, size: 0, modified: week, itemCount: 3),
+                      incoming: incoming.appending(path: "Fonts", directoryHint: .isDirectory))
+            case "import-conflict-many":
+                .init(names: ["README.md", "Logo", "Brand Guidelines.pdf", "Notes.txt"],
+                      keptNames: ["README 2.md", "Logo 2", "Brand Guidelines 2.pdf", "Notes 2.txt"], replacesFolder: true)
+            default:
+                .init(names: ["README.md"], keptNames: ["README 2.md"],
+                      existing: .init(isFolder: false, size: 4_100, modified: week, itemCount: 0),
+                      incoming: incoming.appending(path: "README.md"))
+            }
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                _ = await Prompts.present(BrowserModel.importConflictPrompt(conflicts, in: SampleArchive.make().name))
+            }
+        case "jar-signed":
+            // Saving edits to a JAR with signature metadata (#329); nothing is saved.
+            app.openArchive(named: SampleArchive.make().name)
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                _ = await Prompts.present(BrowserModel.signedJARPrompt(saveTitle: String(localized: "Save")))
             }
         case "signature-warning", "replace-app":
             app.openDemo(SampleArchive.prototypeBuild())
@@ -1046,7 +1098,9 @@ enum DemoScene {
             if let path = defaults.string(forKey: "StowOpen") {
                 Task { show(try await ArchivePreviewLoader.load(URL(filePath: path)) { try await ArchiveEngine.shared.list($0) }) }
             } else {
-                show(.listed(ArchivePreviewModel(archive: sample)))
+                // -StowPreviewRowLimit 14 shows the display budget's last line on the sample.
+                let limit = defaults.integer(forKey: "StowPreviewRowLimit")
+                show(.listed(ArchivePreviewModel(archive: sample, rowLimit: limit > 0 ? limit : ArchivePreviewModel.rowLimit)))
             }
         }
         quickLookWindow = window

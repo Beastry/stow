@@ -7,6 +7,10 @@ import SwiftUI
 /// Up/Down, the marquee and scroll-into-view are arithmetic, and a lazy stack of rows keeps
 /// 100,000 entries smooth.
 struct GridMetrics {
+    /// Glance's compact window takes smaller tiles (#370): three across where the Browser's
+    /// tiles fit two, so icons stay a way to scan rather than a few big pictures.
+    enum Density { case regular, compact }
+
     static let minimumTile: CGFloat = 128
     static let maximumTile: CGFloat = 176
     static let tileHeight: CGFloat = 158
@@ -15,26 +19,40 @@ struct GridMetrics {
 
     let columns: Int
     let tileWidth: CGFloat
+    let tileHeight: CGFloat
+    let spacing: CGFloat
+    let inset: CGFloat
+    /// The thumbnail's height inside a tile.
+    let thumbnailHeight: CGFloat
 
-    init(width: CGFloat) {
-        let usable = max(width - Self.inset * 2, Self.minimumTile)
-        columns = max(1, Int((usable + Self.spacing) / (Self.minimumTile + Self.spacing)))
-        tileWidth = min(Self.maximumTile, (usable - Self.spacing * CGFloat(columns - 1)) / CGFloat(columns))
+    init(width: CGFloat, density: Density = .regular) {
+        let minimum: CGFloat, maximum: CGFloat
+        switch density {
+        case .regular:
+            (minimum, maximum) = (Self.minimumTile, Self.maximumTile)
+            (tileHeight, spacing, inset, thumbnailHeight) = (Self.tileHeight, Self.spacing, Self.inset, 84)
+        case .compact:
+            (minimum, maximum) = (100, 132)
+            (tileHeight, spacing, inset, thumbnailHeight) = (124, Space.m, Space.l, 60)
+        }
+        let usable = max(width - inset * 2, minimum)
+        columns = max(1, Int((usable + spacing) / (minimum + spacing)))
+        tileWidth = min(maximum, (usable - spacing * CGFloat(columns - 1)) / CGFloat(columns))
     }
 
     func rows(for count: Int) -> Int { (count + columns - 1) / columns }
 
     func frame(of index: Int) -> CGRect {
-        CGRect(x: Self.inset + CGFloat(index % columns) * (tileWidth + Self.spacing),
-               y: Self.inset + CGFloat(index / columns) * (Self.tileHeight + Self.spacing),
+        CGRect(x: inset + CGFloat(index % columns) * (tileWidth + spacing),
+               y: inset + CGFloat(index / columns) * (tileHeight + spacing),
                width: tileWidth, height: Self.tileHeight)
     }
 
     /// Tiles the rectangle touches, without visiting the ones it can't.
     func indices(in rect: CGRect, count: Int) -> [Int] {
-        let rowSpan = Self.tileHeight + Self.spacing
-        let first = max(0, Int((rect.minY - Self.inset) / rowSpan))
-        let last = min(rows(for: count) - 1, Int((rect.maxY - Self.inset) / rowSpan))
+        let rowSpan = tileHeight + spacing
+        let first = max(0, Int((rect.minY - inset) / rowSpan))
+        let last = min(rows(for: count) - 1, Int((rect.maxY - inset) / rowSpan))
         guard first <= last else { return [] }
         return (first...last).flatMap { row in
             (0..<columns).map { row * columns + $0 }.filter { $0 < count && frame(of: $0).intersects(rect) }
@@ -45,36 +63,37 @@ struct GridMetrics {
 struct ContentGrid: View {
     @Bindable var model: BrowserModel
     var isSearchFocused: Binding<Bool>
+    var density: GridMetrics.Density = .regular
     @State private var hover = HoverPreviewModel()
     @State private var marquee: (start: CGPoint, current: CGPoint, base: Set<ArchiveEntry.ID>, toggling: Bool)?
     @FocusState private var isFocused: Bool
 
     var body: some View {
         GeometryReader { proxy in
-            let metrics = GridMetrics(width: proxy.size.width)
+            let metrics = GridMetrics(width: proxy.size.width, density: density)
             let entries = model.visibleEntries
             ScrollViewReader { scroller in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: GridMetrics.spacing) {
+                    LazyVStack(alignment: .leading, spacing: metrics.spacing) {
                         ForEach(0..<metrics.rows(for: entries.count), id: \.self) { row in
-                            HStack(alignment: .top, spacing: GridMetrics.spacing) {
+                            HStack(alignment: .top, spacing: metrics.spacing) {
                                 ForEach(entries[row * metrics.columns..<min(entries.count, (row + 1) * metrics.columns)]) { entry in
-                                    tile(entry)
-                                        .frame(width: metrics.tileWidth, height: GridMetrics.tileHeight, alignment: .top)
+                                    tile(entry, thumbnailHeight: metrics.thumbnailHeight)
+                                        .frame(width: metrics.tileWidth, height: metrics.tileHeight, alignment: .top)
                                 }
                             }
                             .id(row)
                         }
                     }
-                    .padding(GridMetrics.inset)
+                    .padding(metrics.inset)
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .topLeading)
                     .background { marqueeSurface(metrics, count: entries.count) }
                     .overlay(alignment: .topLeading) { marqueeRectangle }
                     .coordinateSpace(.named("grid"))
                 }
                 .onScrollGeometryChange(for: Int.self) { geometry in
-                    let offset = geometry.visibleRect.minY - GridMetrics.inset
-                    return max(0, Int(offset / (GridMetrics.tileHeight + GridMetrics.spacing)))
+                    let offset = geometry.visibleRect.minY - metrics.inset
+                    return max(0, Int(offset / (metrics.tileHeight + metrics.spacing)))
                 } action: { _, row in
                     let index = row * metrics.columns
                     if entries.indices.contains(index) { model.recordSearchScrollAnchor(entries[index].id) }
@@ -105,8 +124,8 @@ struct ContentGrid: View {
         .onChange(of: model.demoHover, initial: true) { if let id = model.demoHover { hover.present(id) } }
     }
 
-    private func tile(_ entry: ArchiveEntry) -> some View {
-        GridTile(entry: entry, model: model,
+    private func tile(_ entry: ArchiveEntry, thumbnailHeight: CGFloat) -> some View {
+        GridTile(entry: entry, model: model, thumbnailHeight: thumbnailHeight,
                  isSelected: model.selection.contains(entry.id),
                  showsPath: model.isSearching)
             .onTapGesture(count: 2) { model.open(entry) }
@@ -172,13 +191,14 @@ private struct GridTile: View {
     @Environment(\.colorSchemeContrast) private var contrast
     let entry: ArchiveEntry
     let model: BrowserModel
+    var thumbnailHeight: CGFloat = 84
     let isSelected: Bool
     let showsPath: Bool
 
     var body: some View {
         VStack(spacing: Space.s) {
             LiveThumbnail(entry: entry, model: model)
-                .frame(height: 84)
+                .frame(height: thumbnailHeight)
                 .frame(maxWidth: .infinity)
                 .padding(Space.s)
                 .background(.primary.opacity(isSelected ? 0.08 : 0), in: .rect(cornerRadius: Radius.card))

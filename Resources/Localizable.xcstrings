@@ -9020,16 +9020,6 @@
         }
       }
     },
-    "and %@ more — open in Stow to see everything": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "另有 %@ 项，在 Stow 中打开以查看全部内容"
-          }
-        }
-      }
-    },
     "as Columns": {
       "localizations": {
         "zh-Hans": {
@@ -10132,27 +10122,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "编辑已签名的 JAR 可能会使签名失效。Java 可能会拒绝编辑后的归档。"
-          }
-        }
-      }
-    },
-    "Some items have the same name": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有些项目重名"
-          }
-        }
-      }
-    },
-    "Keep Both gives incoming items unique names. Replace swaps in the last incoming item with each name, removing all contents of any folder it replaces.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保留两者会为导入项目分配不同的名称。替换会使用每个名称对应的最后一个导入项目，并移除被替换文件夹中的所有内容。"
+            "value": "编辑已签名的 JAR 可能会使签名失效。Java 可能会拒绝编辑后的压缩包。"
           }
         }
       }
@@ -10644,17 +10614,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自动解锁归档"
-          }
-        }
-      }
-    },
-    "Remembering saves passwords that unlock archives. Automatic unlock uses passwords already saved in Keychain.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "记住密码会将成功解锁归档的密码存入钥匙串。自动解锁会使用钥匙串中已有的密码。"
+            "value": "自动解锁压缩包"
           }
         }
       }
@@ -14495,16 +14455,6 @@
         }
       }
     },
-    "Separate Archives": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "独立归档"
-          }
-        }
-      }
-    },
     "Cancel “%@”": {
       "localizations": {
         "zh-Hans": {
@@ -14545,26 +14495,6 @@
         }
       }
     },
-    "Create one archive per item": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "为每个项目单独创建归档"
-          }
-        }
-      }
-    },
-    "Completed and verified": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已完成并验证"
-          }
-        }
-      }
-    },
     "Show “%@” in Finder": {
       "localizations": {
         "zh-Hans": {
@@ -14595,26 +14525,6 @@
         }
       }
     },
-    "%lld separate archives": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 个独立归档"
-          }
-        }
-      }
-    },
-    "Cancel All": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "全部取消"
-          }
-        }
-      }
-    },
     "The temporary source is removed after packing.": {
       "localizations": {
         "zh-Hans": {
@@ -14630,7 +14540,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "每个归档都会单独分卷。"
+            "value": "每个压缩包都会单独分卷。"
           }
         }
       }
@@ -14650,7 +14560,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择各个归档的保存位置。"
+            "value": "选择各个压缩包的存储位置。"
           }
         }
       }
@@ -14670,7 +14580,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此 ZIP 归档中的路径有冲突。"
+            "value": "此 ZIP 压缩包中的路径有冲突。"
           }
         }
       }
@@ -14721,6 +14631,486 @@
           "stringUnit": {
             "state": "translated",
             "value": "未解压的项目"
+          }
+        }
+      }
+    },
+    "%@ and %lld more": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 及另外 %2$lld 个"
+          }
+        }
+      }
+    },
+    "Plus %@ more not listed here. Open in Stow to see everything.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另有 %@ 项未在此列出。在 Stow 中打开可查看全部内容。"
+          }
+        }
+      }
+    },
+    "%@ · verified": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · 已验证"
+          }
+        }
+      }
+    },
+    "%lld archives packed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已压缩 %lld 个压缩包"
+          }
+        }
+      }
+    },
+    "%lld archives, about %@ in all": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld 个压缩包，共约 %2$@"
+          }
+        }
+      }
+    },
+    "%lld packed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已压缩 %lld 个"
+          }
+        }
+      }
+    },
+    "%lld parts in %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld 个分卷，位于“%2$@”"
+          }
+        }
+      }
+    },
+    "1 archive packed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已压缩 1 个压缩包"
+          }
+        }
+      }
+    },
+    "A password that opens an archive is saved in your Keychain, where only Stow can read it. Off, Stow keeps it only while the archive is open.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "能打开压缩包的密码会存储在你的钥匙串中，只有 Stow 可以读取。关闭后，Stow 只在压缩包打开期间保留密码。"
+          }
+        }
+      }
+    },
+    "All in One Archive": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部放入一个压缩包"
+          }
+        }
+      }
+    },
+    "All items in one archive": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有项目放入一个压缩包"
+          }
+        }
+      }
+    },
+    "Close these results. Packed archives are kept.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭这些结果。已压缩的压缩包会保留。"
+          }
+        }
+      }
+    },
+    "Copy Path": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝路径"
+          }
+        }
+      }
+    },
+    "Each in Its Own Archive": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每项各成一个压缩包"
+          }
+        }
+      }
+    },
+    "Each item in its own archive": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个项目各成一个压缩包"
+          }
+        }
+      }
+    },
+    "Opens an archive with the password saved for that archive, without asking. Off, Stow asks each time. Pack can use a saved password only when you choose it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开压缩包时自动使用为它存储的密码，不再询问。关闭后，Stow 每次都会询问。压缩时只有在你选择后才会使用存储的密码。"
+          }
+        }
+      }
+    },
+    "Packing %lld of %lld archives": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在压缩第 %1$lld 个，共 %2$lld 个压缩包"
+          }
+        }
+      }
+    },
+    "Packing stopped": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "压缩已停止"
+          }
+        }
+      }
+    },
+    "Preparing…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备…"
+          }
+        }
+      }
+    },
+    "Saved in %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已存储到“%@”"
+          }
+        }
+      }
+    },
+    "Stop packing “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止压缩“%@”"
+          }
+        }
+      }
+    },
+    "Stop unfinished archives. Archives already packed are kept.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止未完成的压缩包。已压缩的压缩包会保留。"
+          }
+        }
+      }
+    },
+    "Stopped before all were packed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未全部压缩完成即已停止"
+          }
+        }
+      }
+    },
+    "Takes the place of the existing items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取代现有项目"
+          }
+        }
+      }
+    },
+    "Takes the place of the existing items, and of everything inside a replaced folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取代现有项目；被替换文件夹中的全部内容也会被取代"
+          }
+        }
+      }
+    },
+    "View as Icons (⌘1)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以图标显示 (⌘1)"
+          }
+        }
+      }
+    },
+    "View as List (⌘2)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以列表显示 (⌘2)"
+          }
+        }
+      }
+    },
+    "You can undo either one. Nothing changes on disk until you save.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "两种操作都可以撤销。存储之前，磁盘上的内容不会改变。"
+          }
+        }
+      }
+    },
+    "each of the %lld items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这 %lld 个项目分别"
+          }
+        }
+      }
+    },
+    "“%@” and %lld other items are already in “%@”.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%3$@”中已有“%1$@”和另外 %2$lld 个项目。"
+          }
+        }
+      }
+    },
+    "“%@” and “%@” are already in “%@”.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%3$@”中已有“%1$@”和“%2$@”。"
+          }
+        }
+      }
+    },
+    "list.separator": {
+      "comment": "Between names in a short list (Chinese uses 、).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", "
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "、"
+          }
+        }
+      }
+    },
+    "Some items you’re adding have the same name.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要添加的项目中有重名项。"
+          }
+        }
+      }
+    },
+    "Uses the last incoming item for each name, replacing matching items and their folder contents": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个名称采用最后添加的项目；压缩包中的同名项目及被替换文件夹的全部内容都会被替换。"
+          }
+        }
+      }
+    },
+    "Uses the last incoming item for each name, replacing any matching items in the archive": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个名称采用最后添加的项目，并替换压缩包中已有的同名项目。"
+          }
+        }
+      }
+    },
+    "Folder with at least 10,000 items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹内至少有 10,000 个项目"
+          }
+        }
+      }
+    },
+    "Adding": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要添加的"
+          }
+        }
+      }
+    },
+    "Adds them as %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加为 %@"
+          }
+        }
+      }
+    },
+    "Adds them as %@ and %lld more": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加为 %1$@ 及另外 %2$lld 个"
+          }
+        }
+      }
+    },
+    "Keep Both adds the new one as %@.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“保留两者”会将新项目添加为 %@。"
+          }
+        }
+      }
+    },
+    "Replace puts it in place of the one here.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“替换”会用新项目取代这里的项目。"
+          }
+        }
+      }
+    },
+    "Replace removes the folder here, with everything in it, and puts the new one in its place.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“替换”会移除这里的文件夹及其中的全部内容，并放入新项目。"
+          }
+        }
+      }
+    },
+    "Folder with %lld items": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Folder with %lld item"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Folder with %lld items"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "文件夹，含 %lld 个项目"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "import.conflict.message": {
+      "comment": "Three sentences in a row (Chinese has no space between them).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@ %3$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@%2$@%3$@"
           }
         }
       }

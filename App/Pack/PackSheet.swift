@@ -117,10 +117,7 @@ struct PackSheet: View {
             }
             .padding(-Space.xs) // …without moving the content off the sheet's grid
             VStack(alignment: .leading, spacing: Space.l) {
-                if request.roots.count > 1 {
-                    Toggle("Create one archive per item", isOn: $separateArchives)
-                }
-                if !separateArchives { nameRow }
+                if separateArchives { separateNamesRow } else { nameRow }
                 if !cpuLimit.isValid(available: availableCores) {
                     // Names the setting: with More Options closed, this line is all that shows.
                     Label(String(localized: "Enter a whole number from 1 to \(availableCores) for CPU threads."), systemImage: "exclamationmark.circle")
@@ -303,9 +300,16 @@ struct PackSheet: View {
                 .frame(maxWidth: 300)
                 .fixedSize(horizontal: true, vertical: false)
         } else {
-            Text(String(localized: "\(request.roots.count) items") + suffix)
-                .fontWeight(.semibold)
-                .liveNumber()
+            // One archive or one per item is part of what the sentence says (#366): "Pack 7 items
+            // as a ZIP…" or "Pack each of the 7 items as a ZIP…". Together is the default.
+            Token(title: separateArchives ? String(localized: "each of the \(request.roots.count) items")
+                                          : String(localized: "\(request.roots.count) items"),
+                  suffix: suffix) {
+                Button("All in One Archive") { separateArchives = false }
+                Button("Each in Its Own Archive") { separateArchives = true }
+            }
+            .accessibilityLabel(separateArchives ? String(localized: "Each item in its own archive")
+                                                 : String(localized: "All items in one archive"))
         }
     }
 
@@ -970,10 +974,30 @@ struct PackSheet: View {
         }
     }
 
+    /// Separate packing has no one name to type: the row says what each archive will be called,
+    /// at the same height as the field it stands in for, so the footer doesn't move.
+    private var separateNamesRow: some View {
+        let names = request.separateNames(audience: options.audience).map { "“\($0).\(options.format.fileExtension)”" }
+        let shown = names.prefix(2).joined(separator: String(localized: "list.separator", defaultValue: ", ",
+                                                                comment: "Between names in a short list (Chinese uses 、)."))
+        let rest = names.count - min(2, names.count)
+        return HStack(spacing: Space.s) {
+            Text("Save as")
+                .foregroundStyle(.secondary)
+            Text(rest > 0 ? String(localized: "\(shown) and \(rest) more") : shown)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(names.joined(separator: "\n"))
+        }
+        .frame(minHeight: 22)
+        .accessibilityElement(children: .combine)
+    }
+
     private func footer(_ report: PackReport) -> some View {
         HStack {
             // Said as an estimate, in words: the size depends on how well these files compress.
-            Text(separateArchives ? String(localized: "\(request.roots.count) separate archives") : estimateText(report))
+            Text(separateArchives ? String(localized: "\(request.roots.count) archives, about \(report.estimatedSize.bytes) in all")
+                                  : estimateText(report))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .liveNumber()
@@ -1035,6 +1059,8 @@ struct PackSheet: View {
         // opens the part-size editor from that control once the sheet is up.
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: "StowPackMore") { showMore = true }
+        // Design review (#366): -StowPackSeparate YES packs each item into its own archive.
+        if defaults.bool(forKey: "StowPackSeparate"), request.roots.count > 1 { separateArchives = true }
         if defaults.bool(forKey: "StowPackChanged") {
             options.includeMacHelperFiles = options.audience.dropsMacHelperFiles
             options.threads = min(2, ProcessInfo.processInfo.activeProcessorCount)

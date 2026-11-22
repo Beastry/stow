@@ -179,8 +179,36 @@ struct EditSessionTests {
         #expect(!session.add([composed, numbered], into: "", resolving: .cancel))
         #expect(session.operations == previous)
         #expect(session.staged.isEmpty)
+        // The collision prompt names what Keep Both will create; it must match what add does.
+        let conflicts = session.importConflicts([decomposed, numbered], into: "")
+        #expect(conflicts.names == [decomposed.lastPathComponent])
+        #expect(conflicts.keptNames.count == 1)
+        #expect(!conflicts.replacesFolder)
+        #expect(conflicts.existing?.isFolder == false)
+        #expect(conflicts.incoming == decomposed)
         #expect(session.add([decomposed, numbered], into: ""))
-        #expect(Set(session.pending.entries.map { $0.path.lowercased() }).isSuperset(of: ["café.txt", "café 2.txt", "café 3.txt"]))
+        let pending = Set(session.pending.entries.map { $0.path.precomposedStringWithCanonicalMapping.lowercased() })
+        #expect(pending.isSuperset(of: ["café.txt", "café 2.txt", "café 3.txt"]))
+        #expect(conflicts.keptNames.allSatisfy { pending.contains($0.precomposedStringWithCanonicalMapping.lowercased()) })
+    }
+
+    @Test func importPromptExplainsDuplicateInputsAndFolderReplacement() {
+        let session = makeSession()
+        let first = URL(filePath: "/first/report.txt")
+        let last = URL(filePath: "/last/REPORT.txt")
+        let duplicates = session.importConflicts([first, last], into: "")
+        let prompt = BrowserModel.importConflictPrompt(duplicates, in: "Test.zip")
+        #expect(prompt.title == "Some items you’re adding have the same name.")
+        #expect(prompt.details.last?.value.contains("last incoming item") == true)
+        #expect(duplicates.keptNames == ["REPORT 2.txt"])
+
+        let incomingFolder = URL(filePath: "/incoming/a.txt", directoryHint: .isDirectory)
+        let fileClash = session.importConflicts([incomingFolder], into: "")
+        #expect(fileClash.existing?.isFolder == false)
+        #expect(!fileClash.replacesFolder)
+        let mixed = session.importConflicts([first, last, URL(filePath: "/incoming/Folder")], into: "")
+        #expect(mixed.replacesFolder)
+        #expect(BrowserModel.importConflictPrompt(mixed, in: "Test.zip").details.last?.value.contains("folder contents") == true)
     }
 
     @Test func importRollsBackWhenAnySourceIsUnreadable() throws {

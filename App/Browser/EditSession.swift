@@ -226,6 +226,63 @@ final class EditSession {
         return roots
     }
 
+    /// What the collision prompt says (#367): the incoming names that collide, once each; the
+    /// names Keep Both will give them (the same numbering `add` uses); whether Replace swaps out a
+    /// whole folder; and, for a single clash, the item in the archive and the one coming in.
+    struct ImportConflicts {
+        struct Existing {
+            let isFolder: Bool
+            let size: Int64
+            let modified: Date
+            /// Everything inside, for a folder.
+            let itemCount: Int
+        }
+
+        var names: [String] = []
+        var keptNames: [String] = []
+        var replacesFolder = false
+        var hasRepeatedInputs = false
+        var existing: Existing?
+        var incoming: URL?
+    }
+
+    func importConflicts(_ urls: [URL], into folder: String) -> ImportConflicts {
+        let roots = importRoots(in: folder)
+        let incomingNames = urls.map { Self.nameKey($0.lastPathComponent) }
+        let reserved = Set(incomingNames)
+        var taking = Set(roots.keys), reported = Set<String>()
+        var result = ImportConflicts(hasRepeatedInputs: reserved.count != incomingNames.count)
+        var clashing: [(url: URL, key: String)] = []
+        for (url, key) in zip(urls, incomingNames) {
+            guard taking.contains(key) else { taking.insert(key); continue }
+            clashing.append((url, key))
+            if reported.insert(key).inserted { result.names.append(url.lastPathComponent) }
+            var attempt = 2
+            var name = Compatibility.numbered(url.lastPathComponent, attempt)
+            while taking.contains(Self.nameKey(name)) || reserved.contains(Self.nameKey(name)) {
+                attempt += 1
+                name = Compatibility.numbered(url.lastPathComponent, attempt)
+            }
+            taking.insert(Self.nameKey(name))
+            result.keptNames.append(name)
+            if let matches = roots[key], pending.entries.contains(where: { matches.contains($0.path) && $0.isFolder && !$0.isSymlink }) {
+                result.replacesFolder = true
+            }
+        }
+        if clashing.count == 1, let clash = clashing.first, let path = roots[clash.key]?.first {
+            let inside = pending.entries.filter { $0.path.hasPrefix(path + "/") }
+            let entry = pending.entries.first { $0.path == path }
+            if entry != nil || !inside.isEmpty {
+                let newestInside: Date = inside.compactMap(\.modified).max() ?? .distantPast
+                let modified: Date = entry?.modified ?? newestInside
+                result.existing = .init(isFolder: entry?.isFolder ?? true, size: entry?.size ?? 0,
+                                        modified: modified, itemCount: inside.count)
+            }
+            result.incoming = clash.url
+        }
+        return result
+    }
+
     func importHasConflicts(_ urls: [URL], into folder: String) -> Bool {
         var names = Set(importRoots(in: folder).keys)
         return urls.map { Self.nameKey($0.lastPathComponent) }.filter { !names.insert($0).inserted }.count > 0
