@@ -29,11 +29,12 @@ enum Extraction {
         var restoredMetadata = AppleDouble.Restored()
         var passwordCompleted: [String] = []
         var passwordSkipped: [String] = []
+        var unplacedZIPEntries: [String] = []
 
         /// Skipped conflicts or safety-filtered payloads are incomplete extraction. In particular,
         /// a successful engine return is not permission to dispose of the only original (#313).
         var isComplete: Bool {
-            passwordSkipped.isEmpty && placement.skipped == 0 && report.removedItems.isEmpty && report.removedLinks.isEmpty
+            passwordSkipped.isEmpty && unplacedZIPEntries.isEmpty && placement.skipped == 0 && report.removedItems.isEmpty && report.removedLinks.isEmpty
         }
 
         /// Checkup lines for what the audit removed and what Mac details came back.
@@ -42,10 +43,14 @@ enum Extraction {
             if !passwordSkipped.isEmpty {
                 findings.append(.init(severity: .caution, title: String(localized: "Skipped encrypted items"),
                                       detail: passwordSkipped.joined(separator: "\n")))
-                if !passwordCompleted.isEmpty {
-                    findings.append(.init(severity: .info, title: String(localized: "Items unlocked for extraction"),
-                                          detail: passwordCompleted.joined(separator: "\n")))
-                }
+            }
+            if !unplacedZIPEntries.isEmpty {
+                findings.append(.init(severity: .caution, title: String(localized: "Items left out of the extraction"),
+                                      detail: unplacedZIPEntries.joined(separator: "\n")))
+            }
+            if !isComplete, !passwordCompleted.isEmpty {
+                findings.append(.init(severity: .info, title: String(localized: "Extracted items"),
+                                      detail: passwordCompleted.joined(separator: "\n")))
             }
             return findings
         }
@@ -73,7 +78,7 @@ enum Extraction {
 
     static func partialAdvice(_ result: Result) -> String {
         let retained = String(localized: "The original archive was kept. Review the extracted files before trying again.")
-        guard !result.passwordSkipped.isEmpty else { return retained }
+        guard !result.passwordSkipped.isEmpty || !result.unplacedZIPEntries.isEmpty else { return retained }
         return ([retained] + result.findings.filter { $0.severity == .caution || $0.severity == .info }
             .map { $0.title + "\n" + $0.detail }).joined(separator: "\n\n")
     }
@@ -113,6 +118,8 @@ enum Extraction {
         var accepted: [String] = []
         var skipped: [String] = []
         var report = ExtractReport()
+        var restored = AppleDouble.Restored()
+        var folderAttributes: [URL: [FileAttributeKey: Any]] = [:]
         var remembered = candidates
         if let known = archive.source?.password, !remembered.contains(known) { remembered.insert(known, at: 0) }
         do {
@@ -143,6 +150,8 @@ enum Extraction {
                         defer { part.discard() }
                         report.removedLinks += part.report.removedLinks
                         report.removedItems += part.report.removedItems
+                        restored.files += part.restoredMetadata.files
+                        restored.attributes += part.restoredMetadata.attributes
                         let source = part.url(for: entry)
                         if exists(source) {
                             let target = root.appending(path: entry.path)
@@ -156,6 +165,13 @@ enum Extraction {
                                     }
                                 } else {
                                     try manager.createDirectory(at: parent, withIntermediateDirectories: false)
+                                    let relative = String(parent.path.dropFirst(root.path.count + 1))
+                                    let original = part.root.appending(path: relative)
+                                    if let sourceAttributes = try? manager.attributesOfItem(atPath: original.path) {
+                                        folderAttributes[parent] = sourceAttributes.filter {
+                                            $0.key == .modificationDate || $0.key == .creationDate
+                                        }
+                                    }
                                 }
                             }
                             try manager.moveItem(at: source, to: target)
@@ -173,16 +189,27 @@ enum Extraction {
                 onProgress(Double(index + 1) / Double(targets.count))
             }
             if Task.isCancelled { throw EngineError(.cancelled) }
-            if accepted.isEmpty, !skipped.isEmpty {
-                return Result(placed: [], report: report, passwordSkipped: skipped)
-            }
             let audited = try await audit(root)
             report.removedLinks += audited.removedLinks
             report.removedItems += audited.removedItems
-            let staged = Staged(folder: stageFolder, root: root, selection: selected, report: report)
-            var result = try await publish(staged, archive: archive, to: destination, options: options)
-            result.passwordCompleted = accepted
+            let surviving = accepted.filter { exists(root.appending(path: $0)) }
+            let staged = Staged(folder: stageFolder, root: root, selection: selected,
+                                report: report, restoredMetadata: restored)
+            var result = Result(placed: [], report: report)
+            if !surviving.isEmpty {
+                for (folder, attributes) in folderAttributes where exists(folder) {
+                    try? manager.setAttributes(attributes, ofItemAtPath: folder.path)
+                }
+                result = try await publish(staged, archive: archive, to: destination, options: options)
+            }
+            let skippedSources = result.placement.skippedSources.map(\.path)
+            result.passwordCompleted = surviving.filter { entry in
+                let path = root.appending(path: entry).path
+                return !skippedSources.contains { path == $0 || path.hasPrefix($0 + "/") }
+            }
             result.passwordSkipped = skipped
+            let accountedFor = Set(result.passwordCompleted + skipped)
+            result.unplacedZIPEntries = targets.map(\.path).filter { !accountedFor.contains($0) }
             return result
         } catch {
             if Task.isCancelled { throw EngineError(.cancelled) }

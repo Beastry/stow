@@ -25,6 +25,7 @@ enum Placement {
         var merged = 0
         var replaced = 0
         var skipped = 0
+        var skippedSources: [URL] = []
         var usedCopyFallback = false
     }
 
@@ -86,6 +87,7 @@ enum Placement {
             return target
         case .skip:
             run.result.skipped += 1
+            run.result.skippedSources.append(item)
             return nil
         }
     }

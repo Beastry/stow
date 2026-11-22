@@ -852,6 +852,28 @@ struct ZIPEntryPasswordTests {
         #expect(try Data(contentsOf: root.appending(path: "a.txt")) == Data("a.txt".utf8))
         #expect(try Data(contentsOf: root.appending(path: "c.txt")) == Data("c.txt".utf8))
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: "b.txt").path))
+        let skippedOut = temp.url.appending(path: "all skipped", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: skippedOut, withIntermediateDirectories: false)
+        let allSkipped = try await Extraction.run(archive, selection: nil, to: skippedOut, options: .init(),
+                                                  passwords: PasswordHook { _, _ in nil }) { _ in }
+        #expect(allSkipped.placed.isEmpty)
+        #expect(allSkipped.passwordCompleted.isEmpty)
+        #expect(allSkipped.passwordSkipped == ["a.txt", "b.txt", "c.txt"])
+        #expect(!allSkipped.isComplete)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: skippedOut.path).isEmpty)
+
+        let conflictOut = temp.url.appending(path: "conflict", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: conflictOut, withIntermediateDirectories: false)
+        let old = Data("existing content".utf8)
+        try old.write(to: conflictOut.appending(path: "a.txt"))
+        let selection = archive.files.filter { $0.path != "b.txt" }
+        let conflict = try await Extraction.run(archive, selection: selection, to: conflictOut,
+                                               options: .init(resolve: { _ in .skip }),
+                                               passwords: PasswordHook { _, _ in "fixture-one" }) { _ in }
+        #expect(conflict.passwordCompleted == ["c.txt"])
+        #expect(conflict.unplacedZIPEntries == ["a.txt"])
+        #expect(!conflict.isComplete)
+        #expect(try Data(contentsOf: conflictOut.appending(path: "a.txt")) == old)
         #expect(try Data(contentsOf: archiveURL) == original)
     }
 }

@@ -14695,12 +14695,22 @@
         }
       }
     },
-    "Items unlocked for extraction": {
+    "Extracted items": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已解锁、准备解压的项目"
+            "value": "已解压的项目"
+          }
+        }
+      }
+    },
+    "Items left out of the extraction": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未解压的项目"
           }
         }
       }
