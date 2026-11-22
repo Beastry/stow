@@ -31,6 +31,7 @@ enum ArchiveCreation {
             return try await DiskImageCreation.run(items, request: request, named: name, in: destination,
                                                    conflict: conflict, portableNames: portableNames, onProgress: onProgress)
         }
+        let destinationIdentity = try ExclusivePublication.DirectoryIdentity(destination)
         let engine = ArchiveEngine.shared
         let meter = Meter(total: totalBytes, onProgress: onProgress)
         let creation = try await engine.create(items, attributes: attributes, request: request,
@@ -38,6 +39,7 @@ enum ArchiveCreation {
         defer { engine.discard(operation: creation.operationID) }
         if Task.isCancelled { throw EngineError(.cancelled) }
 
+        try destinationIdentity.verify(destination)
         let staging: URL
         do {
             staging = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
@@ -60,7 +62,8 @@ enum ArchiveCreation {
         let normalized = request.volumeSize != nil && (request.format == .zip || request.format == .sevenZip)
             && parts.count == 1 && parts[0].1 == "." + request.format.fileExtension
         let placed = try await place(parts, named: name, format: request.format, in: destination,
-                                     conflict: conflict, ordinarySizeSplit: normalized, portableNames: portableNames)
+                                     conflict: conflict, ordinarySizeSplit: normalized, portableNames: portableNames,
+                                     publicationOptions: .init(destinationIdentity: destinationIdentity))
         onProgress(1)
         var report = creation.report
         report.files = placed.map(\.lastPathComponent)
@@ -88,10 +91,13 @@ enum ArchiveCreation {
                       conflict: Conflict, ordinarySizeSplit: Bool = false, portableNames: Bool = false,
                       publicationOptions: ExclusivePublication.Options = .init()) async throws(EngineError) -> [URL] {
         var backups: [(original: URL, trash: URL)] = []
+        let destinationIdentity = publicationOptions.destinationIdentity
         do {
+            try destinationIdentity?.verify(destination)
             if conflict == .replace {
                 let existingFiles = existing(named: name, format: format, in: destination)
                 for old in existingFiles where !ordinarySizeSplit || old.lastPathComponent == name + "." + format.fileExtension {
+                    try destinationIdentity?.verify(destination)
                     var trashed: NSURL?
                     do {
                         try FileManager.default.trashItem(at: old, resultingItemURL: &trashed)
@@ -104,6 +110,7 @@ enum ArchiveCreation {
             }
             for attempt in 1..<10_000 {
                 if Task.isCancelled { throw EngineError(.cancelled) }
+                try destinationIdentity?.verify(destination)
                 let stem = attempt == 1 ? name : "\(name) \(attempt)"
                 let targets = parts.map { destination.appending(path: stem + $0.1) }
                 if portableNames {
@@ -123,6 +130,7 @@ enum ArchiveCreation {
                         published.append((receipt, target))
                     }
                     if Task.isCancelled { throw EngineError(.cancelled) }
+                    try destinationIdentity?.verify(destination)
                     published.forEach { $0.0.commit() }
                     return targets
                 } catch {
@@ -140,8 +148,10 @@ enum ArchiveCreation {
         } catch {
             var retained = PublicationRecovery.paths(in: error, otherwise: [])
             for backup in backups.reversed() {
-                do { try await PublicationRecovery.restore(backup.trash, to: backup.original) }
-                catch { retained += [backup.trash, backup.original] }
+                do {
+                    try destinationIdentity?.verify(destination)
+                    try await PublicationRecovery.restore(backup.trash, to: backup.original)
+                } catch { retained += [backup.trash, backup.original] }
             }
             if !retained.isEmpty { throw PublicationRecovery.retained(retained) }
             throw PublicationRecovery.engineError(error)

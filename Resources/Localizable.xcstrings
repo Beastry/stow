@@ -8339,6 +8339,16 @@
         }
       }
     },
+    "The destination folder moved or was replaced. Choose it again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标文件夹已移动或被替换。请重新选择。"
+          }
+        }
+      }
+    },
     "The new archive didn’t arrive.": {
       "localizations": {
         "zh-Hans": {

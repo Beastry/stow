@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Stow
 
@@ -23,6 +24,10 @@ struct CloudPublicationTests {
             try #require(marker == name)
             try #require(FileManager.default.isUbiquitousItem(at: folder))
             try await exercise(folder)
+            try await packThroughResolvedAlias(in: folder)
+            for recreate in [false, true] {
+                try await expectPackToRejectMovedDestination(in: folder, recreate: recreate)
+            }
         }
     }
 
@@ -74,4 +79,106 @@ struct CloudPublicationTests {
         #expect(try Data(contentsOf: source) == bytes)
         #expect(try Data(contentsOf: ownedExport) == bytes)
     }
+}
+
+@Suite @MainActor
+struct PackDestinationMutationTests {
+    @Test func publishesThroughResolvedAlias() async throws {
+        let local = try TemporaryFolder()
+        defer { local.cleanUp() }
+        try await packThroughResolvedAlias(in: local.url)
+    }
+
+    @Test(arguments: [false, true])
+    func refusesMovedDestination(recreate: Bool) async throws {
+        let local = try TemporaryFolder()
+        defer { local.cleanUp() }
+        try await expectPackToRejectMovedDestination(in: local.url, recreate: recreate)
+    }
+}
+
+@MainActor
+private func expectPackToRejectMovedDestination(in root: URL, recreate: Bool) async throws {
+    let fixture = root.appending(path: "pack-" + UUID().uuidString, directoryHint: .isDirectory)
+    let destination = fixture.appending(path: "Selected", directoryHint: .isDirectory)
+    let moved = fixture.appending(path: "Moved", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: fixture) }
+    var hidden = destination.appending(path: "existing")
+    let bytes = Data(repeating: 42, count: 8192)
+    try bytes.write(to: hidden)
+    var values = URLResourceValues()
+    values.isHidden = true
+    try hidden.setResourceValues(values)
+    let local = try TemporaryFolder()
+    defer { local.cleanUp() }
+    let source = local.url.appending(path: "payload.bin")
+    try bytes.write(to: source)
+    let items = [TreeStream.Item(source: source, path: "payload.bin")]
+    let mutation = Mutex<Result<Void, any Error>?>(nil)
+    let request = CreateRequest(operationID: UUID().uuidString, archiveName: "sample",
+                                format: .zip, level: .store, verify: true)
+    do {
+        _ = try await ArchiveCreation.run(items, totalBytes: Int64(bytes.count), attributes: false,
+                                          request: request, named: "sample", in: destination) { progress in
+            guard progress > 0, progress < 1 else { return }
+            mutation.withLock { result in
+                guard result == nil else { return }
+                result = Result {
+                    try FileManager.default.moveItem(at: destination, to: moved)
+                    if recreate {
+                        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+                        try Data("foreign".utf8).write(to: destination.appending(path: "sample.zip"))
+                    }
+                }
+            }
+        }
+        Issue.record("Pack published after its selected folder moved.")
+    } catch {
+        #expect(error.failure == .failed)
+        #expect(error.message == String(localized: "The destination folder moved or was replaced. Choose it again."))
+    }
+    try #require(mutation.withLock { $0 }).get()
+    let movedHidden = moved.appending(path: "existing")
+    #expect(try Data(contentsOf: movedHidden) == bytes)
+    #expect(try movedHidden.resourceValues(forKeys: [.isHiddenKey]).isHidden == true)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: moved.path) == ["existing"])
+    if recreate {
+        #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path) == ["sample.zip"])
+        #expect(try Data(contentsOf: destination.appending(path: "sample.zip")) == Data("foreign".utf8))
+    } else {
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+    #expect(try Data(contentsOf: source) == bytes)
+}
+
+@MainActor
+private func packThroughResolvedAlias(in root: URL) async throws {
+    let fixture = root.appending(path: "alias-" + UUID().uuidString, directoryHint: .isDirectory)
+    let target = fixture.appending(path: "Target", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: fixture) }
+
+    let alias = fixture.appending(path: "Pack Destination")
+    let bookmark = try target.bookmarkData(options: .suitableForBookmarkFile)
+    try URL.writeBookmarkData(bookmark, to: alias)
+    let aliasBefore = try Data(contentsOf: alias)
+    let destination = try URL(resolvingAliasFileAt: alias, options: [.withoutUI])
+    #expect(destination.standardizedFileURL == target.standardizedFileURL)
+
+    let local = try TemporaryFolder()
+    defer { local.cleanUp() }
+    let data = Data("source".utf8)
+    let source = local.url.appending(path: "source.txt")
+    try data.write(to: source)
+    let request = CreateRequest(operationID: UUID().uuidString, archiveName: "alias",
+                                format: .zip, level: .store, verify: true)
+    let result = try await ArchiveCreation.run([.init(source: source, path: "source.txt")],
+                                                totalBytes: Int64(data.count), attributes: false,
+                                                request: request, named: "alias", in: destination) { _ in }
+    #expect(result.report.verified)
+    #expect(result.placed.map(\.lastPathComponent) == ["alias.zip"])
+    #expect(try FileManager.default.contentsOfDirectory(atPath: target.path) == ["alias.zip"])
+    #expect(try Data(contentsOf: alias) == aliasBefore)
+    #expect(try Data(contentsOf: source) == data)
 }
