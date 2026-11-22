@@ -101,6 +101,22 @@ final class EditSession {
         return listing
     }
 
+    /// Recognizes the conventional JAR signature metadata without asserting it is valid.
+    var hasJARSignature: Bool {
+        guard format == .zip, (name as NSString).pathExtension.lowercased() == "jar" else { return false }
+        let names = Set(base.entries.compactMap { entry -> String? in
+            guard !entry.isFolder, !entry.isSymlink else { return nil }
+            let components = entry.path.uppercased().split(separator: "/")
+            guard components.count == 2, components[0] == "META-INF" else { return nil }
+            return String(components[1])
+        })
+        return names.contains { name in
+            let file = name as NSString
+            return ["RSA", "DSA", "EC"].contains(file.pathExtension)
+                && names.contains(file.deletingPathExtension + ".SF")
+        }
+    }
+
     var readOnlyReason: String {
         let lower = name.lowercased()
         if lower.range(of: #"\.(\d{3,}|z\d+|r\d+)$|(^|\.)part\d+\."#, options: .regularExpression) != nil {

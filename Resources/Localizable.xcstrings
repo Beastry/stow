@@ -10107,6 +10107,26 @@
         }
       }
     },
+    "Save changes to a signed JAR?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要保存对已签名 JAR 的更改吗？"
+          }
+        }
+      }
+    },
+    "Editing a signed JAR can invalidate its signature. Java may reject the edited archive.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑已签名的 JAR 可能会使签名失效。Java 可能会拒绝编辑后的归档。"
+          }
+        }
+      }
+    },
     "Some items have the same name": {
       "localizations": {
         "zh-Hans": {

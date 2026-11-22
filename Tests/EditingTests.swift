@@ -1,3 +1,4 @@
+import AppKit
 import CryptoKit
 import Foundation
 import Testing
@@ -207,6 +208,138 @@ struct EditingTests {
         #expect(!FileManager.default.fileExists(atPath: extracted.appending(path: "removeFolder").path))
     }
 
+    private func jarFixture(_ name: String, in folder: URL) throws -> URL {
+        let fixtures = try #require(Bundle(for: JARFixtureLocator.self).url(forResource: "Fixtures", withExtension: nil))
+        let destination = folder.appending(path: name)
+        try FileManager.default.copyItem(at: fixtures.appending(path: "JAR/" + name), to: destination)
+        return destination
+    }
+
+    @Test @MainActor func ordinaryJarEditsUndoRedoAndSavePreserveNestedDependency() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let archive = try jarFixture("Ordinary.jar", in: folder.url)
+        let before = try hash(archive)
+        let base = try await ArchiveEngine.shared.list(archive)
+        let session = EditSession(base: base, url: archive)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        session.undoManager = undo
+        #expect(session.format == .zip)
+        #expect(!session.hasJARSignature)
+
+        let unpacked = folder.url.appending(path: "before")
+        try FileManager.default.createDirectory(at: unpacked, withIntermediateDirectories: false)
+        let engine = try #require(SevenZip.bundled())
+        _ = try await engine.extract(archive, into: unpacked) { _ in }
+        let nestedPath = "lib/dependency.jar"
+        let nestedBefore = try hash(unpacked.appending(path: nestedPath))
+        let replacement = folder.url.appending(path: "replacement.txt")
+        let addition = folder.url.appending(path: "added.txt")
+        try Data("replacement\n".utf8).write(to: replacement)
+        try Data("new entry\n".utf8).write(to: addition)
+
+        #expect(session.add([addition], into: ""))
+        session.replace("payload.txt", with: replacement)
+        session.delete(["remove.txt"])
+        session.rename("move.txt", to: "renamed.txt")
+        let planned = session.pending
+        #expect(session.operations.count == 4)
+        for _ in 0..<4 { undo.undo() }
+        #expect(session.pending.entries == base.entries)
+        #expect(try hash(archive) == before)
+        for _ in 0..<4 { undo.redo() }
+        #expect(session.pending.entries == planned.entries)
+        #expect(try hash(archive) == before)
+        #expect(await session.save(password: nil))
+        #expect(session.url?.lastPathComponent == "Ordinary.jar")
+        #expect(!undo.canUndo && !undo.canRedo)
+
+        let output = folder.url.appending(path: "after")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+        _ = try await engine.extract(archive, into: output) { _ in }
+        for (path, content) in ["added.txt": "new entry\n", "payload.txt": "replacement\n", "renamed.txt": "rename this\n"] {
+            #expect(try Data(contentsOf: output.appending(path: path)) == Data(content.utf8))
+        }
+        for path in ["remove.txt", "move.txt"] {
+            #expect(!FileManager.default.fileExists(atPath: output.appending(path: path).path))
+        }
+        let dependency = output.appending(path: nestedPath)
+        #expect(try hash(dependency) == nestedBefore)
+        let listing = try await ArchiveEngine.shared.list(dependency)
+        #expect(listing.entries.contains { $0.path == "dep.txt" })
+    }
+
+    @Test @MainActor func signedJarRetainsSignatureFilesButEditingInvalidatesPayloadDigest() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let archive = try jarFixture("Signed.jar", in: folder.url)
+        let before = try hash(archive)
+        let replacement = try staged(folder.url, path: "replacement", text: "replacement")
+        let operations: [EditOperation] = [.replace(path: "payload.txt", item: "replacement")]
+        await #expect(throws: (any Error).self) {
+            try await ArchiveSaver.save(archive: archive, operations: operations, items: [replacement], faults: .failBeforeSwap)
+        }
+        #expect(try hash(archive) == before)
+
+        let engine = try #require(SevenZip.bundled())
+        let original = folder.url.appending(path: "original")
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: false)
+        _ = try await engine.extract(archive, into: original) { _ in }
+        let manifest = try Data(contentsOf: original.appending(path: "META-INF/MANIFEST.MF"))
+        let payload = try Data(contentsOf: original.appending(path: "payload.txt"))
+        let digest = Data(SHA256.hash(data: payload)).base64EncodedString()
+        #expect(String(decoding: manifest, as: UTF8.self).contains("Name: payload.txt\r\nSHA-256-Digest: " + digest))
+
+        let listing = try await ArchiveEngine.shared.list(archive)
+        let model = BrowserModel(archive: Archive(listing: listing, url: archive))
+        #expect(model.editSession.hasJARSignature)
+        model.editSession.replace("payload.txt", with: replacement.source)
+        var prompted: [String] = []
+        let cancel: (Prompt, NSWindow?) async -> Prompt.Answer = { prompt, _ in
+            prompted.append(prompt.choices[0].title)
+            #expect(prompt.choices[1].role == .cancel)
+            return .init(choice: 1, suppress: false)
+        }
+        #expect(!(await model.saveEdits(present: cancel)))
+        #expect(!(await model.saveCopyOfArchive(present: cancel)))
+        #expect(prompted == [String(localized: "Save"), String(localized: "Save a Copy")])
+        #expect(try hash(archive) == before)
+        #expect(model.editSession.operations.count == 1)
+        #expect(await model.saveEdits { _, _ in .init(choice: 0, suppress: false) })
+        let edited = folder.url.appending(path: "edited")
+        try FileManager.default.createDirectory(at: edited, withIntermediateDirectories: false)
+        _ = try await engine.extract(archive, into: edited) { _ in }
+        for path in ["META-INF/MANIFEST.MF", "META-INF/STOWFIXT.SF", "META-INF/STOWFIXT.RSA"] {
+            #expect(try Data(contentsOf: edited.appending(path: path)) == Data(contentsOf: original.appending(path: path)))
+        }
+        let editedPayload = try Data(contentsOf: edited.appending(path: "payload.txt"))
+        #expect(editedPayload == Data("replacement".utf8))
+        #expect(Data(SHA256.hash(data: editedPayload)).base64EncodedString() != digest)
+    }
+
+    @Test func jarWithDuplicateDirectoriesRejectsWritesAndPreservesSourceHash() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let archive = folder.url.appending(path: "Duplicates.jar")
+        try ZipFixture(entries: [
+            .folder("META-INF"), .folder("META-INF"), .file("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\n\r\n"),
+            .file("payload.txt", "original")
+        ]).write(to: archive)
+        let before = try hash(archive)
+        let listing = try await ArchiveEngine.shared.list(archive)
+        #expect(listing.entries.filter { $0.path == "META-INF" && $0.isFolder }.count == 2)
+        let output = folder.url.appending(path: "read")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+        let engine = try #require(SevenZip.bundled())
+        _ = try await engine.extract(archive, into: output) { _ in }
+        #expect(try Data(contentsOf: output.appending(path: "payload.txt")) == Data("original".utf8))
+        await #expect(throws: (any Error).self) {
+            try await ArchiveSaver.save(archive: archive, operations: [.delete(paths: ["payload.txt"])], items: [])
+        }
+        #expect(try hash(archive) == before)
+    }
+
     @Test(arguments: [PackFormat.zip, .sevenZip, .tar])
     func addsStagedDirectories(format: PackFormat) async throws {
         let folder = try TemporaryFolder()
@@ -337,3 +470,5 @@ struct EditingTests {
         #expect(try hash(archive) == before)
     }
 }
+
+private final class JARFixtureLocator: NSObject {}

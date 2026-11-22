@@ -550,12 +550,33 @@ final class BrowserModel {
         }
     }
 
-    @discardableResult func saveEdits() async -> Bool {
+    private var confirmingJARSave = false
+
+    private func confirmJARSave(for target: Level, title: String,
+                                present: (Prompt, NSWindow?) async -> Prompt.Answer) async -> Bool {
+        guard target.edits.hasJARSignature else { return true }
+        guard !confirmingJARSave else { return false }
+        confirmingJARSave = true
+        defer { confirmingJARSave = false }
+        let archiveID = target.archive.id
+        let prompt = Prompt(symbol: "exclamationmark.shield.fill",
+                            title: String(localized: "Save changes to a signed JAR?"),
+                            message: String(localized: "Editing a signed JAR can invalidate its signature. Java may reject the edited archive."),
+                            choices: [.init(title: title),
+                                      .init(title: String(localized: "Cancel"), role: .cancel)])
+        let answer = await present(prompt, editingWindow)
+        return answer.choice == 0 && !Task.isCancelled && !isClosed
+            && level === target && target.archive.id == archiveID
+    }
+
+    @discardableResult func saveEdits(present: (Prompt, NSWindow?) async -> Prompt.Answer = Prompts.present) async -> Bool {
         if renamingPath != nil {
             commitRename()
             guard renamingPath == nil else { return false }
         }
         let target = level
+        if target.edits.canSave,
+           !(await confirmJARSave(for: target, title: String(localized: "Save"), present: present)) { return false }
         if target.savedArchive.isEncrypted, target.password == nil {
             guard let password = await passwords.ask(archive.name, .extract, false) else { return false }
             target.password = password
@@ -631,13 +652,15 @@ final class BrowserModel {
     }
 
     /// Saves pending edits to a new file chosen by the user; the original stays byte-identical.
-    @discardableResult func saveCopyOfArchive() async -> Bool {
+    @discardableResult func saveCopyOfArchive(present: (Prompt, NSWindow?) async -> Prompt.Answer = Prompts.present) async -> Bool {
         guard editSession.isEdited, let source = archive.source?.url else { return false }
         if renamingPath != nil {
             commitRename()
             guard renamingPath == nil else { return false }
         }
         let target = level
+        guard target.edits.canSaveCopy,
+              await confirmJARSave(for: target, title: String(localized: "Save a Copy"), present: present) else { return false }
         if target.savedArchive.isEncrypted, target.password == nil {
             guard let password = await passwords.ask(archive.name, .extract, false) else { return false }
             target.password = password
