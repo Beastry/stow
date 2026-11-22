@@ -25,11 +25,11 @@ enum ArchiveCreation {
     /// `name` is the archive's name without extension. `totalBytes` is the file data in `items`, for
     /// progress.
     static func run(_ items: [TreeStream.Item], totalBytes: Int64, attributes: Bool, request: CreateRequest,
-                    named name: String, in destination: URL, conflict: Conflict = .keepBoth,
+                    named name: String, in destination: URL, conflict: Conflict = .keepBoth, portableNames: Bool = false,
                     onProgress: @escaping @Sendable (Double) -> Void) async throws(EngineError) -> Result {
         if request.format == .dmg {
             return try await DiskImageCreation.run(items, request: request, named: name, in: destination,
-                                                   conflict: conflict, onProgress: onProgress)
+                                                   conflict: conflict, portableNames: portableNames, onProgress: onProgress)
         }
         let engine = ArchiveEngine.shared
         let meter = Meter(total: totalBytes, onProgress: onProgress)
@@ -60,7 +60,7 @@ enum ArchiveCreation {
         let normalized = request.volumeSize != nil && (request.format == .zip || request.format == .sevenZip)
             && parts.count == 1 && parts[0].1 == "." + request.format.fileExtension
         let placed = try await place(parts, named: name, format: request.format, in: destination,
-                                     conflict: conflict, ordinarySizeSplit: normalized)
+                                     conflict: conflict, ordinarySizeSplit: normalized, portableNames: portableNames)
         onProgress(1)
         var report = creation.report
         report.files = placed.map(\.lastPathComponent)
@@ -85,7 +85,7 @@ enum ArchiveCreation {
     /// until none is taken. Publication never replaces an existing name; if one fails, earlier
     /// parts are rolled back conservatively and any retained output is reported.
     static func place(_ parts: [(URL, String)], named name: String, format: PackFormat, in destination: URL,
-                      conflict: Conflict, ordinarySizeSplit: Bool = false,
+                      conflict: Conflict, ordinarySizeSplit: Bool = false, portableNames: Bool = false,
                       publicationOptions: ExclusivePublication.Options = .init()) async throws(EngineError) -> [URL] {
         var backups: [(original: URL, trash: URL)] = []
         do {
@@ -106,8 +106,16 @@ enum ArchiveCreation {
                 if Task.isCancelled { throw EngineError(.cancelled) }
                 let stem = attempt == 1 ? name : "\(name) \(attempt)"
                 let targets = parts.map { destination.appending(path: stem + $0.1) }
+                if portableNames {
+                    let contents = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+                    let base = collisionKey(stem + "." + format.fileExtension)
+                    if contents.contains(where: {
+                        let key = collisionKey($0)
+                        return key == base || isVolume(key, of: base)
+                    }) { continue }
+                }
                 if targets.contains(where: exists) { continue }
-                if conflict == .keepBoth, !existing(named: stem, format: format, in: destination).isEmpty { continue }
+                if !portableNames, conflict == .keepBoth, !existing(named: stem, format: format, in: destination).isEmpty { continue }
                 var published: [(ExclusivePublication.Receipt, URL)] = []
                 do {
                     for ((source, _), target) in zip(parts, targets) {
@@ -138,6 +146,11 @@ enum ArchiveCreation {
             if !retained.isEmpty { throw PublicationRecovery.retained(retained) }
             throw PublicationRecovery.engineError(error)
         }
+    }
+
+    private static func collisionKey(_ name: String) -> String {
+        name.folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+            .precomposedStringWithCanonicalMapping
     }
 
     private static func exists(_ url: URL) -> Bool {

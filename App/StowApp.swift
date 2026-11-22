@@ -886,13 +886,13 @@ struct PackActivityAccessory: View {
     var body: some View {
         let nextSteps = app.browser.map { !$0.selection.isEmpty || $0.activity != nil } ?? false
         ZStack {
-            if app.packing.activity != nil {
+            if app.packing.hasActivity {
                 PackActivityBar(packing: app.packing)
                     .transition(.rise(reduceMotion: reduceMotion))
             }
         }
-        .padding(.bottom, app.packing.activity == nil ? 0 : nextSteps ? 76 : Space.l)
-        .animation(Motion.presence(app.packing.activity != nil, reduceMotion: reduceMotion), value: app.packing.activity == nil)
+        .padding(.bottom, !app.packing.hasActivity ? 0 : nextSteps ? 76 : Space.l)
+        .animation(Motion.presence(app.packing.hasActivity, reduceMotion: reduceMotion), value: !app.packing.hasActivity)
     }
 }
 

@@ -14394,6 +14394,166 @@
           }
         }
       }
+    },
+    "Separate Archives": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独立归档"
+          }
+        }
+      }
+    },
+    "Cancel “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消“%@”"
+          }
+        }
+      }
+    },
+    "A temporary item is still needed for packing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包仍需使用一个临时项目。"
+          }
+        }
+      }
+    },
+    "Cancelled": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消"
+          }
+        }
+      }
+    },
+    "There are no files to pack for this item.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此项目中没有可打包的文件。"
+          }
+        }
+      }
+    },
+    "Create one archive per item": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为每个项目单独创建归档"
+          }
+        }
+      }
+    },
+    "Completed and verified": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已完成并验证"
+          }
+        }
+      }
+    },
+    "Show “%@” in Finder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示“%@”"
+          }
+        }
+      }
+    },
+    "Try packing “%@” again": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新打包“%@”"
+          }
+        }
+      }
+    },
+    "Completed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已完成"
+          }
+        }
+      }
+    },
+    "%lld separate archives": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个独立归档"
+          }
+        }
+      }
+    },
+    "Cancel All": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部取消"
+          }
+        }
+      }
+    },
+    "The temporary source is removed after packing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包完成后会删除临时源文件夹。"
+          }
+        }
+      }
+    },
+    "Splitting applies to each archive.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个归档都会单独分卷。"
+          }
+        }
+      }
+    },
+    "Choose a folder outside the temporary source.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请选择临时源文件夹以外的位置。"
+          }
+        }
+      }
+    },
+    "Choose where to save the separate archives.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择各个归档的保存位置。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

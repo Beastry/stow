@@ -153,7 +153,7 @@ extension SevenZip {
     }
 
     /// "Project" stays; anything that could leave the output folder becomes "Archive".
-    static func safeName(_ name: String) -> String {
+    nonisolated static func safeName(_ name: String) -> String {
         let last = (name as NSString).lastPathComponent
         return last.isEmpty || last == "." || last == ".." || name.contains("/") ? "Archive" : last
     }

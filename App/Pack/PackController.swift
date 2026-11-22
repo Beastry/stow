@@ -43,13 +43,19 @@ final class PackController {
     /// The last real pack, for a failure's Try Again / Choose Another Folder.
     private var lastJob: Job?
 
+    let separate = SeparatePackQueue()
+    var hasActivity: Bool { activity != nil || !separate.rows.isEmpty }
+
     var isRunning: Bool {
-        if case .running = activity?.phase { true } else { false }
+        if separate.isRunning { return true }
+        if case .running = activity?.phase { return true }
+        return false
     }
 
     /// Drafts handle failure in their editable workspace and must rebuild a job on the next Save.
     /// Replaying a cached draft job would bypass its current files, source checks and save lifecycle.
     func start(_ job: Job, allowsRetry: Bool = true, completion: ((Result<[URL], Error>) -> Void)? = nil) {
+        separate.dismiss()
         task?.cancel()
         lastJob = allowsRetry ? job : nil
         let fileName = job.name + "." + job.request.format.fileExtension
@@ -91,6 +97,18 @@ final class PackController {
                 return
             }
             await self?.fadeOut(after: .seconds(6))
+        }
+    }
+
+    func startSeparate(_ jobs: [Job], cleanupDirectory: URL?, cleanupOnlyOnSuccess: Bool,
+                       completion: ((Result<[URL], Error>) -> Void)? = nil) {
+        guard !isRunning else { return }
+        dismiss()
+        lastJob = nil
+        separate.start(jobs, cleanupDirectory: cleanupDirectory, cleanupOnlyOnSuccess: cleanupOnlyOnSuccess) {
+            [weak self] cleaned in self?.onDirectoryCleaned?(cleaned)
+        } completion: { result in
+            completion?(result)
         }
     }
 
@@ -229,15 +247,15 @@ enum PackPreferences {
 /// place Stow may write the archive (and its staging folder) to.
 enum PackDestination {
     /// `severalFolders`: the items come from more than one folder, so the panel says it's asking.
-    static func choose(for fileName: String, startingAt directory: URL?, severalFolders: Bool = false) async -> URL? {
+    static func choose(for fileName: String, startingAt directory: URL?, severalFolders: Bool = false, message: String? = nil) async -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.prompt = String(localized: "Save Here")
-        panel.message = severalFolders
+        panel.message = message ?? (severalFolders
             ? String(localized: "These come from several folders. Choose where to save “\(fileName)”.")
-            : String(localized: "Choose where to save “\(fileName)”.")
+            : String(localized: "Choose where to save “\(fileName)”."))
         panel.directoryURL = directory
         let response = if let window = NSApp.keyWindow {
             await panel.beginSheetModal(for: window)

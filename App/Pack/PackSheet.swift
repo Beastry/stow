@@ -13,6 +13,7 @@ struct PackSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.reducesMotion) private var reduceMotion
     @State private var options = PackOptions()
+    @State private var separateArchives = false
     @State private var cpuLimit = CPUCoreLimitInput()
     @AppStorage("PackCPUCores") private var globalCPUCores = 0
     @State private var password = ""
@@ -114,7 +115,10 @@ struct PackSheet: View {
             }
             .padding(-Space.xs) // …without moving the content off the sheet's grid
             VStack(alignment: .leading, spacing: Space.l) {
-                nameRow
+                if request.roots.count > 1 {
+                    Toggle("Create one archive per item", isOn: $separateArchives)
+                }
+                if !separateArchives { nameRow }
                 if !cpuLimit.isValid(available: availableCores) {
                     // Names the setting: with More Options closed, this line is all that shows.
                     Label(String(localized: "Enter a whole number from 1 to \(availableCores) for CPU threads."), systemImage: "exclamationmark.circle")
@@ -124,6 +128,7 @@ struct PackSheet: View {
                 footer(report)
             }
         }
+        .disabled(isChoosing)
         .padding(Space.xxl)
         .frame(width: 580)
         .fixedSize(horizontal: false, vertical: true)
@@ -305,7 +310,7 @@ struct PackSheet: View {
         VStack(alignment: .leading, spacing: Space.xl) {
             if options.usesPassword { passwordField }
             ReportView(report: report, audience: options.audience,
-                       partsNote: Compatibility.partsNote(for: options, parts: report.parts, archiveName: archiveName),
+                       partsNote: separateArchives ? nil : Compatibility.partsNote(for: options, parts: report.parts, archiveName: archiveName),
                        overrides: $overrides, showDetails: $showDetails)
             moreOptions(report)
                 .id(Self.moreOptionsID)
@@ -537,6 +542,7 @@ struct PackSheet: View {
             return String(localized: "A \(options.format.displayName) is always one file")
         }
         guard options.isSplit else { return nil }
+        if separateArchives { return String(localized: "Splitting applies to each archive.") }
         if let count = options.partCount, report.parts < count {
             return String(localized: "Too small for \(count) parts: about \(report.parts).")
         }
@@ -930,7 +936,7 @@ struct PackSheet: View {
     private func footer(_ report: PackReport) -> some View {
         HStack {
             // Said as an estimate, in words: the size depends on how well these files compress.
-            Text(estimateText(report))
+            Text(separateArchives ? String(localized: "\(request.roots.count) separate archives") : estimateText(report))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .liveNumber()
@@ -943,7 +949,7 @@ struct PackSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
-                .disabled(isChoosing || app.packing.isRunning || !cpuLimit.isValid(available: availableCores) || report.included.isEmpty || (options.usesPassword && (password.isEmpty || !passwordChecked)))
+                .disabled(isChoosing || app.packing.isRunning || !cpuLimit.isValid(available: availableCores) || (!separateArchives && report.included.isEmpty) || (options.usesPassword && (password.isEmpty || !passwordChecked)))
         }
     }
 
@@ -1042,26 +1048,45 @@ struct PackSheet: View {
         guard cpuLimit.isValid(available: availableCores) else { return }
         // Recheck at dispatch as well as disabling the button; never run with stale valid input.
         options.threads = cpuLimit.overrideValue(available: availableCores)
+        let combinedName = archiveName
         let format = options.format
-        let fileName = archiveName + "." + format.fileExtension
+        let fileName = combinedName + "." + format.fileExtension
         guard !request.isSample else {
             app.packing.simulate(name: fileName)
             dismiss()
             return
         }
+        let separate = separateArchives
+        let options = options
+        let password = password
+        let threads = options.effectiveThreads(global: inheritedThreadLimit)
+        let overrides = overrides
+        let inheritedName = name
         isChoosing = true
         Task {
             defer { isChoosing = false }
             let severalFolders = GatherDestination.sources(of: request.origins).count > 1
+            let destinationLabel = separate ? String(localized: "Choose where to save the separate archives.") : nil
             guard let destination = await PackDestination.choose(for: fileName, startingAt: request.directory,
-                                                                  severalFolders: severalFolders) else { return }
+                                                                  severalFolders: severalFolders, message: destinationLabel) else { return }
+            if let directory = request.cleanupDirectory {
+                let source = directory.resolvingSymlinksInPath().standardizedFileURL.path
+                let target = destination.resolvingSymlinksInPath().standardizedFileURL.path
+                guard target != source, !target.hasPrefix(source + "/") else {
+                    _ = await Prompts.explain(Failure(
+                        String(localized: "Choose a folder outside the temporary source."),
+                        advice: String(localized: "The temporary source is removed after packing."),
+                        code: ErrorCode(.pack, .unknown)))
+                    return
+                }
+            }
             GatherDestination.remember(destination, for: request.origins)
             var conflict = ArchiveCreation.Conflict.keepBoth
-            if !ArchiveCreation.existing(named: archiveName, format: format, in: destination).isEmpty {
+            if !separate, !ArchiveCreation.existing(named: combinedName, format: format, in: destination).isEmpty {
                 var free = 2
-                while !ArchiveCreation.existing(named: "\(archiveName) \(free)", format: format, in: destination).isEmpty { free += 1 }
+                while !ArchiveCreation.existing(named: "\(combinedName) \(free)", format: format, in: destination).isEmpty { free += 1 }
                 guard let choice = await PackDestination.resolveConflict(
-                    fileName: fileName, keepBothName: "\(archiveName) \(free).\(format.fileExtension)", in: destination
+                    fileName: fileName, keepBothName: "\(combinedName) \(free).\(format.fileExtension)", in: destination
                 ) else { return }
                 conflict = choice
             }
@@ -1070,14 +1095,14 @@ struct PackSheet: View {
             let cleanupOnlyOnSuccess = self.request.cleanupOnlyOnSuccess
             var request = CreateRequest(
                 operationID: UUID().uuidString,
-                archiveName: archiveName,
+                archiveName: combinedName,
                 format: format,
                 level: options.level,
                 password: options.usesPassword ? password : nil,
                 volumeSize: options.split.isNone || options.partCount != nil ? nil : options.split.rawValue,
                 keepsMacMetadata: keepsMetadata,
                 verify: options.verify,
-                threads: options.effectiveThreads(global: inheritedThreadLimit),
+                threads: threads,
                 diskImageFilesystem: format == .dmg ? options.diskImageFilesystem : .hfsPlus,
                 diskImageApplicationsLink: format == .dmg && options.diskImageApplicationsLink,
                 diskImageFinderChrome: format == .dmg && options.diskImageFinderChrome
@@ -1087,17 +1112,31 @@ struct PackSheet: View {
             guard !app.packing.isRunning else { return }
             handedOffCleanup = true
             if let draft {
-                draft.configuration = .init(options: options, name: name, overrides: overrides)
-                draft.name = name
+                draft.configuration = .init(options: options, name: inheritedName, overrides: overrides)
+                draft.name = inheritedName
                 draft.format = format
                 draft.beganSaving()
             }
-            app.packing.start(.init(items: report.items, totalBytes: report.totalBytes, attributes: keepsMetadata,
-                                    request: request, name: archiveName, destination: destination, conflict: conflict,
-                                    cleanupDirectory: cleanupDirectory, cleanupOnlyOnSuccess: cleanupOnlyOnSuccess),
-                              allowsRetry: draft == nil) { result in
+            let finished: (Result<[URL], Error>) -> Void = { result in
                 draft?.finishedSaving(result)
                 if case .success(let urls) = result, draft != nil { didCreate(urls) }
+            }
+            if separate {
+                let reports = self.request.separateReports(options: options, password: password, overrides: overrides)
+                let jobs = reports.map { name, report in
+                    var itemRequest = request
+                    itemRequest.archiveName = name
+                    return PackController.Job(items: report.items, totalBytes: report.totalBytes,
+                                              attributes: keepsMetadata, request: itemRequest,
+                                              name: name, destination: destination)
+                }
+                app.packing.startSeparate(jobs, cleanupDirectory: cleanupDirectory,
+                                          cleanupOnlyOnSuccess: cleanupOnlyOnSuccess, completion: finished)
+            } else {
+                app.packing.start(.init(items: report.items, totalBytes: report.totalBytes, attributes: keepsMetadata,
+                                        request: request, name: combinedName, destination: destination, conflict: conflict,
+                                        cleanupDirectory: cleanupDirectory, cleanupOnlyOnSuccess: cleanupOnlyOnSuccess),
+                                  allowsRetry: draft == nil, completion: finished)
             }
             dismiss()
         }

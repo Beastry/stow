@@ -52,6 +52,43 @@ nonisolated struct PackRequest: Identifiable, Sendable {
         return isFolder || stem.isEmpty ? root : stem
     }
 
+    /// Each top-level input keeps its own tree and gets its own compatibility pass.
+    func separateReports(options: PackOptions, password: String, overrides: [String: String]) -> [(String, PackReport)] {
+        let grouped = Dictionary(grouping: files) { $0.path.split(separator: "/", maxSplits: 1).first.map(String.init) ?? "" }
+        return roots.enumerated().map { index, root in
+            let group = grouped[root] ?? []
+            let sourceName = origins.indices.contains(index) ? origins[index].lastPathComponent : root
+            let folder = group.first { $0.path == root }?.isFolder == true
+            let name = Self.separateName(sourceName, isFolder: folder, audience: options.audience)
+            // Gathering numbers repeated names so the combined report can tell them apart.
+            // Separate archives can restore each input's original name inside its own tree.
+            var localOverrides = overrides
+            if sourceName != root, localOverrides[root] == nil { localOverrides[root] = sourceName }
+            return (name, Compatibility.report(for: group, options: options, password: password, overrides: localOverrides))
+        }
+    }
+
+    static func separateName(_ sourceName: String, isFolder: Bool, audience: Audience) -> String {
+        let compounds = PackFormat.allCases.map(\.fileExtension).filter { $0.contains(".") } + ["tar.lz", "tar.lzma", "tar.Z"]
+        let stem: String
+        if isFolder {
+            stem = sourceName
+        } else if let compound = compounds.first(where: { sourceName.lowercased().hasSuffix("." + $0.lowercased()) }) {
+            stem = String(sourceName.dropLast(compound.count + 1))
+        } else {
+            stem = (sourceName as NSString).deletingPathExtension
+        }
+        let safe = Compatibility.archiveName(stem.isEmpty ? sourceName : stem, for: audience)
+        let clean = safe.replacingOccurrences(of: "[\\p{Cc}]", with: "-", options: .regularExpression)
+        // Leave room for the compound extension, split part and collision number.
+        var bounded = ""
+        for character in clean {
+            guard bounded.decomposedStringWithCanonicalMapping.utf8.count + String(character).decomposedStringWithCanonicalMapping.utf8.count <= 220 else { break }
+            bounded.append(character)
+        }
+        return SevenZip.safeName(bounded)
+    }
+
     /// Walks the chosen items (without following links). Two items with the same name get numbered.
     @concurrent
     static func gather(_ urls: [URL]) async -> PackRequest {

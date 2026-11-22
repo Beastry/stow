@@ -440,7 +440,7 @@ struct ArchiveDraftView: View {
             }
             Spacer(minLength: 0)
             ZStack {
-                if draft.isSaving, app.packing.activity != nil {
+                if draft.isSaving, app.packing.hasActivity {
                     PackActivityBar(packing: app.packing)
                         .transition(.rise(reduceMotion: reduceMotion))
                 }

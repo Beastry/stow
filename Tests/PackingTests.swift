@@ -710,3 +710,101 @@ struct PackPlanTests {
         #expect(PackRequest.collect(mixed, remembered: nil).origins == mixed)
     }
 }
+
+@MainActor
+@Suite("Separate packing queue")
+struct SeparatePackingTests {
+    @Test func independentOutputsKeepFolderPathsAndAvoidEquivalentNames() async throws {
+        let temp = try TemporaryFolder()
+        defer { temp.cleanUp() }
+        let folder = temp.url.appending(path: "Photos.v1", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        let photo = folder.appending(path: "photo.txt")
+        let source = temp.url.appending(path: "Café.tar.GZ")
+        let existing = temp.url.appending(path: "CAFE\u{301}.7Z.002")
+        let bytes = Data("photos and archives".utf8)
+        try bytes.write(to: photo)
+        try bytes.write(to: source)
+        try Data("existing".utf8).write(to: existing)
+        let queue = SeparatePackQueue()
+        let inputs = PackRequest.collect([folder, source])
+        var options = PackOptions()
+        options.setFormat(.sevenZip)
+        let password = "separate-fixture-password"
+        let planned = inputs.separateReports(options: options, password: password, overrides: [:])
+        #expect(planned.map { $0.0 } == ["Photos.v1", "Café"])
+        let jobs = planned.map { name, report in
+            var job = job(name, items: report.items, in: temp.url)
+            job.request.format = .sevenZip
+            job.request.threads = 1
+            job.request.verify = true
+            job.request.password = password
+            job.request.encryptFilenames = true
+            job.request.partCount = 2
+            return job
+        }
+        queue.start(jobs, cleanupDirectory: nil, cleanupOnlyOnSuccess: false, cleaned: { _ in }, completion: { _ in })
+        try await wait(for: queue)
+        #expect(queue.rows.allSatisfy { $0.phase == .completed && $0.verified && $0.placed.count == 2 })
+        let first = try #require(queue.rows[0].placed.first)
+        let second = try #require(queue.rows[1].placed.first)
+        #expect(first.lastPathComponent == "Photos.v1.7z.001")
+        #expect(second.lastPathComponent == "Café 2.7z.001")
+        await expectEngineFailure(.passwordRequired) { _ = try await ArchiveEngine.shared.list(first) }
+        let operation = try await ArchiveEngine.shared.extract(first, paths: [], password: password) { _ in }
+        defer { ArchiveEngine.shared.discard(operation) }
+        let extracted = temp.url.appending(path: "extracted", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: false)
+        try await ArchiveEngine.shared.receive(operation, into: extracted)
+        #expect(try Data(contentsOf: extracted.appending(path: "Photos.v1/photo.txt")) == bytes)
+        #expect(try Data(contentsOf: existing) == Data("existing".utf8))
+        #expect(try Data(contentsOf: source) == bytes)
+    }
+
+    @Test func failureAndCancellationKeepSourcesUntilRetryFinishes() async throws {
+        let temp = try TemporaryFolder()
+        defer { temp.cleanUp() }
+        let owned = temp.url.appending(path: "owned", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: owned, withIntermediateDirectories: false)
+        let present = owned.appending(path: "present.txt")
+        let missing = owned.appending(path: "missing.txt")
+        try Data("present".utf8).write(to: present)
+        let queue = SeparatePackQueue()
+        queue.start([job("missing", items: [.init(source: missing, path: "missing.txt")], in: temp.url),
+                     job("present", items: [.init(source: present, path: "present.txt")], in: temp.url),
+                     job("cancelled", items: [.init(source: present, path: "present.txt")], in: temp.url)],
+                    cleanupDirectory: owned, cleanupOnlyOnSuccess: true, cleaned: { _ in }, completion: { _ in })
+        queue.cancel(queue.rows[2].id)
+        try await wait(for: queue)
+        if case .failed = queue.rows[0].phase {} else { Issue.record("Missing input should fail independently") }
+        #expect(queue.rows[1].phase == .completed)
+        #expect(queue.rows[2].phase == .cancelled)
+        #expect(queue.protects(owned))
+        #expect(FileManager.default.fileExists(atPath: present.path))
+        try Data("available again".utf8).write(to: missing)
+        queue.retry(queue.rows[0].id)
+        queue.retry(queue.rows[2].id)
+        queue.cancelAll()
+        try await wait(for: queue)
+        #expect(queue.rows[1].phase == .completed)
+        #expect(FileManager.default.fileExists(atPath: present.path))
+        queue.retry(queue.rows[0].id)
+        queue.retry(queue.rows[2].id)
+        try await wait(for: queue)
+        #expect(queue.rows.allSatisfy { $0.phase == .completed })
+        #expect(!FileManager.default.fileExists(atPath: owned.path))
+        #expect(queue.rows.flatMap(\.placed).allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    private func job(_ name: String, items: [TreeStream.Item], in destination: URL) -> PackController.Job {
+        .init(items: items, totalBytes: 1, attributes: false,
+              request: CreateRequest(operationID: UUID().uuidString, archiveName: name, format: .zip),
+              name: name, destination: destination)
+    }
+
+    private func wait(for queue: SeparatePackQueue) async throws {
+        let deadline = ContinuousClock.now + .seconds(30)
+        while queue.isRunning, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        try #require(!queue.isRunning)
+    }
+}

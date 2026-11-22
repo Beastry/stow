@@ -536,3 +536,18 @@ panel; replacement proxies now forward directly to the native delegate and stale
 cannot reclaim the window. Finder requested its menu on an XPC queue and tripped
 MainActor.assumeIsolated; menu construction now synchronously enters main only when needed.
 These are ordinary window/menu stability defects, not completion of deferred #93.
+
+## Separate archive creation and results (#366)
+
+Pack, the new-archive draft, and Tray packing offer one archive per selected top-level item.
+The existing Finder and Services Compress… entry points open that same Pack sheet. The combined
+mode is the default. Separate mode hides the shared name field and uses one destination picker.
+One snapshot of format, compatibility, compression, encryption, splitting, verification, and CPU
+choices applies to the serial queue. A folder remains intact inside its archive.
+
+The results show waiting, packing, completed, failed, and cancelled items. A user can cancel a
+waiting or running item, stop the queue, retry failed or cancelled items, and reveal real output
+paths. Successful outputs remain on disk when another row fails or the queue stops. Keep each
+row's controls distinguishable by name and reachable by keyboard. When a draft has unfinished
+rows, Done returns to the editable draft. Codex owns these behaviors and accessibility semantics.
+Claude Code owns the visual and motion treatment of the mode selector and results.
