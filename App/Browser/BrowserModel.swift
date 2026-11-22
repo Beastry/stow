@@ -492,11 +492,12 @@ final class BrowserModel {
               !resolvingImport, target.edits.requireEditable() else { return false }
         let edits = target.edits
         var resolution = EditSession.ImportResolution.keepBoth
-        if edits.importHasConflicts(urls, into: folder) {
+        let conflicts = edits.importConflicts(urls, into: folder)
+        if !conflicts.names.isEmpty {
             let archiveID = target.archive.id
             resolvingImport = true
             defer { resolvingImport = false }
-            let prompt = Self.importConflictPrompt(edits.importConflicts(urls, into: folder),
+            let prompt = Self.importConflictPrompt(conflicts,
                                                    in: folder.isEmpty ? target.archive.name : (folder as NSString).lastPathComponent)
             let answer = await present(prompt, editingWindow)
             guard !isClosed, level === target, target.archive.id == archiveID else { return false }
@@ -527,10 +528,15 @@ final class BrowserModel {
     /// chosen knowing which is newer or bigger.
     static func importConflictPrompt(_ conflicts: EditSession.ImportConflicts, in place: String) -> Prompt {
         let names = conflicts.names
-        let title = switch names.count {
-        case 0, 1: String(localized: "“\(names.first ?? "")” is already in “\(place)”.")
-        case 2: String(localized: "“\(names[0])” and “\(names[1])” are already in “\(place)”.")
-        default: String(localized: "“\(names[0])” and \(names.count - 1) other items are already in “\(place)”.")
+        let title: String
+        if conflicts.hasRepeatedInputs {
+            title = String(localized: "Some items you’re adding have the same name.")
+        } else {
+            title = switch names.count {
+            case 0, 1: String(localized: "“\(names.first ?? "")” is already in “\(place)”.")
+            case 2: String(localized: "“\(names[0])” and “\(names[1])” are already in “\(place)”.")
+            default: String(localized: "“\(names[0])” and \(names.count - 1) other items are already in “\(place)”.")
+            }
         }
         let undo = String(localized: "You can undo either one. Nothing changes on disk until you save.")
         let symbol = conflicts.replacesFolder ? "folder.fill" : "doc.on.doc.fill"
@@ -539,7 +545,7 @@ final class BrowserModel {
                                         .init(title: String(localized: "Keep Both"), role: .primary)]
         let kept = conflicts.keptNames.map { "“\($0)”" }
 
-        if conflicts.keptNames.count == 1, let renamed = kept.first {
+        if !conflicts.hasRepeatedInputs, conflicts.keptNames.count == 1, let renamed = kept.first {
             // One clash: the two items side by side, and each choice in one sentence.
             let keepBoth = String(localized: "Keep Both adds the new one as \(renamed).")
             let replace = conflicts.replacesFolder
@@ -566,9 +572,16 @@ final class BrowserModel {
                                                             comment: "Between names in a short list (Chinese uses 、)."))
         let keepBoth = kept.count > 2 ? String(localized: "Adds them as \(shown) and \(kept.count - 2) more")
                                       : String(localized: "Adds them as \(shown)")
-        let replace = conflicts.replacesFolder
-            ? String(localized: "Takes the place of the existing items, and of everything inside a replaced folder")
-            : String(localized: "Takes the place of the existing items")
+        let replace: String
+        if conflicts.hasRepeatedInputs {
+            replace = conflicts.replacesFolder
+                ? String(localized: "Uses the last incoming item for each name, replacing matching items and their folder contents")
+                : String(localized: "Uses the last incoming item for each name, replacing any matching items in the archive")
+        } else {
+            replace = conflicts.replacesFolder
+                ? String(localized: "Takes the place of the existing items, and of everything inside a replaced folder")
+                : String(localized: "Takes the place of the existing items")
+        }
         return Prompt(symbol: symbol, title: title, message: undo,
                       details: [(String(localized: "Keep Both"), keepBoth), (String(localized: "Replace"), replace)],
                       choices: choices)
@@ -578,9 +591,13 @@ final class BrowserModel {
     /// side says, counted no further than the prompt needs.
     private static func describeIncoming(_ url: URL) -> String {
         guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { return Prompts.describe(url) }
+        guard let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) else {
+            return Prompts.describe(url)
+        }
         var count = 0
-        if let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) {
-            while walker.nextObject() != nil, count < 9_999 { count += 1 }
+        while walker.nextObject() != nil {
+            count += 1
+            if count == 10_000 { return String(localized: "Folder with at least 10,000 items") }
         }
         return String(localized: "Folder with \(count) items")
     }

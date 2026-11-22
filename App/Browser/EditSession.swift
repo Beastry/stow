@@ -241,6 +241,7 @@ final class EditSession {
         var names: [String] = []
         var keptNames: [String] = []
         var replacesFolder = false
+        var hasRepeatedInputs = false
         var existing: Existing?
         var incoming: URL?
     }
@@ -250,7 +251,7 @@ final class EditSession {
         let incomingNames = urls.map { Self.nameKey($0.lastPathComponent) }
         let reserved = Set(incomingNames)
         var taking = Set(roots.keys), reported = Set<String>()
-        var result = ImportConflicts()
+        var result = ImportConflicts(hasRepeatedInputs: reserved.count != incomingNames.count)
         var clashing: [(url: URL, key: String)] = []
         for (url, key) in zip(urls, incomingNames) {
             guard taking.contains(key) else { taking.insert(key); continue }
@@ -264,12 +265,7 @@ final class EditSession {
             }
             taking.insert(Self.nameKey(name))
             result.keptNames.append(name)
-            if url.hasDirectoryPath || (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-                result.replacesFolder = true
-            }
-            for path in roots[key] ?? [] where pending.entries.contains(where: {
-                ($0.path == path && $0.isFolder) || $0.path.hasPrefix(path + "/")
-            }) {
+            if let matches = roots[key], pending.entries.contains(where: { matches.contains($0.path) && $0.isFolder && !$0.isSymlink }) {
                 result.replacesFolder = true
             }
         }
