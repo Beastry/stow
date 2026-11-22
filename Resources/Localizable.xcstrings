@@ -10097,6 +10097,36 @@
         }
       }
     },
+    "Some items have the same name": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有些项目重名"
+          }
+        }
+      }
+    },
+    "Keep Both gives incoming items unique names. Replace swaps in the last incoming item with each name, removing all contents of any folder it replaces.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留两者会为导入项目分配不同的名称。替换会使用每个名称对应的最后一个导入项目，并移除被替换文件夹中的所有内容。"
+          }
+        }
+      }
+    },
+    "Some dropped files couldn’t be read. Drag the files again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取部分拖入的文件。请重新拖入这些文件。"
+          }
+        }
+      }
+    },
     "“%@” couldn’t be read. Choose the file again.": {
       "localizations": {
         "zh-Hans": {

@@ -26,6 +26,12 @@ nonisolated enum EditableFormat: String, Codable, CaseIterable, Sendable {
 }
 
 nonisolated enum EditOperation: Codable, Hashable, Sendable {
+    struct ImportItem: Codable, Hashable, Sendable {
+        var name: String
+        var source: String
+    }
+
+    case importItems(destinationFolder: String, items: [ImportItem], replacing: [String])
     case add(destinationFolder: String, items: [String])
     case replace(path: String, item: String)
     case delete(paths: [String])
@@ -98,29 +104,48 @@ nonisolated enum EditPlan {
         func parentIsSafe(_ path: String) -> Bool {
             !nodes.contains { inside(path, $0.entry.path) && path != $0.entry.path && (!$0.entry.isFolder || $0.entry.isSymlink) }
         }
+        func remove(_ paths: [String]) throws(EngineError) {
+            guard Set(paths).count == paths.count else { throw refuse(String(localized: "An edit contains duplicate paths.")) }
+            for path in paths {
+                try validate(path)
+                guard exists(path) else { throw refuse(String(localized: "An edit refers to an entry that no longer exists.")) }
+                guard !nodes.contains(where: { inside($0.entry.path, path) && $0.entry.rawPath != nil }) else {
+                    throw refuse(String(localized: "This name uses an unknown text encoding, so Stow can’t rename or delete it safely."))
+                }
+                nodes.removeAll { inside($0.entry.path, path) }
+            }
+        }
+        func append(_ item: EditOperation.ImportItem, to folder: String) throws(EngineError) {
+            try validate(item.source)
+            try validate(item.name)
+            guard !item.source.contains("/"), !item.name.contains("/") else {
+                throw refuse(String(localized: "Added items must have top-level staging names."))
+            }
+            let path = folder.isEmpty ? item.name : folder + "/" + item.name
+            guard !exists(path), parentIsSafe(path) else {
+                throw refuse(String(localized: "An edit would overwrite an existing path or write inside a file."))
+            }
+            let tree = sources.filter { inside($0.path, item.source) }
+            if tree.isEmpty {
+                nodes.append(Node(entry: ListedEntry(path: path, isFolder: false, size: 0), item: item.source))
+            } else {
+                for source in tree {
+                    var entry = source
+                    entry.path = path + source.path.dropFirst(item.source.count)
+                    try validate(entry.path)
+                    nodes.append(Node(entry: entry, item: source.path))
+                }
+            }
+        }
         for op in ops {
             switch op {
             case let .add(folder, items):
                 if !folder.isEmpty { try validate(folder) }
-                for item in items {
-                    try validate(item)
-                    guard !item.contains("/") else { throw refuse(String(localized: "Added items must have top-level staging names.")) }
-                    let path = folder.isEmpty ? item : folder + "/" + item
-                    guard !exists(path), parentIsSafe(path) else {
-                        throw refuse(String(localized: "An edit would overwrite an existing path or write inside a file."))
-                    }
-                    let tree = sources.filter { inside($0.path, item) }
-                    if tree.isEmpty {
-                        nodes.append(Node(entry: ListedEntry(path: path, isFolder: false, size: 0), item: item))
-                    } else {
-                        for source in tree {
-                            var entry = source
-                            entry.path = path + source.path.dropFirst(item.count)
-                            try validate(entry.path)
-                            nodes.append(Node(entry: entry, item: source.path))
-                        }
-                    }
-                }
+                for item in items { try append(.init(name: item, source: item), to: folder) }
+            case let .importItems(folder, items, replacing):
+                if !folder.isEmpty { try validate(folder) }
+                try remove(replacing)
+                for item in items { try append(item, to: folder) }
             case let .replace(path, item):
                 try validate(path)
                 try validate(item)
@@ -142,15 +167,7 @@ nonisolated enum EditPlan {
                 nodes[index].item = item
                 nodes[index].requiresRegularFile = true
             case let .delete(paths):
-                guard Set(paths).count == paths.count else { throw refuse(String(localized: "An edit contains duplicate paths.")) }
-                for path in paths {
-                    try validate(path)
-                    guard exists(path) else { throw refuse(String(localized: "An edit refers to an entry that no longer exists.")) }
-                    guard !nodes.contains(where: { inside($0.entry.path, path) && $0.entry.rawPath != nil }) else {
-                        throw refuse(String(localized: "This name uses an unknown text encoding, so Stow can’t rename or delete it safely."))
-                    }
-                    nodes.removeAll { inside($0.entry.path, path) }
-                }
+                try remove(paths)
             case let .rename(from, to):
                 try validate(from)
                 try validate(to)

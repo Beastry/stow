@@ -129,9 +129,9 @@ final class ArchiveTransfer {
         let result = try await Placement.place(items, in: delivered, resolve: Placement.keepBoth)
         if let sourceURL = archive.source?.url { Quarantine.propagate(from: sourceURL, to: result.added) }
         try check()
-        let previous = destination.edits.operations
-        destination.edits.add(result.placed, into: folder)
-        guard destination.edits.operations != previous else { throw EngineError(.cancelled) }
+        guard await target.importFiles(result.placed, into: folder, level: destination) else {
+            throw EngineError(.cancelled)
+        }
         destination.edits.retainTransferDirectory(parent)
         retained = true
         target.archive.record(Checkup.findings(for: staged.report) + Checkup.findings(for: staged.restoredMetadata))

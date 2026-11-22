@@ -124,6 +124,40 @@ nonisolated struct PackRequest: Identifiable, Sendable {
         return request
     }
 
+    /// Archive edits accept a source tree only when every item can be staged.
+    static func collectForEditing(_ url: URL, named name: String) -> [PackFile]? {
+        func readableFile(at url: URL, path: String) -> PackFile? {
+            guard let entry = file(at: url, path: path),
+                  let values = try? url.resourceValues(forKeys: [.isRegularFileKey]) else { return nil }
+            if entry.isLink {
+                guard (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil else { return nil }
+            } else if entry.isFolder {
+                guard access(url.path, R_OK | X_OK) == 0 else { return nil }
+            } else {
+                guard values.isRegularFile == true, access(url.path, R_OK) == 0 else { return nil }
+            }
+            return entry
+        }
+
+        guard let root = readableFile(at: url, path: name) else { return nil }
+        guard root.isFolder else { return [root] }
+        var failed = false
+        guard let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil, errorHandler: { _, _ in
+            failed = true
+            return false
+        }) else { return nil }
+        let base = url.standardizedFileURL.path
+        var files = [root]
+        for case let child as URL in walker {
+            let path = child.standardizedFileURL.path
+            guard path.hasPrefix(base + "/"),
+                  let entry = readableFile(at: child, path: name + path.dropFirst(base.count)) else { return nil }
+            files.append(entry)
+            if entry.isLink { walker.skipDescendants() }
+        }
+        return failed ? nil : files
+    }
+
     private static func file(at url: URL, path: String) -> PackFile? {
         guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey]) else {
             return nil

@@ -465,9 +465,50 @@ final class BrowserModel {
     }
 
     func chooseAddFiles() {
-        guard !isListing else { return }
-        guard editSession.requireEditable() else { return }
-        Task { editSession.add(await PackDestination.chooseSources(forAdding: true), into: folder) }
+        guard !isListing, editSession.requireEditable() else { return }
+        let target = level, destination = folder
+        Task {
+            let urls = await PackDestination.chooseSources(forAdding: true)
+            await importFiles(urls, into: destination, level: target)
+        }
+    }
+
+    private var resolvingImport = false
+
+    @discardableResult
+    func importFiles(_ urls: [URL], into folder: String, level target: Level) async -> Bool {
+        guard !isClosed, level === target, !Task.isCancelled, !urls.isEmpty,
+              !resolvingImport, target.edits.requireEditable() else { return false }
+        let edits = target.edits
+        var resolution = EditSession.ImportResolution.keepBoth
+        if edits.importHasConflicts(urls, into: folder) {
+            let archiveID = target.archive.id
+            resolvingImport = true
+            defer { resolvingImport = false }
+            let prompt = Prompt(symbol: "doc.on.doc.fill",
+                                title: String(localized: "Some items have the same name"),
+                                message: String(localized: "Keep Both gives incoming items unique names. Replace swaps in the last incoming item with each name, removing all contents of any folder it replaces."),
+                                choices: [.init(title: String(localized: "Cancel"), role: .cancel),
+                                          .init(title: String(localized: "Replace")),
+                                          .init(title: String(localized: "Keep Both"), role: .primary)])
+            let answer = await Prompts.present(prompt, on: editingWindow)
+            guard !isClosed, level === target, target.archive.id == archiveID else { return false }
+            resolution = switch answer.choice {
+            case 1: .replace
+            case 2: .keepBoth
+            default: .cancel
+            }
+        }
+
+        let previousFolder = self.folder
+        let previousSelection = selection
+        return edits.add(urls, into: folder, resolving: resolution, select: { [weak self, weak target] paths in
+            guard let self, let target, self.level === target, self.folder == folder else { return }
+            self.selection = paths.filter { target.archive.entry(at: $0) != nil }
+        }, undoSelection: { [weak self, weak target] in
+            guard let self, let target, self.level === target, self.folder == previousFolder else { return }
+            self.selection = previousSelection.filter { target.archive.entry(at: $0) != nil }
+        })
     }
 
     func beginRename(_ entry: ArchiveEntry) {
