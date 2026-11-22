@@ -10599,12 +10599,42 @@
         }
       }
     },
-    "When on, a password that unlocks an archive is saved in your Keychain — nowhere else, and only this app can read it. When off, Stow keeps passwords only while the archive is open.": {
+    "Unlock archives automatically": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开启后，成功解锁压缩包的密码会存进你的钥匙串——只存在那里，也只有本 App 能读。关闭后，密码仅在压缩包打开期间保留在内存中。"
+            "value": "自动解锁归档"
+          }
+        }
+      }
+    },
+    "Remembering saves passwords that unlock archives. Automatic unlock uses passwords already saved in Keychain.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "记住密码会将成功解锁归档的密码存入钥匙串。自动解锁会使用钥匙串中已有的密码。"
+          }
+        }
+      }
+    },
+    "Use Saved Password": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用已保存的密码"
+          }
+        }
+      }
+    },
+    "Couldn’t read that password from Keychain.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法从钥匙串读取该密码。"
           }
         }
       }

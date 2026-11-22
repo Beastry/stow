@@ -67,16 +67,22 @@ nonisolated enum ArchivePasswordVault {
 
     static var isEnabled: Bool { SettingsKeys.flag(SettingsKeys.rememberPasswords) }
 
-    /// Looks up a saved password when the vault is on and `url` is vaultable; otherwise nil.
-    static func recalled(for url: URL) -> String? {
-        guard isEnabled, let identity = ArchivePasswordIdentity.make(url: url) else { return nil }
+    /// Automatic lookup respects its own setting and still applies archive identity checks.
+    static func recalled(for url: URL, in settings: UserDefaults = .standard) -> String? {
+        guard SettingsKeys.automaticallyUnlocks(in: settings), let identity = ArchivePasswordIdentity.make(url: url) else { return nil }
         return store.password(for: identity)
+    }
+
+    /// Only a deliberate Pack action reads the selected entry's secret from Keychain.
+    static func passwordForPacking(from entry: ArchivePasswordEntry) -> String? {
+        guard let password = store.password(for: entry.identity), !password.isEmpty else { return nil }
+        return password
     }
 
     /// Saves after a password unlocked the archive, when the vault is on. No-op when off or when
     /// `url` isn't vaultable. Never logs the password.
-    static func remember(_ password: String, for url: URL) {
-        guard isEnabled, !password.isEmpty, let identity = ArchivePasswordIdentity.make(url: url) else { return }
+    static func remember(_ password: String, for url: URL, in settings: UserDefaults = .standard) {
+        guard SettingsKeys.flag(SettingsKeys.rememberPasswords, in: settings), !password.isEmpty, let identity = ArchivePasswordIdentity.make(url: url) else { return }
         try? store.save(password, for: identity, displayName: url.lastPathComponent)
     }
 

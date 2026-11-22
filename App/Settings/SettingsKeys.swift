@@ -9,6 +9,7 @@ nonisolated enum SettingsKeys {
     static let showPassword = "password.showByDefault"
     /// Opt-in Keychain vault for archive passwords (#76). Off by default.
     static let rememberPasswords = "password.rememberInKeychain"
+    static let automaticallyUnlockArchives = "password.automaticallyUnlockArchives"
     static let openInGlance = "glance.openFromFinder" // Legacy fixed-mode preference.
     static let archiveWindowMode = "browse.archiveWindowMode"
     static let lastArchiveWindow = "browse.lastArchiveWindow"
@@ -116,6 +117,7 @@ nonisolated enum SettingsKeys {
         .init(key: hoverPreviews, defaultValue: .bool(true)),
         .init(key: showPassword, defaultValue: .bool(false)),
         .init(key: rememberPasswords, defaultValue: .bool(false)),
+        .init(key: automaticallyUnlockArchives, defaultValue: .bool(false)),
         .init(key: openInGlance, defaultValue: .bool(false)),
         .init(key: archiveWindowMode, defaultValue: .string(ArchiveWindowMode.lastUsed.rawValue)),
         .init(key: lastArchiveWindow, defaultValue: .string(ArchiveWindow.browser.rawValue)),
@@ -177,7 +179,7 @@ nonisolated enum SettingsKeys {
         case .previews:
             keys = [hoverPreviews]
         case .passwords:
-            keys = [showPassword, rememberPasswords]
+            keys = [showPassword, rememberPasswords, automaticallyUnlockArchives]
         case .integration:
             keys = ["FinderMenuOnExternalDrives"]
         case .fileTypes, .advanced, .licenses:
@@ -203,6 +205,18 @@ nonisolated enum SettingsKeys {
     static func defaultValue(for key: String) -> DefaultValue {
         resettable.first { $0.key == key }!.defaultValue
     }
+    /// Previous versions used the save preference for both behaviors.
+    static func automaticallyUnlocks(in store: UserDefaults = .standard) -> Bool {
+        store.object(forKey: automaticallyUnlockArchives) as? Bool ?? flag(rememberPasswords, in: store)
+    }
+
+    static func setRememberPasswords(_ enabled: Bool, in store: UserDefaults = .standard) {
+        if store.object(forKey: automaticallyUnlockArchives) == nil {
+            store.set(automaticallyUnlocks(in: store), forKey: automaticallyUnlockArchives)
+        }
+        store.set(enabled, forKey: rememberPasswords)
+    }
+
     static func appearance(in store: UserDefaults = .standard) -> Appearance {
         Appearance(rawValue: store.string(forKey: appearance) ?? "") ?? .system
     }

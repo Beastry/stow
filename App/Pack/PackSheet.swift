@@ -17,9 +17,11 @@ struct PackSheet: View {
     @State private var cpuLimit = CPUCoreLimitInput()
     @AppStorage("PackCPUCores") private var globalCPUCores = 0
     @State private var password = ""
+    @State private var savedPasswords: [ArchivePasswordEntry] = []
+    @State private var showsSavedPasswordFailure = false
     @State private var confirmation = ""
     @State private var revealsPassword = false
-    /// The password as it last appeared on screen. Seeing it counts as checking it.
+    /// A password reviewed on screen or explicitly chosen from Keychain.
     @State private var seenPassword: String?
     @FocusState private var focus: Field?
     @State private var name = ""
@@ -143,6 +145,7 @@ struct PackSheet: View {
             if uses { focus = .password }
         }
         .onChange(of: password) { _, new in
+            showsSavedPasswordFailure = false
             if revealsPassword { seenPassword = new }
         }
         .onChange(of: cpuLimit) { _, input in
@@ -380,12 +383,46 @@ struct PackSheet: View {
             Toggle("Show password", isOn: Binding(get: { revealsPassword }, set: { setRevealsPassword($0) }))
                 .revealsKeyboardFocus()
                 .padding(.leading, 18 + Space.s)
+            if !savedPasswords.isEmpty {
+                Menu("Use Saved Password") {
+                    ForEach(savedPasswords) { entry in
+                        let ambiguous = savedPasswords.contains { $0.id != entry.id && $0.displayName == entry.displayName }
+                        Button(ambiguous ? entry.identity.path : entry.displayName) { useSavedPassword(entry) }
+                            .help(entry.identity.path)
+                            .accessibilityHint(entry.identity.path)
+                    }
+                }
+                .revealsKeyboardFocus()
+                .padding(.leading, 18 + Space.s)
+            }
+            if showsSavedPasswordFailure {
+                Text("Couldn’t read that password from Keychain.")
+                    .font(.callout)
+                    .padding(.leading, 18 + Space.s)
+            }
+        }
+        .onAppear {
+            savedPasswords = ArchivePasswordVault.entries()
+            showsSavedPasswordFailure = false
         }
         .animation(Motion.byKeyboard ? nil : Motion.resolved(Motion.status, reduceMotion: reduceMotion), value: needsConfirmation)
         .animation(Motion.byKeyboard ? nil : Motion.resolved(Motion.status, reduceMotion: reduceMotion), value: showsMismatch)
         // Slides down from the sentence that asked for it; goes faster than it came.
         .transition(AnyTransition.asymmetric(insertion: reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)),
                                 removal: .opacity.animation(Motion.byKeyboard ? nil : Motion.resolved(Motion.exit, reduceMotion: reduceMotion))))
+    }
+
+    private func useSavedPassword(_ entry: ArchivePasswordEntry) {
+        guard let saved = ArchivePasswordVault.passwordForPacking(from: entry) else {
+            showsSavedPasswordFailure = true
+            return
+        }
+        showsSavedPasswordFailure = false
+        revealsPassword = false
+        password = saved
+        seenPassword = saved
+        confirmation = ""
+        focus = .password
     }
 
     private var suggestButton: some View {

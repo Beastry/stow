@@ -225,6 +225,7 @@ struct GlanceSettingsView: View {
 struct PasswordSettingsView: View {
     @AppStorage(SettingsKeys.showPassword) private var show = false
     @AppStorage(SettingsKeys.rememberPasswords) private var remember = false
+    @AppStorage(SettingsKeys.automaticallyUnlockArchives) private var automaticUnlock: Bool?
     @State private var entries: [ArchivePasswordEntry] = []
     @State private var confirmsWipe = false
 
@@ -236,11 +237,16 @@ struct PasswordSettingsView: View {
                 Text("Visible passwords support Chinese and Japanese input methods. You can hide a password in the password sheet.")
             }
             Section {
-                Toggle("Remember passwords in Keychain", isOn: $remember)
+                Toggle("Remember passwords in Keychain", isOn: Binding(
+                    get: { remember }, set: { SettingsKeys.setRememberPasswords($0) }
+                ))
+                Toggle("Unlock archives automatically", isOn: Binding(
+                    get: { automaticUnlock ?? remember }, set: { automaticUnlock = $0 }
+                ))
             } footer: {
-                Text("When on, a password that unlocks an archive is saved in your Keychain — nowhere else, and only this app can read it. When off, Stow keeps passwords only while the archive is open.")
+                Text("Remembering saves passwords that unlock archives. Automatic unlock uses passwords already saved in Keychain.")
             }
-            if remember {
+            if remember || !entries.isEmpty {
                 Section {
                     if entries.isEmpty {
                         Text("No saved passwords yet")
