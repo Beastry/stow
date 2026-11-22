@@ -82,6 +82,8 @@ Settings keys (UserDefaults; the resettable list and defaults are in `SettingsKe
 | `extract.quickExtractOnOpen` | `false` | Archives opened from Finder are extracted next to themselves (#328, `QuickExtraction`); Debug builds take `-StowOpenSender com.apple.finder` to treat any open as Finder's |
 | `install.removeQuarantine` | `false` | |
 | `general.appearance` | `system` | `system`, `light`, `dark` |
+| `AppleLanguages` | absent (follow the system) | `["en"]` or `["zh-Hans"]` from General › App Language (#331, `AppLanguage`); System Settings › Language & Region › Applications writes the same key. Read at launch, so a change offers a restart; not reset with the other settings |
+| `general.languageRestart` | absent | Time stamp a language restart leaves for the next launch, which reopens General once (`AppRestart`) |
 | `browse.defaultView` | `grid` | `grid`, `list`, `columns` |
 | `browse.hoverPreviews` | `true` | |
 | `password.showByDefault` | `false` | |

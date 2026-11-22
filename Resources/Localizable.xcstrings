@@ -1185,16 +1185,6 @@
         }
       }
     },
-    "To use English or Simplified Chinese just for Stow, open System Settings → General → Language & Region → Applications. Add Stow and choose its language. Quit and reopen Stow after your current tasks and unsaved changes are finished.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "如需仅为 Stow 使用英语或简体中文，请打开“系统设置”→“通用”→“语言与地区”→“应用程序”，添加 Stow 并选择语言。请先完成当前任务、存储修改，再退出并重新打开 Stow。"
-          }
-        }
-      }
-    },
     "Colourful Glance window controls": {
       "localizations": {
         "zh-Hans": {
@@ -11279,16 +11269,6 @@
         }
       }
     },
-    "How to change the language": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "如何更改语言"
-          }
-        }
-      }
-    },
     "Nothing": {
       "localizations": {
         "zh-Hans": {
@@ -15111,6 +15091,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@%2$@%3$@"
+          }
+        }
+      }
+    },
+    "Restart Stow": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新启动 Stow"
+          }
+        }
+      }
+    },
+    "Stow shows %@ after it restarts.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stow 重新启动后将使用“%@”。"
+          }
+        }
+      }
+    },
+    "Stow waits for running tasks and asks about unsaved changes before it restarts.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新启动前，Stow 会等待进行中的任务完成，并询问如何处理未存储的修改。"
+          }
+        }
+      }
+    },
+    "System Settings → General → Language & Region → Applications sets the same choice.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“系统设置”→“通用”→“语言与地区”→“应用程序”中的设置与此相同。"
           }
         }
       }
