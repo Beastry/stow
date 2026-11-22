@@ -14725,26 +14725,6 @@
         }
       }
     },
-    "Adds the new one with a number after its name": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加新项目，并在名称后加上编号"
-          }
-        }
-      }
-    },
-    "Adds the new ones with a number after each name": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加新项目，并在每个名称后加上编号"
-          }
-        }
-      }
-    },
     "All in One Archive": {
       "localizations": {
         "zh-Hans": {
@@ -14885,26 +14865,6 @@
         }
       }
     },
-    "Takes the place of the existing folder and everything in it": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "取代现有文件夹及其中的全部内容"
-          }
-        }
-      }
-    },
-    "Takes the place of the existing item": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "取代现有项目"
-          }
-        }
-      }
-    },
     "Takes the place of the existing items": {
       "localizations": {
         "zh-Hans": {
@@ -14999,6 +14959,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "、"
+          }
+        }
+      }
+    },
+    "Adding": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要添加的"
+          }
+        }
+      }
+    },
+    "Adds them as %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加为 %@"
+          }
+        }
+      }
+    },
+    "Adds them as %@ and %lld more": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加为 %1$@ 及另外 %2$lld 个"
+          }
+        }
+      }
+    },
+    "Keep Both adds the new one as %@.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“保留两者”会将新项目添加为 %@。"
+          }
+        }
+      }
+    },
+    "Replace puts it in place of the one here.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“替换”会用新项目取代这里的项目。"
+          }
+        }
+      }
+    },
+    "Replace removes the folder here, with everything in it, and puts the new one in its place.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“替换”会移除这里的文件夹及其中的全部内容，并放入新项目。"
+          }
+        }
+      }
+    },
+    "Folder with %lld items": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Folder with %lld item"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Folder with %lld items"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "文件夹，含 %lld 个项目"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "sentence.separator": {
+      "comment": "Between sentences (none in Chinese).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " "
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ""
           }
         }
       }

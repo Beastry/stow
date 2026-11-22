@@ -520,33 +520,69 @@ final class BrowserModel {
                          .init(title: String(localized: "Cancel"), role: .primary)])
     }
 
-    /// Names what collides and where, as the extraction conflict prompt does, and says what each
-    /// choice does to it: what Keep Both calls the new ones, that Replace takes a whole folder's
+    /// Names what collides and where, as the extraction conflict prompt does, and says exactly
+    /// what each choice does: the names Keep Both will give, that Replace takes a whole folder's
     /// contents with it, and that either one is an edit (one Undo, nothing written until Save).
-    static func importConflictPrompt(_ conflicts: (names: [String], replacesFolder: Bool), in place: String) -> Prompt {
+    /// A single clash compares the item in the archive with the one coming in, so Replace is
+    /// chosen knowing which is newer or bigger.
+    static func importConflictPrompt(_ conflicts: EditSession.ImportConflicts, in place: String) -> Prompt {
         let names = conflicts.names
         let title = switch names.count {
         case 0, 1: String(localized: "“\(names.first ?? "")” is already in “\(place)”.")
         case 2: String(localized: "“\(names[0])” and “\(names[1])” are already in “\(place)”.")
         default: String(localized: "“\(names[0])” and \(names.count - 1) other items are already in “\(place)”.")
         }
-        // One row per choice, so its consequence sits beside its name before anyone confirms.
-        let many = names.count > 1
-        let keepBoth = many ? String(localized: "Adds the new ones with a number after each name")
-                            : String(localized: "Adds the new one with a number after its name")
-        let replace = switch (many, conflicts.replacesFolder) {
-        case (true, true): String(localized: "Takes the place of the existing items, and of everything inside a replaced folder")
-        case (true, false): String(localized: "Takes the place of the existing items")
-        case (false, true): String(localized: "Takes the place of the existing folder and everything in it")
-        case (false, false): String(localized: "Takes the place of the existing item")
+        let undo = String(localized: "You can undo either one. Nothing changes on disk until you save.")
+        let symbol = conflicts.replacesFolder ? "folder.fill" : "doc.on.doc.fill"
+        let choices: [Prompt.Choice] = [.init(title: String(localized: "Cancel"), role: .cancel),
+                                        .init(title: String(localized: "Replace")),
+                                        .init(title: String(localized: "Keep Both"), role: .primary)]
+        let kept = conflicts.keptNames.map { "“\($0)”" }
+
+        if conflicts.keptNames.count == 1, let renamed = kept.first {
+            // One clash: the two items side by side, and each choice in one sentence.
+            let keepBoth = String(localized: "Keep Both adds the new one as \(renamed).")
+            let replace = conflicts.replacesFolder
+                ? String(localized: "Replace removes the folder here, with everything in it, and puts the new one in its place.")
+                : String(localized: "Replace puts it in place of the one here.")
+            var details: [(label: String, value: String)] = []
+            if let existing = conflicts.existing {
+                let value = existing.isFolder
+                    ? String(localized: "Folder with \(existing.itemCount) items")
+                    : String(localized: "\(existing.size.bytes), \(existing.modified.formatted(date: .abbreviated, time: .shortened))")
+                details.append((String(localized: "In the archive"), value))
+            }
+            if let incoming = conflicts.incoming {
+                details.append((String(localized: "Adding"), Self.describeIncoming(incoming)))
+            }
+            return Prompt(symbol: symbol, title: title,
+                          message: [keepBoth, replace, undo].joined(separator: String(localized: "sentence.separator", defaultValue: " ",
+                                                                                         comment: "Between sentences (none in Chinese).")),
+                          details: details, choices: choices)
         }
-        return Prompt(symbol: conflicts.replacesFolder ? "folder.fill" : "doc.on.doc.fill",
-                      title: title,
-                      message: String(localized: "You can undo either one. Nothing changes on disk until you save."),
+
+        // Several: a row per choice, so its consequence sits beside its name before anyone confirms.
+        let shown = kept.prefix(2).joined(separator: String(localized: "list.separator", defaultValue: ", ",
+                                                            comment: "Between names in a short list (Chinese uses 、)."))
+        let keepBoth = kept.count > 2 ? String(localized: "Adds them as \(shown) and \(kept.count - 2) more")
+                                      : String(localized: "Adds them as \(shown)")
+        let replace = conflicts.replacesFolder
+            ? String(localized: "Takes the place of the existing items, and of everything inside a replaced folder")
+            : String(localized: "Takes the place of the existing items")
+        return Prompt(symbol: symbol, title: title, message: undo,
                       details: [(String(localized: "Keep Both"), keepBoth), (String(localized: "Replace"), replace)],
-                      choices: [.init(title: String(localized: "Cancel"), role: .cancel),
-                                .init(title: String(localized: "Replace")),
-                                .init(title: String(localized: "Keep Both"), role: .primary)])
+                      choices: choices)
+    }
+
+    /// A file as the extraction prompt describes it; a folder by what's in it, as the archive's
+    /// side says, counted no further than the prompt needs.
+    private static func describeIncoming(_ url: URL) -> String {
+        guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { return Prompts.describe(url) }
+        var count = 0
+        if let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) {
+            while walker.nextObject() != nil, count < 9_999 { count += 1 }
+        }
+        return String(localized: "Folder with \(count) items")
     }
 
     @discardableResult

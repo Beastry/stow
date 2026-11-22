@@ -365,10 +365,26 @@ enum DemoScene {
         case "import-conflict", "import-conflict-folder", "import-conflict-many":
             // Files added to an archive meet the same names (#367); nothing is added.
             app.openArchive(named: SampleArchive.make().name)
-            let conflicts: (names: [String], replacesFolder: Bool) = switch scene {
-            case "import-conflict-folder": (["Fonts"], true)
-            case "import-conflict-many": (["README.md", "Logo", "Brand Guidelines.pdf", "Notes.txt"], true)
-            default: (["README.md"], false)
+            // A real incoming file or folder, so the prompt can describe it.
+            let incoming = FileManager.default.temporaryDirectory.appending(path: "Demo Import")
+            try? FileManager.default.createDirectory(at: incoming.appending(path: "Fonts"), withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: incoming.appending(path: "README.md").path, contents: Data(count: 6_200))
+            for font in ["Display.otf", "Text.otf"] {
+                FileManager.default.createFile(atPath: incoming.appending(path: "Fonts/" + font).path, contents: Data(count: 90_000))
+            }
+            let week = Date(timeIntervalSinceNow: -86_400 * 9)
+            let conflicts: EditSession.ImportConflicts = switch scene {
+            case "import-conflict-folder":
+                .init(names: ["Fonts"], keptNames: ["Fonts 2"], replacesFolder: true,
+                      existing: .init(isFolder: true, size: 0, modified: week, itemCount: 3),
+                      incoming: incoming.appending(path: "Fonts", directoryHint: .isDirectory))
+            case "import-conflict-many":
+                .init(names: ["README.md", "Logo", "Brand Guidelines.pdf", "Notes.txt"],
+                      keptNames: ["README 2.md", "Logo 2", "Brand Guidelines 2.pdf", "Notes 2.txt"], replacesFolder: true)
+            default:
+                .init(names: ["README.md"], keptNames: ["README 2.md"],
+                      existing: .init(isFolder: false, size: 4_100, modified: week, itemCount: 0),
+                      incoming: incoming.appending(path: "README.md"))
             }
             Task {
                 try? await Task.sleep(for: .milliseconds(300))

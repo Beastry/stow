@@ -562,13 +562,20 @@ and Copy Path. Four rows show, failures and the running one first; Show All open
 list. **Stop All** sits in the header while anything runs; **Done** at the foot once nothing does
 (it returns a draft with unfinished rows to editing). Rises in and leaves as the batch panel does.
 
-**Same names when adding files (#367).** The extraction conflict prompt's form: the title names
-what collides and where (““README.md” is already in “Harbor Handoff.zip”.”, two names, or the first
-and a count), the message that either choice can be undone and nothing is written until Save, and
-a row per choice saying what it does, so the consequence is read before confirming: *Keep Both* adds
-numbered names; *Replace* takes the existing item's place, and says so plainly when a folder's
-whole contents go with it (the prompt then shows a folder symbol). Cancel · Replace · **Keep Both**
-(default). ArcZip, checked natively 2026-11-21 with a real Finder drop onto an open archive: the
+**Same names when adding files (#367).** The extraction conflict prompt's form, more specific
+than ArcZip's (whose prompt sits behind its paywall). The title names what collides and where
+(““README.md” is already in “Harbor Handoff.zip”.”, two names, or the first and a count). Every
+choice says what it will actually do before anyone confirms:
+- **One clash:** the two items side by side (*In the archive* 4 kB, 12 Nov · *Adding* 6 kB, today;
+  a folder as “Folder with 3 items”), and one sentence each: Keep Both adds the new one as
+  “README 2.md” (the exact name the import will use), Replace puts it in place of the one here, or,
+  for a folder, removes it with everything in it.
+- **Several:** a row per choice: *Keep Both* “Adds them as “README 2.md”, “Logo 2” and 2 more”;
+  *Replace* says when replaced folders lose their contents.
+- Both end on “You can undo either one. Nothing changes on disk until you save.” A folder
+  replacement shows the folder symbol. Cancel · Replace · **Keep Both** (default).
+
+ArcZip, checked natively 2026-11-21 with a real Finder drop onto an open archive: the
 drop lights the whole window's edge in its accent, then the free version stops at a Pro paywall
 (“Modify Existing Archive” requires ArcZip Pro), so its same-name prompt couldn't be observed.
 Stow's prompt follows its own extraction conflict prompt.
