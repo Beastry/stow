@@ -149,6 +149,42 @@ struct DragOutTests {
         #expect(model.dragOut.dragCandidate(for: try mouse(.leftMouseDragged, in: window, x: 12)) == nil)
     }
 
+    @Test func glancingAtIconsPublishesEachSelectedFilePromise() async throws {
+        let temp = try TemporaryFolder()
+        defer { temp.cleanUp() }
+        let archiveURL = temp.url.appending(path: "Glance.zip")
+        let entries = [ZipFixture.Entry.file("alpha.txt", "first payload"),
+                       .file("beta.txt", "second payload"),
+                       .file("unselected.txt", "outside the marquee")]
+        try ZipFixture(entries: entries).write(to: archiveURL)
+        let original = try Data(contentsOf: archiveURL)
+        let listing = try await ArchiveEngine.shared.list(archiveURL)
+        let model = BrowserModel(archive: Archive(listing: listing, url: archiveURL))
+        model.glanceViewMode = .icons
+        model.marquee(["alpha.txt", "beta.txt"], base: [], toggling: false)
+        let dragging = model.dragOut.prepareDrag(from: "alpha.txt")
+        #expect(dragging.map(\.id) == ["alpha.txt", "beta.txt"])
+
+        let output = temp.url.appending(path: "Output", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+        for entry in dragging {
+            let promise = model.dragOut.promise(for: entry, token: nil)
+            let name = model.dragOut.filePromiseProvider(promise, fileNameForType: promise.fileType)
+            let url = output.appending(path: name)
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                model.dragOut.filePromiseProvider(promise, writePromiseTo: url) { error in
+                    if let error { continuation.resume(throwing: error) }
+                    else { continuation.resume() }
+                }
+            }
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: output.path).sorted() == ["alpha.txt", "beta.txt"])
+        for entry in entries.prefix(2) {
+            #expect(try Data(contentsOf: output.appending(path: entry.name)) == entry.data)
+        }
+        #expect(try Data(contentsOf: archiveURL) == original)
+    }
+
     private func sourceModel() -> BrowserModel {
         BrowserModel(archive: Archive(listing: ArchiveListing(type: "zip", entries: [
             ListedEntry(path: "alpha.txt", isFolder: false, size: 1)
