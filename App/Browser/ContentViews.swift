@@ -84,7 +84,7 @@ struct ContentGrid: View {
                     scroller.scrollTo(index / metrics.columns, anchor: .top)
                     model.historyScrollTarget = nil
                 }
-                .onChange(of: model.scrollTarget) { _, target in
+                .onChange(of: model.scrollTarget, initial: true) { _, target in
                     guard let target, let index = model.position(of: target) else { return }
                     // Keyboard-driven: no animation.
                     scroller.scrollTo(index / metrics.columns)
@@ -101,7 +101,7 @@ struct ContentGrid: View {
         // Search hands the keyboard back to the files when it lets go (Esc, or a click away),
         // and when the window first opens, so arrow keys work straight away.
         .filesTakeKeyboard($isFocused, isSearchFocused: isSearchFocused)
-        .browserKeys(model)
+        .browserKeys(model, in: .grid)
         .onChange(of: model.demoHover, initial: true) { if let id = model.demoHover { hover.present(id) } }
     }
 
@@ -232,7 +232,7 @@ private struct GridTile: View {
 extension View {
     /// The browser's keyboard, shared by the icon grid and column view (the list's table brings
     /// its own arrows): arrows move (⇧ extends), Space is Quick Look, Return opens, letters jump.
-    func browserKeys(_ model: BrowserModel) -> some View {
+    func browserKeys(_ model: BrowserModel, in presentation: BrowserModel.ViewMode? = nil) -> some View {
         self
             .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { press in
                 guard press.modifiers.isDisjoint(with: [.command, .option, .control]) else { return .ignored }
@@ -242,14 +242,14 @@ extension View {
                 case .leftArrow: .left
                 default: .right
                 }
-                model.move(direction, extending: press.modifiers.contains(.shift))
+                model.move(direction, extending: press.modifiers.contains(.shift), in: presentation)
                 return .handled
             }
             .quickLookKeys(model)
             .onKeyPress(characters: .alphanumerics.union(.punctuationCharacters), phases: .down) { press in
                 guard press.modifiers.isDisjoint(with: [.command, .option, .control]) else { return .ignored }
                 guard model.renamingPath == nil else { return .ignored }
-                model.typeSelect(press.characters)
+                model.typeSelect(press.characters, in: presentation)
                 return .handled
             }
     }

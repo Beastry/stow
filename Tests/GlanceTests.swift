@@ -33,6 +33,44 @@ struct GlanceTests {
         }
     }
 
+    @Test func defaultOnlyAppliesToNewArchiveWindows() throws {
+        let suite = "Stow.GlanceTests." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        settings.set("columns", forKey: SettingsKeys.defaultView)
+        let archive = SampleArchive.make()
+        let first = BrowserModel(archive: archive, settings: settings)
+        let second = BrowserModel(archive: archive, settings: settings)
+        #expect(first.glanceViewMode == .list && first.viewMode == .columns)
+
+        first.glanceViewMode = .icons
+        #expect(first.viewMode == .columns && second.glanceViewMode == .list)
+        #expect(settings.object(forKey: SettingsKeys.glanceDefaultView) == nil)
+
+        settings.set("icons", forKey: SettingsKeys.glanceDefaultView)
+        let third = BrowserModel(archive: archive, settings: settings)
+        #expect(third.glanceViewMode == .icons && third.viewMode == .columns)
+        #expect(second.glanceViewMode == .list)
+
+        settings.set("columns", forKey: SettingsKeys.glanceDefaultView)
+        #expect(SettingsKeys.glanceView(in: settings) == .list)
+    }
+
+    @Test func iconKeyboardUsesGridSemanticsWithBrowserColumns() throws {
+        let model = BrowserModel(archive: SampleArchive.make())
+        model.viewMode = .columns
+        model.glanceViewMode = .icons
+        model.navigate(to: "Photos")
+        model.gridColumns = 2
+        let entries = model.visibleEntries
+        try #require(entries.count >= 3)
+        model.select([entries[0].id])
+        model.move(.down, extending: true, in: .grid)
+        #expect(model.selection == Set(entries.prefix(3).map(\.id)))
+        #expect(model.scrollTarget == entries[2].id)
+        #expect(model.folder == "Photos" && model.viewMode == .columns)
+    }
+
     @Test func switchingKeepsFolderSelectionAndHistory() throws {
         let harness = Harness()
         let app = harness.app, glance = app.glance

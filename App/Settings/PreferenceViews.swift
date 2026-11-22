@@ -188,6 +188,7 @@ struct GlanceSettingsView: View {
     @AppStorage(SettingsKeys.archiveWindowMode) private var archiveWindowMode = SettingsKeys.archiveWindowMode().rawValue
     @AppStorage(SettingsKeys.glanceColourfulControls) private var colourfulControls = false
     @AppStorage(SettingsKeys.glanceMaterial) private var material = SettingsKeys.GlanceMaterialPreference.liquidGlass.rawValue
+    @AppStorage(SettingsKeys.glanceDefaultView) private var viewMode = SettingsKeys.GlanceViewMode.list.rawValue
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
@@ -198,6 +199,11 @@ struct GlanceSettingsView: View {
                 }
             } footer: {
                 Text("Last Used Window opens archives in whichever window you used last — the full Browser or Glance — even after Stow quits. Window › Switch to Glance (⌥⌘G) moves an open archive between the two.")
+            }
+            Section {
+                Picker("Open Glance in", selection: $viewMode) {
+                    ForEach(SettingsKeys.GlanceViewMode.allCases) { Text($0.title).tag($0.rawValue) }
+                }
             }
             Section {
                 Picker("Window material", selection: $material) {

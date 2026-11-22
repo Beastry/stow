@@ -126,14 +126,30 @@ struct BrowseCommands: Commands {
                 .disabled(draft.map(\.files.isEmpty) ?? (browser == nil || app.glance.isShown))
         }
         CommandGroup(before: .toolbar) {
-            Button("as Icons") { if let draft { draft.browsing.viewMode = .grid } else { app.passwords.performCommand { browser?.viewMode = .grid } } }
-                .disabled(app.passwords.question != nil)
-                .keyboardShortcut("1")
-            Button("as List") { if let draft { draft.browsing.viewMode = .list } else { app.passwords.performCommand { browser?.viewMode = .list } } }
-                .disabled(app.passwords.question != nil)
-                .keyboardShortcut("2")
+            Button("as Icons") {
+                if let draft { draft.browsing.viewMode = .grid }
+                else {
+                    app.passwords.performCommand {
+                        if app.glance.isShown { browser?.glanceViewMode = .icons }
+                        else { browser?.viewMode = .grid }
+                    }
+                }
+            }
+            .disabled(app.passwords.question != nil)
+            .keyboardShortcut("1")
+            Button("as List") {
+                if let draft { draft.browsing.viewMode = .list }
+                else {
+                    app.passwords.performCommand {
+                        if app.glance.isShown { browser?.glanceViewMode = .list }
+                        else { browser?.viewMode = .list }
+                    }
+                }
+            }
+            .disabled(app.passwords.question != nil)
+            .keyboardShortcut("2")
             Button("as Columns") { if let draft { draft.browsing.viewMode = .columns } else { app.passwords.performCommand { browser?.viewMode = .columns } } }
-                .disabled(app.passwords.question != nil)
+                .disabled(app.passwords.question != nil || (draft == nil && app.glance.isShown))
                 .keyboardShortcut("3")
             Divider()
             Toggle("Show macOS Helper Items", isOn: Binding(

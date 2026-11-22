@@ -51,6 +51,24 @@ nonisolated enum SettingsKeys {
     }
     static let glancePinned = "glance.pinned"
     static let glanceColourfulControls = "glance.colourfulControls"
+    static let glanceDefaultView = "glance.defaultView"
+
+    enum GlanceViewMode: String, CaseIterable, Identifiable, Sendable {
+        case list, icons
+
+        var id: Self { self }
+        var title: String {
+            switch self {
+            case .list: String(localized: "List")
+            case .icons: String(localized: "Icons")
+            }
+        }
+    }
+
+    static func glanceView(in store: UserDefaults = .standard) -> GlanceViewMode {
+        GlanceViewMode(rawValue: store.string(forKey: glanceDefaultView) ?? "") ?? .list
+    }
+
     /// Liquid Glass vs classic frosted Glance background (#158). Default preserves Liquid Glass.
     static let glanceMaterial = "glance.material"
     static let trayEnabled = "tray.enabled"
@@ -121,6 +139,7 @@ nonisolated enum SettingsKeys {
         .init(key: openInGlance, defaultValue: .bool(false)),
         .init(key: archiveWindowMode, defaultValue: .string(ArchiveWindowMode.lastUsed.rawValue)),
         .init(key: lastArchiveWindow, defaultValue: .string(ArchiveWindow.browser.rawValue)),
+        .init(key: glanceDefaultView, defaultValue: .string(GlanceViewMode.list.rawValue)),
         .init(key: glancePinned, defaultValue: .bool(false)),
         .init(key: glanceColourfulControls, defaultValue: .bool(false)),
         .init(key: glanceMaterial, defaultValue: .string(GlanceMaterialPreference.liquidGlass.rawValue)),
@@ -161,7 +180,7 @@ nonisolated enum SettingsKeys {
         case .glance:
             // Pin on Top is set from Glance itself (and Window › Keep Glance on Top), not shown here,
             // but it is Glance's preference, so it resets with this page.
-            keys = [openInGlance, archiveWindowMode, lastArchiveWindow, glancePinned, glanceColourfulControls, glanceMaterial]
+            keys = [openInGlance, archiveWindowMode, lastArchiveWindow, glancePinned, glanceColourfulControls, glanceMaterial, glanceDefaultView]
         case .extraction:
             keys = [
                 Preferences.Key.extractAllFolder, Preferences.Key.afterExtractAll,

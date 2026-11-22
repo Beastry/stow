@@ -6670,6 +6670,16 @@
         }
       }
     },
+    "Open Glance in": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glance 默认视图"
+          }
+        }
+      }
+    },
     "Open Inside": {
       "localizations": {
         "zh-Hans": {

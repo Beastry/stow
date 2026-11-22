@@ -85,8 +85,16 @@ final class BrowserModel {
             if isSearching, !selection.isEmpty, selection != oldValue { pendingSearchRestore = nil }
         }
     }
-    var viewMode: ViewMode = SettingsKeys.browserView() {
+    var viewMode: ViewMode {
         didSet { if viewMode != oldValue { refresh() } }
+    }
+    /// Per archive window, retained when switching between the Browser and Glance.
+    var glanceViewMode: SettingsKeys.GlanceViewMode {
+        didSet {
+            guard glanceViewMode != oldValue else { return }
+            scrollTarget = cursor.flatMap { selection.contains($0) ? $0 : nil }
+                ?? selection.min { (positions[$0] ?? .max) < (positions[$1] ?? .max) }
+        }
     }
     var query = "" {
         didSet {
@@ -236,7 +244,9 @@ final class BrowserModel {
     private(set) var listedCount = 0
 
     init(archive: Archive, previews: PreviewService = PreviewService(), isListing: Bool = false,
-         installerCanvas start: InstallerCanvasStart = .load) {
+         installerCanvas start: InstallerCanvasStart = .load, settings: UserDefaults = .standard) {
+        viewMode = SettingsKeys.browserView(in: settings)
+        glanceViewMode = SettingsKeys.glanceView(in: settings)
         self.isListing = isListing
         listedCount = archive.source?.listing?.entries.count ?? archive.entries.count
         let root = Level(archive: archive, password: archive.source?.password)
@@ -1162,8 +1172,9 @@ final class BrowserModel {
     }
 
     /// Arrow keys: in the grid by rows and columns, in the list by rows. ⇧ extends.
-    func move(_ direction: Direction, extending: Bool = false) {
+    func move(_ direction: Direction, extending: Bool = false, in presentation: ViewMode? = nil) {
         guard !visibleEntries.isEmpty else { return }
+        let viewMode = presentation ?? self.viewMode
         if viewMode == .columns {
             moveInColumns(direction)
             return
@@ -1235,7 +1246,8 @@ final class BrowserModel {
     }
 
     /// Typing a name's first letters selects it.
-    func typeSelect(_ text: String) {
+    func typeSelect(_ text: String, in presentation: ViewMode? = nil) {
+        let viewMode = presentation ?? self.viewMode
         let now = Date.now
         typeahead.text = now.timeIntervalSince(typeahead.at) > 1 ? text : typeahead.text + text
         typeahead.at = now

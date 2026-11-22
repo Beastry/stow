@@ -375,6 +375,13 @@ Folder. Forward returns to the revealed folder and entry. If a saved reading anc
 it. The functional implementation keeps the context-menu command. Claude Code owns any
 additional reveal affordance and its visual and motion treatment.
 
+## Glance view modes (#370)
+
+The View menu switches an open Glance between List and Icons. Settings › Glance sets the
+default for future archives. Both presentations use the same archive location, selection,
+and edit history. The authored installer canvas retains its existing presentation.
+Claude Code owns the view controls, tile sizing, layout, and motion.
+
 ## Motion intent
 
 Follow the existing motion table in DESIGN.md. Claude Code owns animation treatment and
