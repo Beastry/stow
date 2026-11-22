@@ -199,6 +199,69 @@ struct NavigationTests {
         #expect(model.pathSegments.map(\.title) == ["t.zip", "A"])
     }
 
+    @Test func revealAndHistoryRestoreMultipleMatchesAndReadingPosition() async throws {
+        let paths = (0..<6_000).map { "Matches/match-\($0).txt" }
+        let model = BrowserModel(archive: archive(paths))
+        model.query = "match"
+        try await waitUntil { model.visibleEntries.count == paths.count + 1 }
+
+        let selected: Set<ArchiveEntry.ID> = [paths[2400], paths[4800]]
+        model.select(selected)
+        model.recordSearchScrollAnchor(paths[4300])
+        model.navigate(to: "Matches", selecting: [paths[4800]])
+        #expect(!model.isSearching && model.selection == [paths[4800]])
+
+        model.goBack()
+        try await waitUntil { model.selection == selected }
+        #expect(model.query == "match" && model.folder.isEmpty)
+        #expect(model.visibleEntries.count == paths.count + 1)
+        #expect(model.historyScrollTarget == paths[4300])
+
+        model.goForward()
+        #expect(model.folder == "Matches" && model.selection == [paths[4800]])
+        #expect(!model.isSearching && model.historyScrollTarget == nil)
+    }
+
+    @Test func sameFolderRevealIsAHistoryVisitAndRestoresOnlyCurrentHits() async throws {
+        let model = BrowserModel(archive: archive(["hit-a.txt", "hit-b.txt", "hit-c.txt"]))
+        model.query = "hit"
+        try await waitUntil { model.visibleEntries.count == 3 }
+
+        model.select(["hit-a.txt", "hit-b.txt", "hit-c.txt"])
+        model.recordSearchScrollAnchor("hit-b.txt")
+        model.navigate(to: "", selecting: ["hit-a.txt"])
+        #expect(model.canGoBack)
+        model.editSession.rename("hit-c.txt", to: "hit-renamed.txt")
+        model.editSession.delete(["hit-b.txt"])
+
+        model.goBack()
+        try await waitUntil { model.selection == ["hit-a.txt", "hit-renamed.txt"] }
+        #expect(model.visibleEntries.map(\.id) == ["hit-a.txt", "hit-renamed.txt"])
+        #expect(model.historyScrollTarget == nil)
+
+        model.goForward()
+        #expect(model.selection == ["hit-a.txt"])
+        #expect(!model.isSearching)
+    }
+
+    @Test func rapidForwardDiscardsSearchRestoration() async throws {
+        let model = BrowserModel(archive: archive(["Folder/hit.txt", "other.txt"]))
+        let otherWindow = BrowserModel(archive: archive(["hit-in-other-window.txt"]))
+        otherWindow.query = "hit"
+        model.query = "hit"
+        try await waitUntil { model.visibleEntries.map(\.id) == ["Folder/hit.txt"] }
+
+        model.select(["Folder/hit.txt"])
+        model.navigate(to: "Folder", selecting: ["Folder/hit.txt"])
+        model.goBack()
+        model.goForward()
+        try await waitUntil { otherWindow.visibleEntries.map(\.id) == ["hit-in-other-window.txt"] }
+        #expect(model.folder == "Folder" && !model.isSearching)
+        #expect(model.selection == ["Folder/hit.txt"])
+        #expect(model.visibleEntries.map(\.id) == ["Folder/hit.txt"])
+        #expect(otherWindow.selection.isEmpty && !otherWindow.canGoBack)
+    }
+
     @Test func gridArrowsMoveByRowsAndShiftExtends() {
         let model = BrowserModel(archive: archive((0..<10).map { "f\($0).txt" }))
         model.gridColumns = 4

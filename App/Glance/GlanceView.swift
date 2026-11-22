@@ -472,6 +472,11 @@ private struct GlanceList: View {
             .safeAreaPadding(.bottom, 56)
             .quickLookKeys(model)
             .onChange(of: model.selection) { model.selectionDidChange() }
+            .onChange(of: model.historyScrollTarget, initial: true) { _, target in
+                guard let target else { return }
+                scroller.scrollTo(target, anchor: .top)
+                model.historyScrollTarget = nil
+            }
             .onChange(of: model.scrollTarget) { _, target in
                 guard let target else { return }
                 scroller.scrollTo(target)

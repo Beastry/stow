@@ -368,6 +368,13 @@ extraction or installs as verified release behaviour — those remain design-rev
 Screenshot/video asset retakes stay on [#69](https://github.com/skyswordw/stow/issues/69).
 See `Handoff/91-real-sample-zip.md`.
 
+## Search history (#365)
+
+Back restores the search query, multi-selection and reading position after Show in Enclosing
+Folder. Forward returns to the revealed folder and entry. If a saved reading anchor is gone, drop
+it. The functional implementation keeps the context-menu command. Claude Code owns any
+additional reveal affordance and its visual and motion treatment.
+
 ## Motion intent
 
 Follow the existing motion table in DESIGN.md. Claude Code owns animation treatment and
