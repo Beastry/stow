@@ -1044,7 +1044,7 @@ enum DemoScene {
         case "slow": show(fallback(.tooSlow))
         default:
             if let path = defaults.string(forKey: "StowOpen") {
-                Task { show(await ArchivePreviewLoader.load(URL(filePath: path)) { try await ArchiveEngine.shared.list($0) }) }
+                Task { show(try await ArchivePreviewLoader.load(URL(filePath: path)) { try await ArchiveEngine.shared.list($0) }) }
             } else {
                 show(.listed(ArchivePreviewModel(archive: sample)))
             }

@@ -9,7 +9,7 @@ import SwiftUI
 final class PreviewViewController: NSViewController, QLPreviewingController {
     nonisolated private static let log = Logger(subsystem: "app.stow.Stow.QuickLook", category: "preview")
 
-    private var preparation: Task<ArchivePreviewContent, Never>?
+    private var preparation: Task<ArchivePreviewContent, any Error>?
     private var generation = UUID()
 
     override func loadView() {
@@ -23,11 +23,11 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
         view.subviews.forEach { $0.removeFromSuperview() }
         let token = UUID()
         generation = token
-        let task = Task { await ArchivePreviewLoader.load(url) { try await ArchiveEngine.shared.list($0) } }
+        let task = Task { try await ArchivePreviewLoader.load(url) { try await ArchiveEngine.shared.list($0) } }
         preparation = task
-        let content = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        defer { if generation == token { preparation = nil } }
+        let content = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
         guard generation == token else { throw CancellationError() }
-        preparation = nil
         try Task.checkCancellation()
         switch content {
         case .listed(let model):
