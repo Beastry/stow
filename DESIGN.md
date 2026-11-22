@@ -546,6 +546,9 @@ or “Pack **each of the 7 items** as a ZIP…” (zh “将**这 7 个项目分
 *All in One Archive* / *Each in Its Own Archive*. Separate packing has no one name to type, so the
 Save as row lists the names the archives will take (the first two, then “and 5 more”; all of them
 in the help tag) at the field's height, and the footer says “7 archives, about 27.3 MB in all”.
+ArcZip has no counterpart in its Create Archive sheet (checked natively 2026-11-21: purpose cards,
+format, level, password, and Advanced Options with only Mac support files and Split Volumes), so
+this choice is Stow's own and follows the sentence rather than a card or switch.
 
 **Separate packing's results.** The batch panel's form (`BatchStack`), centred where the pack
 capsule sits and lifted over an open archive's bottom row: a headline in words (“Packing 2 of 5

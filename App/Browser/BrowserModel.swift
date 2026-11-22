@@ -510,6 +510,16 @@ final class BrowserModel {
         return stageImport(urls, into: folder, level: target, resolution: resolution)
     }
 
+    /// The signature warning's form: caution yellow, and Cancel is the default, so Return alone
+    /// never writes an archive Java may refuse; Escape answers it too.
+    static func signedJARPrompt(saveTitle: String) -> Prompt {
+        Prompt(symbol: "exclamationmark.shield.fill", tint: .yellow,
+               title: String(localized: "Save changes to a signed JAR?"),
+               message: String(localized: "Editing a signed JAR can invalidate its signature. Java may reject the edited archive."),
+               choices: [.init(title: saveTitle),
+                         .init(title: String(localized: "Cancel"), role: .primary)])
+    }
+
     /// Names what collides and where, as the extraction conflict prompt does, and says what each
     /// choice does to it: what Keep Both calls the new ones, that Replace takes a whole folder's
     /// contents with it, and that either one is an edit (one Undo, nothing written until Save).
@@ -590,13 +600,7 @@ final class BrowserModel {
         confirmingJARSave = true
         defer { confirmingJARSave = false }
         let archiveID = target.archive.id
-        // The signature warning's form: caution yellow, and Cancel is the default, so Return
-        // alone never writes an archive Java may refuse; Escape answers it too.
-        let prompt = Prompt(symbol: "exclamationmark.shield.fill", tint: .yellow,
-                            title: String(localized: "Save changes to a signed JAR?"),
-                            message: String(localized: "Editing a signed JAR can invalidate its signature. Java may reject the edited archive."),
-                            choices: [.init(title: title),
-                                      .init(title: String(localized: "Cancel"), role: .primary)])
+        let prompt = Self.signedJARPrompt(saveTitle: title)
         let answer = await present(prompt, editingWindow)
         return answer.choice == 0 && !Task.isCancelled && !isClosed
             && level === target && target.archive.id == archiveID

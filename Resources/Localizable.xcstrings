@@ -10122,7 +10122,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "编辑已签名的 JAR 可能会使签名失效。Java 可能会拒绝编辑后的归档。"
+            "value": "编辑已签名的 JAR 可能会使签名失效。Java 可能会拒绝编辑后的压缩包。"
           }
         }
       }
@@ -10614,7 +10614,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自动解锁归档"
+            "value": "自动解锁压缩包"
           }
         }
       }
@@ -14540,7 +14540,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "每个归档都会单独分卷。"
+            "value": "每个压缩包都会单独分卷。"
           }
         }
       }
@@ -14560,7 +14560,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择各个归档的保存位置。"
+            "value": "选择各个压缩包的存储位置。"
           }
         }
       }
@@ -14580,7 +14580,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此 ZIP 归档中的路径有冲突。"
+            "value": "此 ZIP 压缩包中的路径有冲突。"
           }
         }
       }
@@ -14981,6 +14981,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%3$@”中已有“%1$@”和“%2$@”。"
+          }
+        }
+      }
+    },
+    "list.separator": {
+      "comment": "Between names in a short list (Chinese uses 、).",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", "
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "、"
           }
         }
       }

@@ -374,6 +374,13 @@ enum DemoScene {
                 try? await Task.sleep(for: .milliseconds(300))
                 _ = await Prompts.present(BrowserModel.importConflictPrompt(conflicts, in: SampleArchive.make().name))
             }
+        case "jar-signed":
+            // Saving edits to a JAR with signature metadata (#329); nothing is saved.
+            app.openArchive(named: SampleArchive.make().name)
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                _ = await Prompts.present(BrowserModel.signedJARPrompt(saveTitle: String(localized: "Save")))
+            }
         case "signature-warning", "replace-app":
             app.openDemo(SampleArchive.prototypeBuild())
             app.browser?.selection = ["Harbor Prototype.app"]
@@ -1075,7 +1082,9 @@ enum DemoScene {
             if let path = defaults.string(forKey: "StowOpen") {
                 Task { show(await ArchivePreviewLoader.load(URL(filePath: path)) { try await ArchiveEngine.shared.list($0) }) }
             } else {
-                show(.listed(ArchivePreviewModel(archive: sample)))
+                // -StowPreviewRowLimit 14 shows the display budget's last line on the sample.
+                let limit = defaults.integer(forKey: "StowPreviewRowLimit")
+                show(.listed(ArchivePreviewModel(archive: sample, rowLimit: limit > 0 ? limit : ArchivePreviewModel.rowLimit)))
             }
         }
         quickLookWindow = window

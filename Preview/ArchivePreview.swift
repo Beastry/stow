@@ -42,7 +42,13 @@ struct ArchivePreview: View {
 }
 
 private struct ListedPreview: View {
+    #if DEBUG
+    /// Design review: `-StowPreviewExpand "Photos|Fonts"` opens those folders.
+    @State private var expanded = Set((UserDefaults.standard.string(forKey: "StowPreviewExpand") ?? "")
+        .split(separator: "|").map(String.init))
+    #else
     @State private var expanded: Set<String> = []
+    #endif
     let model: ArchivePreviewModel
     let openInStow: (() -> Void)?
 

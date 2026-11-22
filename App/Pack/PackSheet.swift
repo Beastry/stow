@@ -978,7 +978,8 @@ struct PackSheet: View {
     /// at the same height as the field it stands in for, so the footer doesn't move.
     private var separateNamesRow: some View {
         let names = request.separateNames(audience: options.audience).map { "“\($0).\(options.format.fileExtension)”" }
-        let shown = names.prefix(2).joined(separator: ", ")
+        let shown = names.prefix(2).joined(separator: String(localized: "list.separator", defaultValue: ", ",
+                                                                comment: "Between names in a short list (Chinese uses 、)."))
         let rest = names.count - min(2, names.count)
         return HStack(spacing: Space.s) {
             Text("Save as")
