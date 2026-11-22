@@ -649,6 +649,11 @@ struct StowApp: App {
         .defaultPosition(.center)
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+        // Finder opens, `stow://` hand-offs and Services all route through AppDelegate, which
+        // decides whether a window is needed at all (Finder quick extraction needs none). Left at
+        // SwiftUI's default, a document open first orders the welcome front, before AppDelegate
+        // runs: a cold quick extraction left the welcome up and a warm open flashed it (#372).
+        .handlesExternalEvents(matching: [])
         .commands {
             StowCommands(app: app)
             EditingUndoCommands()
@@ -666,6 +671,7 @@ struct StowApp: App {
         .windowToolbarStyle(.unified)
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
         .commandsRemoved()
         Window("Welcome to Stow", id: "onboarding") {
             OnboardingView().environment(app)
@@ -673,6 +679,7 @@ struct StowApp: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
         Window("Create Archive", id: "creation") {
             if let draft = app.archiveDraft { ArchiveDraftView(draft: draft).environment(app) }
         }
@@ -681,6 +688,7 @@ struct StowApp: App {
         .windowToolbarStyle(.unified)
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
         .commandsRemoved()
         Settings {
             SettingsView().environment(app)
