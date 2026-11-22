@@ -14,14 +14,10 @@ final class EngineService: NSObject, EngineXPCProtocol, Sendable {
         client = ClientProxy(connection.remoteObjectProxy as? EngineClientXPCProtocol)
     }
 
-    /// Output left behind by a previous run that crashed or was killed.
-    static func removeStaleOutputs() {
-        let temporary = FileManager.default.temporaryDirectory
-        let items = (try? FileManager.default.contentsOfDirectory(at: temporary, includingPropertiesForKeys: nil)) ?? []
-        for item in items where [outputPrefix, packPrefix, packInputPrefix, "edit-"].contains(where: item.lastPathComponent.hasPrefix) {
-            remove(item)
-        }
-    }
+    private static let staging = Result { try EngineStaging() }
+
+    /// Initialize once, before accepting operations. Errors propagate through operation replies.
+    static func prepareStaging() { _ = staging }
 
     /// Removes every output this connection still holds (the app went away).
     func invalidate() {
@@ -80,8 +76,6 @@ final class EngineService: NSObject, EngineXPCProtocol, Sendable {
         }
         let archive = SendableHandle(archive)
         let id = request.operationID
-        let output = FileManager.default.temporaryDirectory
-            .appending(path: Self.outputPrefix + UUID().uuidString, directoryHint: .isDirectory)
         let client = client
         running.withLock { running in
             running[id] = Task {
@@ -96,6 +90,8 @@ final class EngineService: NSObject, EngineXPCProtocol, Sendable {
                         reply(try JSONEncoder.engine.encode(ExtractReport()), nil)
                         return
                     }
+                    let output = try Self.staging.get().directory
+                        .appending(path: "Extract-" + UUID().uuidString, directoryHint: .isDirectory)
                     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
                     outputs.withLock { $0[id] = output }
                     let refused = try await Self.sevenZip().extract(
@@ -133,23 +129,24 @@ final class EngineService: NSObject, EngineXPCProtocol, Sendable {
         }
         let tree = SendableHandle(tree)
         let id = request.operationID
-        let temporary = FileManager.default.temporaryDirectory
-        let output = temporary.appending(path: Self.packPrefix + UUID().uuidString, directoryHint: .isDirectory)
-        let scratch = temporary.appending(path: Self.packInputPrefix + UUID().uuidString, directoryHint: .isDirectory)
-        let input = scratch.appending(path: "Files", directoryHint: .isDirectory)
-        let work = scratch.appending(path: "Work", directoryHint: .isDirectory)
         let client = client
         running.withLock { running in
             running[id] = Task {
                 defer {
                     _ = self.running.withLock { $0.removeValue(forKey: id) }
-                    Self.remove(scratch)
                 }
                 do {
-                    for folder in [output, input, work] {
+                    let base = try Self.staging.get().directory
+                    let output = base.appending(path: "Pack-" + UUID().uuidString, directoryHint: .isDirectory)
+                    let scratch = base.appending(path: "PackIn-" + UUID().uuidString, directoryHint: .isDirectory)
+                    defer { Self.remove(scratch) }
+                    let input = scratch.appending(path: "Files", directoryHint: .isDirectory)
+                    let work = scratch.appending(path: "Work", directoryHint: .isDirectory)
+                    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+                    outputs.withLock { $0[id] = output }
+                    for folder in [input, work] {
                         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                     }
-                    outputs.withLock { $0[id] = output }
                     try await Self.receive(tree, into: input)
                     try Task.checkCancellation()
                     let report = try await Self.sevenZip().create(request, from: input, into: output, work: work) {
@@ -178,18 +175,20 @@ final class EngineService: NSObject, EngineXPCProtocol, Sendable {
         let archive = SendableHandle(archive)
         let tree = tree.map(SendableHandle.init)
         let id = request.operationID
-        let output = FileManager.default.temporaryDirectory.appending(path: "edit-" + UUID().uuidString)
         let client = client
         running.withLock { running in
             running[id] = Task {
                 do {
+                    let output = try Self.staging.get().directory
+                        .appending(path: "edit-" + UUID().uuidString, directoryHint: .isDirectory)
                     let manager = FileManager.default
+                    try manager.createDirectory(at: output, withIntermediateDirectories: false)
+                    outputs.withLock { $0[id] = output }
                     let input = output.appending(path: "input")
                     let staged = output.appending(path: "tree")
                     for folder in [input, staged] {
                         try manager.createDirectory(at: folder, withIntermediateDirectories: true)
                     }
-                    outputs.withLock { $0[id] = output }
                     let work = output.appending(path: "work." + request.format.fileExtension)
                     try await Self.copy(archive, to: work)
                     if let tree { try await Self.receive(tree, into: input) }
@@ -400,9 +399,6 @@ final class EngineService: NSObject, EngineXPCProtocol, Sendable {
 
     // MARK: -
 
-    private static let outputPrefix = "Extract-"
-    private static let packPrefix = "Pack-"
-    private static let packInputPrefix = "PackIn-"
 
     /// Packed folders can arrive read-only (mode 555); make them writable so they can be emptied.
     private static func remove(_ url: URL) {
