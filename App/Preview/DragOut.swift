@@ -258,7 +258,7 @@ final class DragOutController: NSObject, NSFilePromiseProviderDelegate, NSDraggi
                 return
             }
             do {
-                _ = try await model.extractForDrop([entry], into: url.deletingLastPathComponent())
+                try await model.extractForDrop(entry, to: url)
                 completionHandler(nil)
             } catch {
                 completionHandler(error)

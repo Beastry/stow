@@ -217,6 +217,29 @@ enum Extraction {
         }
     }
 
+    @concurrent
+    static func publishPromise(_ source: URL, to target: URL) async throws(EngineError) {
+        do {
+            let receipt = try await ExclusivePublication.publish(source: source, to: target)
+            receipt.commit()
+        } catch ExclusivePublication.Failure.system(let operation, _, EPERM)
+            where operation == "exclusive rename" || operation == "open destination" {
+            // Finder can grant the promised URL without authorizing directory-relative operations.
+            // The exact-path copy refuses existing names. A failed copy may leave a partial item.
+            do {
+                try Task.checkCancellation()
+                try FileManager.default.copyItem(at: source, to: target)
+            } catch {
+                if (error as? CocoaError)?.code != .fileWriteFileExists, exists(target) {
+                    throw PublicationRecovery.retained([target])
+                }
+                throw PublicationRecovery.engineError(error)
+            }
+        } catch {
+            throw PublicationRecovery.engineError(error)
+        }
+    }
+
     /// Extracted and audited, waiting next to `destination` (same volume) to be moved into place.
     struct Staged {
         /// The staging folder; `root` holds the archive's contents.
@@ -374,7 +397,7 @@ enum Extraction {
     }
 
     /// Without following links: a staged link pointing at a sibling still counts.
-    static func exists(_ url: URL) -> Bool {
+    nonisolated static func exists(_ url: URL) -> Bool {
         (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
     }
 }

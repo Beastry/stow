@@ -1607,22 +1607,30 @@ final class BrowserModel {
     }
 
     /// A file promise from a drag to Finder: extract `entries` into `folder` as they're dropped.
-    func extractForDrop(_ entries: [ArchiveEntry], into folder: URL) async throws(EngineError) -> [URL] {
+    func extractForDrop(_ entry: ArchiveEntry, to target: URL) async throws(EngineError) {
         activityTask?.cancel()
-        activity = Activity(step: .extract, itemCount: entries.count, phase: .running(0))
+        activity = Activity(step: .extract, itemCount: 1, phase: .running(0))
+        let scoped = target.startAccessingSecurityScopedResource()
+        defer { if scoped { target.stopAccessingSecurityScopedResource() } }
+        let sourceArchive = archive
         do {
-            let options = Extraction.Options.current(resolve: ConflictPolicy().resolver)
-            let result = try await Extraction.run(archive, selection: entries, to: folder, options: options) { fraction in
+            let staged = try await Extraction.stage(sourceArchive, selection: [entry],
+                                                    near: target.deletingLastPathComponent(),
+                                                    skipSystemFiles: Preferences.current.skipSystemFiles) { fraction in
                 Task { @MainActor in self.advance(to: fraction) }
             }
-            archive.record(result.findings)
-            activity?.placed = result.placed
+            defer { staged.discard() }
+            try await Extraction.publishPromise(staged.url(for: entry), to: target)
+            if archive.id == sourceArchive.id {
+                archive.record(Checkup.findings(for: staged.report) + Checkup.findings(for: staged.restoredMetadata))
+            }
+            if let origin = sourceArchive.source?.url { Quarantine.propagate(from: origin, to: [target]) }
+            activity?.placed = [target]
             withAnimation(Motion.current(Motion.status)) { activity?.phase = .done }
             dismissLater()
-            return result.placed
         } catch {
-            report(error, step: .extract, count: entries.count)
-            throw error
+            report(error, step: .extract, count: 1)
+            throw EngineError(error)
         }
     }
 
