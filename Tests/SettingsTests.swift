@@ -20,7 +20,7 @@ struct SettingsTests {
                 "install.afterInstall", "install.removeQuarantine", "PackAudience", "PackVerify",
                 "PackCPUCores", "FinderMenuOnExternalDrives",
                 "general.appearance", "browse.defaultView", "PackVolumeSize",
-                "browse.hoverPreviews", "password.showByDefault", "password.rememberInKeychain",
+                "browse.hoverPreviews", "password.showByDefault", "password.rememberInKeychain", "password.automaticallyUnlockArchives",
                 "glance.openFromFinder", "browse.archiveWindowMode", "browse.lastArchiveWindow", "glance.pinned", "glance.colourfulControls", "glance.material", "glance.defaultView",
                 "tray.enabled", "tray.menuBarIcon", "tray.showWhileDragging", "tray.border", "tray.pinned",
                 "nextSteps.shown", "nextSteps.hidden", "SUEnableAutomaticChecks", "SUAutomaticallyUpdate",
