@@ -11349,6 +11349,16 @@
         }
       }
     },
+    "If the finished archive fits in one part, it’s saved as %@.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果一个分卷就能装下整个压缩包，将存为 %@。"
+          }
+        }
+      }
+    },
     "Probably fits in one part": {
       "localizations": {
         "zh-Hans": {

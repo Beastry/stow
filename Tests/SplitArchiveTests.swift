@@ -66,6 +66,41 @@ struct SplitArchiveTests {
 @MainActor
 struct SplitArchiveEngineTests {
     @Test(arguments: [PackFormat.zip, .sevenZip], [false, true])
+    func sizeSplitNamesFollowTheFinishedSize(format: PackFormat, encrypted: Bool) async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let input = folder.url.appending(path: "input")
+        try FileManager.default.createDirectory(at: input, withIntermediateDirectories: false)
+        let bytes = Data(repeating: 37, count: 4096)
+        try bytes.write(to: input.appending(path: "payload"))
+        let tool = try #require(SevenZip.bundled())
+        var request = CreateRequest(operationID: UUID().uuidString, archiveName: "sample",
+                                    format: format, level: .store, password: encrypted ? "sample" : nil,
+                                    verify: true)
+        // Measure a real volume before checking the exact boundary. An ordinary ZIP and a
+        // volume can have different headers even with identical input.
+        let ordinary = "sample." + format.fileExtension
+        var limit: Int64 = 1 << 20
+        for index in 0..<3 {
+            let output = folder.url.appending(path: "out-\(index)")
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+            request.volumeSize = limit
+            let report = try await tool.create(request, from: input, into: output, work: folder.url) { _ in }
+            #expect(report.verified)
+            if index == 2 {
+                #expect(report.files == [ordinary + ".001", ordinary + ".002"])
+            } else {
+                #expect(report.files == [ordinary])
+                let back = folder.url.appending(path: "back-\(index)")
+                try FileManager.default.createDirectory(at: back, withIntermediateDirectories: false)
+                _ = try await tool.extract(output.appending(path: ordinary), into: back, password: request.password) { _ in }
+                #expect(try Data(contentsOf: back.appending(path: "payload")) == bytes)
+            }
+            limit = report.size - Int64(index)
+        }
+    }
+
+    @Test(arguments: [PackFormat.zip, .sevenZip], [false, true])
     func reopensAndExtractsStowCreatedVolumes(format: PackFormat, encrypted: Bool) async throws {
         let folder = try TemporaryFolder()
         defer { folder.cleanUp() }

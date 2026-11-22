@@ -57,9 +57,14 @@ enum ArchiveCreation {
         guard !parts.isEmpty, parts.allSatisfy({ FileManager.default.fileExists(atPath: $0.0.path) }) else {
             throw EngineError(.failed, String(localized: "The new archive didn’t arrive."))
         }
-        let placed = try await place(parts, named: name, format: request.format, in: destination, conflict: conflict)
+        let normalized = request.volumeSize != nil && (request.format == .zip || request.format == .sevenZip)
+            && parts.count == 1 && parts[0].1 == "." + request.format.fileExtension
+        let placed = try await place(parts, named: name, format: request.format, in: destination,
+                                     conflict: conflict, ordinarySizeSplit: normalized)
         onProgress(1)
-        return Result(placed: placed, report: creation.report)
+        var report = creation.report
+        report.files = placed.map(\.lastPathComponent)
+        return Result(placed: placed, report: report)
     }
 
     /// Names in `destination` that packing `name` would collide with: the archive, or any of its volumes.
@@ -80,12 +85,13 @@ enum ArchiveCreation {
     /// until none is taken. Publication never replaces an existing name; if one fails, earlier
     /// parts are rolled back conservatively and any retained output is reported.
     static func place(_ parts: [(URL, String)], named name: String, format: PackFormat, in destination: URL,
-                      conflict: Conflict,
+                      conflict: Conflict, ordinarySizeSplit: Bool = false,
                       publicationOptions: ExclusivePublication.Options = .init()) async throws(EngineError) -> [URL] {
         var backups: [(original: URL, trash: URL)] = []
         do {
             if conflict == .replace {
-                for old in existing(named: name, format: format, in: destination) {
+                let existingFiles = existing(named: name, format: format, in: destination)
+                for old in existingFiles where !ordinarySizeSplit || old.lastPathComponent == name + "." + format.fileExtension {
                     var trashed: NSURL?
                     do {
                         try FileManager.default.trashItem(at: old, resultingItemURL: &trashed)
@@ -101,6 +107,7 @@ enum ArchiveCreation {
                 let stem = attempt == 1 ? name : "\(name) \(attempt)"
                 let targets = parts.map { destination.appending(path: stem + $0.1) }
                 if targets.contains(where: exists) { continue }
+                if conflict == .keepBoth, !existing(named: stem, format: format, in: destination).isEmpty { continue }
                 var published: [(ExclusivePublication.Receipt, URL)] = []
                 do {
                     for ((source, _), target) in zip(parts, targets) {

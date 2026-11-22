@@ -685,6 +685,11 @@ nonisolated enum Compatibility {
             )
         }
         guard parts > 1 else {
+            if options.format == .zip || options.format == .sevenZip {
+                let filename = archiveName + "." + options.format.fileExtension
+                return .init(tone: .info, title: String(localized: "Probably fits in one part"),
+                             detail: String(localized: "If the finished archive fits in one part, it’s saved as \(filename)."))
+            }
             return .init(
                 tone: .info,
                 title: String(localized: "Probably fits in one part"),
