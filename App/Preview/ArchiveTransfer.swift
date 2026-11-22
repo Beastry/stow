@@ -80,6 +80,7 @@ final class ArchiveTransfer {
     }
 
     func copy(to target: BrowserModel, level destination: BrowserModel.Level, folder: String,
+              present: (Prompt, NSWindow?) async -> Prompt.Answer = Prompts.present,
               onProgress: @escaping @Sendable (Double) -> Void) async throws {
         guard source !== target, destination.edits.requireEditable() else { throw EngineError(.cancelled) }
         let destinationID = destination.archive.id
@@ -129,7 +130,7 @@ final class ArchiveTransfer {
         let result = try await Placement.place(items, in: delivered, resolve: Placement.keepBoth)
         if let sourceURL = archive.source?.url { Quarantine.propagate(from: sourceURL, to: result.added) }
         try check()
-        guard await target.importFiles(result.placed, into: folder, level: destination) else {
+        guard await target.importFiles(result.placed, into: folder, level: destination, present: present) else {
             throw EngineError(.cancelled)
         }
         destination.edits.retainTransferDirectory(parent)

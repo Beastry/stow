@@ -486,7 +486,8 @@ final class BrowserModel {
     private var resolvingImport = false
 
     @discardableResult
-    func importFiles(_ urls: [URL], into folder: String, level target: Level) async -> Bool {
+    func importFiles(_ urls: [URL], into folder: String, level target: Level,
+                     present: (Prompt, NSWindow?) async -> Prompt.Answer = Prompts.present) async -> Bool {
         guard !isClosed, level === target, !Task.isCancelled, !urls.isEmpty,
               !resolvingImport, target.edits.requireEditable() else { return false }
         let edits = target.edits
@@ -501,7 +502,7 @@ final class BrowserModel {
                                 choices: [.init(title: String(localized: "Cancel"), role: .cancel),
                                           .init(title: String(localized: "Replace")),
                                           .init(title: String(localized: "Keep Both"), role: .primary)])
-            let answer = await Prompts.present(prompt, on: editingWindow)
+            let answer = await present(prompt, editingWindow)
             guard !isClosed, level === target, target.archive.id == archiveID else { return false }
             resolution = switch answer.choice {
             case 1: .replace
