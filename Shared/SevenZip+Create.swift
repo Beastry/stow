@@ -38,7 +38,19 @@ extension SevenZip {
             try await SplitArchive.split(archive, into: count)
         }
 
-        let files = ((try? FileManager.default.contentsOfDirectory(atPath: output.path)) ?? []).sorted()
+        let files: [String]
+        do {
+            let produced = try FileManager.default.contentsOfDirectory(atPath: output.path).sorted()
+            if request.volumeSize != nil, request.format == .zip || request.format == .sevenZip,
+               produced == [archive.lastPathComponent + ".001"] {
+                try FileManager.default.moveItem(at: output.appending(path: produced[0]), to: archive)
+                files = [archive.lastPathComponent]
+            } else {
+                files = produced
+            }
+        } catch {
+            throw EngineError(.failed, error.localizedDescription)
+        }
         guard let first = files.first else { throw EngineError(.failed, String(localized: "7-Zip didn’t write an archive.")) }
         let size = files.reduce(Int64(0)) { total, file in
             total + Int64((try? output.appending(path: file).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
@@ -141,7 +153,7 @@ extension SevenZip {
     }
 
     /// "Project" stays; anything that could leave the output folder becomes "Archive".
-    static func safeName(_ name: String) -> String {
+    nonisolated static func safeName(_ name: String) -> String {
         let last = (name as NSString).lastPathComponent
         return last.isEmpty || last == "." || last == ".." || name.contains("/") ? "Archive" : last
     }

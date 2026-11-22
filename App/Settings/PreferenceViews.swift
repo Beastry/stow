@@ -188,6 +188,7 @@ struct GlanceSettingsView: View {
     @AppStorage(SettingsKeys.archiveWindowMode) private var archiveWindowMode = SettingsKeys.archiveWindowMode().rawValue
     @AppStorage(SettingsKeys.glanceColourfulControls) private var colourfulControls = false
     @AppStorage(SettingsKeys.glanceMaterial) private var material = SettingsKeys.GlanceMaterialPreference.liquidGlass.rawValue
+    @AppStorage(SettingsKeys.glanceDefaultView) private var viewMode = SettingsKeys.GlanceViewMode.list.rawValue
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
@@ -198,6 +199,11 @@ struct GlanceSettingsView: View {
                 }
             } footer: {
                 Text("Last Used Window opens archives in whichever window you used last — the full Browser or Glance — even after Stow quits. Window › Switch to Glance (⌥⌘G) moves an open archive between the two.")
+            }
+            Section {
+                Picker("Open Glance in", selection: $viewMode) {
+                    ForEach(SettingsKeys.GlanceViewMode.allCases) { Text($0.title).tag($0.rawValue) }
+                }
             }
             Section {
                 Picker("Window material", selection: $material) {
@@ -225,6 +231,7 @@ struct GlanceSettingsView: View {
 struct PasswordSettingsView: View {
     @AppStorage(SettingsKeys.showPassword) private var show = false
     @AppStorage(SettingsKeys.rememberPasswords) private var remember = false
+    @AppStorage(SettingsKeys.automaticallyUnlockArchives) private var automaticUnlock: Bool?
     @State private var entries: [ArchivePasswordEntry] = []
     @State private var confirmsWipe = false
 
@@ -236,11 +243,16 @@ struct PasswordSettingsView: View {
                 Text("Visible passwords support Chinese and Japanese input methods. You can hide a password in the password sheet.")
             }
             Section {
-                Toggle("Remember passwords in Keychain", isOn: $remember)
+                Toggle("Remember passwords in Keychain", isOn: Binding(
+                    get: { remember }, set: { SettingsKeys.setRememberPasswords($0) }
+                ))
+                Toggle("Unlock archives automatically", isOn: Binding(
+                    get: { automaticUnlock ?? remember }, set: { automaticUnlock = $0 }
+                ))
             } footer: {
-                Text("When on, a password that unlocks an archive is saved in your Keychain — nowhere else, and only this app can read it. When off, Stow keeps passwords only while the archive is open.")
+                Text("Remembering saves passwords that unlock archives. Automatic unlock uses passwords already saved in Keychain.")
             }
-            if remember {
+            if remember || !entries.isEmpty {
                 Section {
                     if entries.isEmpty {
                         Text("No saved passwords yet")

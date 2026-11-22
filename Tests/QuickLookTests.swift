@@ -61,17 +61,30 @@ struct QuickLookPreviewTests {
         let model = ArchivePreviewModel(archive: archive([
             ("b.txt", 1), ("Docs/z.txt", 2), ("Docs/Sub/a.txt", 3), ("a.txt", 4),
         ]))
-        #expect(model.rows.map(\.id) == ["Docs", "Docs/Sub", "Docs/Sub/a.txt", "Docs/z.txt", "a.txt", "b.txt"])
-        #expect(model.rows.map(\.depth) == [0, 1, 2, 1, 0, 0])
+        #expect(model.visible(expanded: []).rows.map(\.id) == ["Docs", "a.txt", "b.txt"])
+        let visible = model.visible(expanded: ["Docs", "Docs/Sub"])
+        #expect(visible.rows.map(\.id) == ["Docs", "Docs/Sub", "Docs/Sub/a.txt", "Docs/z.txt", "a.txt", "b.txt"])
+        #expect(visible.rows.map(\.depth) == [0, 1, 2, 1, 0, 0])
         #expect(model.fileCount == 4)
         #expect(model.folderCount == 2)
-        #expect(model.hiddenRowCount == 0)
+        #expect(visible.hiddenRowCount == 0)
     }
 
     @Test func hugeArchivesAreCapped() {
         let model = ArchivePreviewModel(archive: archive((0..<50).map { ("f\($0).txt", 1) }), rowLimit: 10)
-        #expect(model.rows.count == 10)
-        #expect(model.hiddenRowCount == 40)
+        #expect(model.visible(expanded: []).rows.count == 10)
+        #expect(model.visible(expanded: []).hiddenRowCount == 40)
+    }
+
+    @Test func collapsingRestoresOtherRootsAtTheBudgetBoundary() {
+        let archive = archive([("A/B/C/one", 1), ("A/B/C/two", 1), ("z.txt", 1)])
+        let model = ArchivePreviewModel(archive: archive, rowLimit: 2)
+        let open = model.visible(expanded: ["A", "A/B", "A/B/C"])
+        #expect(open.rows.map(\.id) == ["A", "A/B"])
+        #expect(open.hiddenRowCount == 4)
+        let closed = model.visible(expanded: ["A/B", "A/B/C"])
+        #expect(closed.rows.map(\.id) == ["A", "z.txt"])
+        #expect(closed.hiddenRowCount == 0)
     }
 
     @Test func headlinePrefersCautionThenHandled() {
@@ -117,7 +130,7 @@ struct QuickLookPreviewTests {
         try ZipFixture(entries: [.file("Docs/a.txt", "hi"), .file("b.txt", "yo")]).write(to: zip)
         let content = await ArchivePreviewLoader.load(zip) { try await ArchiveEngine.shared.list($0) }
         guard case .listed(let model) = content else { Issue.record("expected a listing, got \(content)"); return }
-        #expect(model.rows.map(\.id) == ["Docs", "Docs/a.txt", "b.txt"])
+        #expect(model.visible(expanded: ["Docs"]).rows.map(\.id) == ["Docs", "Docs/a.txt", "b.txt"])
         #expect(model.headline == nil)
     }
 

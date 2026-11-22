@@ -190,6 +190,9 @@ struct GlanceView: View {
             InstallerCanvasView(model: model, canvas: canvas, isSearchFocused: .constant(false))
                 .safeAreaPadding(.bottom, 56)
                 .transition(.opacity)
+        } else if model.glanceViewMode == .icons {
+            ContentGrid(model: model, isSearchFocused: .constant(false))
+                .safeAreaPadding(.bottom, 56)
         } else {
             GlanceList(model: model)
         }
@@ -412,6 +415,7 @@ private struct ColourfulWindowControl: ButtonStyle {
 private struct GlanceList: View {
     @Bindable var model: BrowserModel
     @State private var hover = HoverPreviewModel()
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         ScrollViewReader { scroller in
@@ -468,11 +472,18 @@ private struct GlanceList: View {
             .alternatingRowBackgrounds(.disabled)
             // The rows sit on the window's surface.
             .scrollContentBackground(.hidden)
+            .focused($isFocused)
+            .onAppear { isFocused = true }
             .collapsesSelectionOnClick(model)
             .safeAreaPadding(.bottom, 56)
             .quickLookKeys(model)
             .onChange(of: model.selection) { model.selectionDidChange() }
-            .onChange(of: model.scrollTarget) { _, target in
+            .onChange(of: model.historyScrollTarget, initial: true) { _, target in
+                guard let target else { return }
+                scroller.scrollTo(target, anchor: .top)
+                model.historyScrollTarget = nil
+            }
+            .onChange(of: model.scrollTarget, initial: true) { _, target in
                 guard let target else { return }
                 scroller.scrollTo(target)
                 model.scrollTarget = nil

@@ -15,7 +15,7 @@ final class ServiceDelegate: NSObject, NSXPCListenerDelegate {
     }
 }
 
-EngineService.removeStaleOutputs()
+EngineService.prepareStaging()
 let delegate = ServiceDelegate()
 let listener = NSXPCListener.service()
 listener.delegate = delegate

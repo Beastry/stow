@@ -31,6 +31,39 @@ struct ArchivePasswordVaultTests {
         return try body(store, defaults, archive)
     }
 
+    @Test func saveAndAutomaticUnlockCanBeChangedIndependently() throws {
+        try withVault { _, settings, archive in
+            #expect(!SettingsKeys.automaticallyUnlocks(in: settings))
+            SettingsKeys.setRememberPasswords(true, in: settings)
+            ArchivePasswordVault.remember("saved", for: archive, in: settings)
+            #expect(ArchivePasswordVault.recalled(for: archive, in: settings) == nil)
+            let entry = try #require(ArchivePasswordVault.entries().first)
+            #expect(ArchivePasswordVault.passwordForPacking(from: entry) == "saved")
+
+            settings.set(true, forKey: SettingsKeys.automaticallyUnlockArchives)
+            SettingsKeys.setRememberPasswords(false, in: settings)
+            ArchivePasswordVault.remember("discarded", for: archive, in: settings)
+            #expect(ArchivePasswordVault.recalled(for: archive, in: settings) == "saved")
+
+            ArchivePasswordVault.forget(entry)
+            #expect(ArchivePasswordVault.passwordForPacking(from: entry) == nil)
+        }
+    }
+
+    @Test func legacyOptInStillUnlocksAutomaticallyUntilChanged() throws {
+        try withVault { _, settings, archive in
+            settings.set(true, forKey: SettingsKeys.rememberPasswords)
+            ArchivePasswordVault.remember("saved", for: archive, in: settings)
+            #expect(ArchivePasswordVault.recalled(for: archive, in: settings) == "saved")
+            SettingsKeys.setRememberPasswords(false, in: settings)
+            #expect(ArchivePasswordVault.recalled(for: archive, in: settings) == "saved")
+            settings.set(false, forKey: SettingsKeys.automaticallyUnlockArchives)
+            #expect(ArchivePasswordVault.recalled(for: archive, in: settings) == nil)
+            let entry = try #require(ArchivePasswordVault.entries().first)
+            #expect(ArchivePasswordVault.passwordForPacking(from: entry) == "saved")
+        }
+    }
+
     @Test func identityUsesPathSizeAndDate() throws {
         let folder = try VaultableFolder()
         defer { folder.cleanUp() }

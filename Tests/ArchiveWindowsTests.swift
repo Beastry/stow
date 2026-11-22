@@ -176,7 +176,11 @@ struct ArchiveTransferTests {
         try Data("new".utf8).write(to: extra)
         source.editSession.add([extra], into: "")
         let transfer = ArchiveTransfer(source: source, entries: source.archive.files)
-        try await transfer.copy(to: target, level: target.level, folder: "") { _ in }
+        try await transfer.copy(to: target, level: target.level, folder: "", present: { prompt, _ in
+            let primary = prompt.choices.firstIndex { $0.role == .primary }
+            #expect(primary.map { prompt.choices[$0].title } == "Keep Both")
+            return .init(choice: primary ?? 0, suppress: false)
+        }) { _ in }
         #expect(source.editSession.operations.count == 2)
         #expect(try Data(contentsOf: source.archive.source!.url) == original)
         #expect(target.archive.entry(at: "renamed 2.txt") != nil)

@@ -710,3 +710,170 @@ struct PackPlanTests {
         #expect(PackRequest.collect(mixed, remembered: nil).origins == mixed)
     }
 }
+
+@MainActor
+@Suite("Separate packing queue")
+struct SeparatePackingTests {
+    @Test func independentOutputsKeepFolderPathsAndAvoidEquivalentNames() async throws {
+        let temp = try TemporaryFolder()
+        defer { temp.cleanUp() }
+        let folder = temp.url.appending(path: "Photos.v1", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        let photo = folder.appending(path: "photo.txt")
+        let source = temp.url.appending(path: "Café.tar.GZ")
+        let existing = temp.url.appending(path: "CAFE\u{301}.7Z.002")
+        let bytes = Data(repeating: 0xA3, count: 4096)
+        try bytes.write(to: photo)
+        try bytes.write(to: source)
+        try Data("existing".utf8).write(to: existing)
+        let queue = SeparatePackQueue()
+        let inputs = PackRequest.collect([folder, source])
+        var options = PackOptions()
+        options.setFormat(.sevenZip)
+        let password = "separate-fixture-password"
+        let planned = inputs.separateReports(options: options, password: password, overrides: [:])
+        #expect(planned.map { $0.0 } == ["Photos.v1", "Café"])
+        let jobs = planned.map { name, report in
+            var job = job(name, items: report.items, in: temp.url)
+            job.request.format = .sevenZip
+            job.request.level = .store
+            job.request.threads = 1
+            job.request.verify = true
+            job.request.password = password
+            job.request.encryptFilenames = true
+            job.request.partCount = 2
+            return job
+        }
+        queue.start(jobs, cleanupDirectory: nil, cleanupOnlyOnSuccess: false, cleaned: { _ in }, completion: { _ in })
+        try await wait(for: queue)
+        for row in queue.rows {
+            #expect(row.phase == .completed)
+            #expect(row.verified)
+            #expect(row.placed.count == 2)
+        }
+        let first = try #require(queue.rows[0].placed.first)
+        let second = try #require(queue.rows[1].placed.first)
+        #expect(first.lastPathComponent == "Photos.v1.7z.001")
+        #expect(second.lastPathComponent == "Café 2.7z.001")
+        await expectEngineFailure(.passwordRequired) { _ = try await ArchiveEngine.shared.list(first) }
+        let operation = try await ArchiveEngine.shared.extract(first, paths: [], password: password) { _ in }
+        defer { ArchiveEngine.shared.discard(operation) }
+        let extracted = temp.url.appending(path: "extracted", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: false)
+        try await ArchiveEngine.shared.receive(operation, into: extracted)
+        #expect(try Data(contentsOf: extracted.appending(path: "Photos.v1/photo.txt")) == bytes)
+        #expect(try Data(contentsOf: existing) == Data("existing".utf8))
+        #expect(try Data(contentsOf: source) == bytes)
+    }
+
+    @Test func failureAndCancellationKeepSourcesUntilRetryFinishes() async throws {
+        let temp = try TemporaryFolder()
+        defer { temp.cleanUp() }
+        let owned = temp.url.appending(path: "owned", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: owned, withIntermediateDirectories: false)
+        let present = owned.appending(path: "present.txt")
+        let missing = owned.appending(path: "missing.txt")
+        try Data("present".utf8).write(to: present)
+        let queue = SeparatePackQueue()
+        queue.start([job("missing", items: [.init(source: missing, path: "missing.txt")], in: temp.url),
+                     job("present", items: [.init(source: present, path: "present.txt")], in: temp.url),
+                     job("cancelled", items: [.init(source: present, path: "present.txt")], in: temp.url)],
+                    cleanupDirectory: owned, cleanupOnlyOnSuccess: true, cleaned: { _ in }, completion: { _ in })
+        queue.cancel(queue.rows[2].id)
+        try await wait(for: queue)
+        if case .failed = queue.rows[0].phase {} else { Issue.record("Missing input should fail independently: \(queue.rows[0].phase)") }
+        #expect(queue.rows[1].phase == .completed)
+        #expect(queue.rows[2].phase == .cancelled)
+        #expect(queue.protects(owned))
+        #expect(FileManager.default.fileExists(atPath: present.path))
+        try Data("available again".utf8).write(to: missing)
+        queue.retry(queue.rows[0].id)
+        queue.retry(queue.rows[2].id)
+        queue.cancelAll()
+        try await wait(for: queue)
+        #expect(queue.rows[1].phase == .completed)
+        #expect(FileManager.default.fileExists(atPath: present.path))
+        queue.retry(queue.rows[0].id)
+        queue.retry(queue.rows[2].id)
+        try await wait(for: queue)
+        #expect(queue.rows.allSatisfy { $0.phase == .completed })
+        #expect(!FileManager.default.fileExists(atPath: owned.path))
+        #expect(queue.rows.flatMap(\.placed).allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    private func job(_ name: String, items: [TreeStream.Item], in destination: URL) -> PackController.Job {
+        .init(items: items, totalBytes: 1, attributes: false,
+              request: CreateRequest(operationID: UUID().uuidString, archiveName: name, format: .zip),
+              name: name, destination: destination)
+    }
+
+    private func wait(for queue: SeparatePackQueue) async throws {
+        let deadline = ContinuousClock.now + .seconds(30)
+        while queue.isRunning, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        try #require(!queue.isRunning)
+    }
+}
+
+@MainActor
+@Suite("ZIP entry passwords")
+struct ZIPEntryPasswordTests {
+    @Test func independentlyEncryptedEntriesCanBeSkippedAndReuseAcceptedPasswords() async throws {
+        let temp = try TemporaryFolder()
+        defer { temp.cleanUp() }
+        let archiveURL = temp.url.appending(path: "mixed.zip")
+        for (name, password) in [("a.txt", "fixture-one"), ("b.txt", "fixture-two"), ("c.txt", "fixture-one")] {
+            try Data(name.utf8).write(to: temp.url.appending(path: name))
+            let zip = Process()
+            zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+            zip.currentDirectoryURL = temp.url
+            // Fixed public test fixture values, supplied only to the archive-building tool.
+            zip.arguments = ["-q", "-P", password, archiveURL.lastPathComponent, name]
+            try zip.run()
+            zip.waitUntilExit()
+            try #require(zip.terminationStatus == 0)
+        }
+        let original = try Data(contentsOf: archiveURL)
+        let listing = try await ArchiveEngine.shared.list(archiveURL)
+        let archive = Archive(listing: listing, url: archiveURL)
+        let out = temp.url.appending(path: "extracted", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: false)
+        var questions: [String] = []
+        let passwords = PasswordHook { name, _ in
+            questions.append(name)
+            return name == "a.txt" ? "fixture-one" : nil
+        }
+        let result = try await Extraction.run(archive, selection: nil, to: out, options: .init(),
+                                              passwords: passwords) { _ in }
+        #expect(questions == ["a.txt", "b.txt"])
+        #expect(result.passwordCompleted == ["a.txt", "c.txt"])
+        #expect(result.passwordSkipped == ["b.txt"])
+        #expect(!result.isComplete)
+        let root = try #require(result.placed.first)
+        #expect(try Data(contentsOf: root.appending(path: "a.txt")) == Data("a.txt".utf8))
+        #expect(try Data(contentsOf: root.appending(path: "c.txt")) == Data("c.txt".utf8))
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: "b.txt").path))
+        let skippedOut = temp.url.appending(path: "all skipped", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: skippedOut, withIntermediateDirectories: false)
+        let allSkipped = try await Extraction.run(archive, selection: nil, to: skippedOut, options: .init(),
+                                                  passwords: PasswordHook { _, _ in nil }) { _ in }
+        #expect(allSkipped.placed.isEmpty)
+        #expect(allSkipped.passwordCompleted.isEmpty)
+        #expect(allSkipped.passwordSkipped == ["a.txt", "b.txt", "c.txt"])
+        #expect(!allSkipped.isComplete)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: skippedOut.path).isEmpty)
+
+        let conflictOut = temp.url.appending(path: "conflict", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: conflictOut, withIntermediateDirectories: false)
+        let old = Data("existing content".utf8)
+        try old.write(to: conflictOut.appending(path: "a.txt"))
+        let selection = archive.files.filter { $0.path != "b.txt" }
+        let conflict = try await Extraction.run(archive, selection: selection, to: conflictOut,
+                                               options: .init(resolve: { _ in .skip }),
+                                               passwords: PasswordHook { _, _ in "fixture-one" }) { _ in }
+        #expect(conflict.passwordCompleted == ["c.txt"])
+        #expect(conflict.unplacedZIPEntries == ["a.txt"])
+        #expect(!conflict.isComplete)
+        #expect(try Data(contentsOf: conflictOut.appending(path: "a.txt")) == old)
+        #expect(try Data(contentsOf: archiveURL) == original)
+    }
+}

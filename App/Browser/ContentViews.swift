@@ -72,7 +72,19 @@ struct ContentGrid: View {
                     .overlay(alignment: .topLeading) { marqueeRectangle }
                     .coordinateSpace(.named("grid"))
                 }
-                .onChange(of: model.scrollTarget) { _, target in
+                .onScrollGeometryChange(for: Int.self) { geometry in
+                    let offset = geometry.visibleRect.minY - GridMetrics.inset
+                    return max(0, Int(offset / (GridMetrics.tileHeight + GridMetrics.spacing)))
+                } action: { _, row in
+                    let index = row * metrics.columns
+                    if entries.indices.contains(index) { model.recordSearchScrollAnchor(entries[index].id) }
+                }
+                .onChange(of: model.historyScrollTarget, initial: true) { _, target in
+                    guard let target, let index = model.position(of: target) else { return }
+                    scroller.scrollTo(index / metrics.columns, anchor: .top)
+                    model.historyScrollTarget = nil
+                }
+                .onChange(of: model.scrollTarget, initial: true) { _, target in
                     guard let target, let index = model.position(of: target) else { return }
                     // Keyboard-driven: no animation.
                     scroller.scrollTo(index / metrics.columns)
@@ -89,7 +101,7 @@ struct ContentGrid: View {
         // Search hands the keyboard back to the files when it lets go (Esc, or a click away),
         // and when the window first opens, so arrow keys work straight away.
         .filesTakeKeyboard($isFocused, isSearchFocused: isSearchFocused)
-        .browserKeys(model)
+        .browserKeys(model, in: .grid)
         .onChange(of: model.demoHover, initial: true) { if let id = model.demoHover { hover.present(id) } }
     }
 
@@ -220,7 +232,7 @@ private struct GridTile: View {
 extension View {
     /// The browser's keyboard, shared by the icon grid and column view (the list's table brings
     /// its own arrows): arrows move (⇧ extends), Space is Quick Look, Return opens, letters jump.
-    func browserKeys(_ model: BrowserModel) -> some View {
+    func browserKeys(_ model: BrowserModel, in presentation: BrowserModel.ViewMode? = nil) -> some View {
         self
             .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { press in
                 guard press.modifiers.isDisjoint(with: [.command, .option, .control]) else { return .ignored }
@@ -230,14 +242,14 @@ extension View {
                 case .leftArrow: .left
                 default: .right
                 }
-                model.move(direction, extending: press.modifiers.contains(.shift))
+                model.move(direction, extending: press.modifiers.contains(.shift), in: presentation)
                 return .handled
             }
             .quickLookKeys(model)
             .onKeyPress(characters: .alphanumerics.union(.punctuationCharacters), phases: .down) { press in
                 guard press.modifiers.isDisjoint(with: [.command, .option, .control]) else { return .ignored }
                 guard model.renamingPath == nil else { return .ignored }
-                model.typeSelect(press.characters)
+                model.typeSelect(press.characters, in: presentation)
                 return .handled
             }
     }
@@ -374,6 +386,11 @@ struct ContentList: View {
             .quickLookKeys(model)
             .onChange(of: model.selection) { model.selectionDidChange() }
             .onChange(of: model.demoHover, initial: true) { if let id = model.demoHover { hover.present(id) } }
+            .onChange(of: model.historyScrollTarget, initial: true) { _, target in
+                guard let target else { return }
+                scroller.scrollTo(target, anchor: .top)
+                model.historyScrollTarget = nil
+            }
             .onChange(of: model.scrollTarget) { _, target in
                 guard let target else { return }
                 scroller.scrollTo(target)
@@ -413,6 +430,7 @@ struct TableClickSelection: NSViewRepresentable {
         private var monitor: Any?
         /// The table whose rows drag out and take drops (see `ArchiveTableDragSource`).
         private weak var dragTable: NSTableView?
+        private var boundsMonitor: (any NSObjectProtocol)?
         /// The selected row a plain press landed on, while it can still become a click.
         private var press: (row: Int, point: NSPoint)?
 
@@ -433,6 +451,7 @@ struct TableClickSelection: NSViewRepresentable {
             guard window != nil else {
                 if let dragTable { ArchiveTableDragSource.uninstall(from: dragTable) }
                 dragTable = nil
+                stopTrackingScroll()
                 return
             }
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
@@ -452,14 +471,39 @@ struct TableClickSelection: NSViewRepresentable {
 
         func installDragSource() {
             guard window != nil, let table = nearbyTable() else { return }
-            if let dragTable, dragTable !== table { ArchiveTableDragSource.uninstall(from: dragTable) }
+            if dragTable !== table {
+                if let dragTable { ArchiveTableDragSource.uninstall(from: dragTable) }
+                trackScroll(in: table)
+            }
             dragTable = table
             ArchiveTableDragSource.install(on: table, model: model)
+        }
+
+        private func stopTrackingScroll() {
+            if let boundsMonitor { NotificationCenter.default.removeObserver(boundsMonitor) }
+            boundsMonitor = nil
+        }
+
+        private func trackScroll(in table: NSTableView) {
+            stopTrackingScroll()
+            guard let clip = table.enclosingScrollView?.contentView else { return }
+            clip.postsBoundsChangedNotifications = true
+            boundsMonitor = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification,
+                                                                   object: clip, queue: .main) { [weak self, weak table] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let table, self.model.isSearching else { return }
+                    let row = table.rows(in: table.visibleRect).location
+                    if self.model.visibleEntries.indices.contains(row) {
+                        self.model.recordSearchScrollAnchor(self.model.visibleEntries[row].id)
+                    }
+                }
+            }
         }
 
         isolated deinit {
             if let monitor { NSEvent.removeMonitor(monitor) }
             if let dragTable { ArchiveTableDragSource.uninstall(from: dragTable) }
+            if let boundsMonitor { NotificationCenter.default.removeObserver(boundsMonitor) }
         }
 
         func handle(_ event: NSEvent) {

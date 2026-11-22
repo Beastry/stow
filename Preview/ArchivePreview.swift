@@ -42,10 +42,12 @@ struct ArchivePreview: View {
 }
 
 private struct ListedPreview: View {
+    @State private var expanded: Set<String> = []
     let model: ArchivePreviewModel
     let openInStow: (() -> Void)?
 
     var body: some View {
+        let visible = model.visible(expanded: expanded)
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 PreviewHeader(name: model.name, format: model.format, summary: model.summary,
@@ -63,11 +65,21 @@ private struct ListedPreview: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(model.rows) { row in
-                        TreeRow(row: row)
+                    ForEach(visible.rows) { row in
+                        if row.hasChildren {
+                            Button {
+                                if !expanded.insert(row.id).inserted { expanded.remove(row.id) }
+                            } label: {
+                                TreeRow(row: row, expanded: expanded.contains(row.id))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(expanded.contains(row.id) ? String(localized: "Collapse \(row.name)") : String(localized: "Expand \(row.name)"))
+                        } else {
+                            TreeRow(row: row, expanded: false)
+                        }
                     }
-                    if model.hiddenRowCount > 0 {
-                        Text("and \(model.hiddenRowCount.formatted()) more — open in Stow to see everything")
+                    if visible.hiddenRowCount > 0 {
+                        Text("and \(visible.hiddenRowCount.formatted()) more — open in Stow to see everything")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
@@ -216,9 +228,14 @@ private struct FindingLine: View {
 
 private struct TreeRow: View {
     let row: ArchivePreviewModel.Row
+    let expanded: Bool
 
     var body: some View {
         HStack(spacing: 6) {
+            if row.hasChildren {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .accessibilityHidden(true)
+            }
             Image(nsImage: Self.icon(for: row))
                 .resizable()
                 .frame(width: 16, height: 16)
@@ -237,6 +254,7 @@ private struct TreeRow: View {
         .padding(.leading, 16 + CGFloat(min(row.depth, 12)) * 16)
         .padding(.trailing, 16)
         .frame(height: 22)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel([row.name, row.isFolder ? String(localized: "Folder") : (UTType(filenameExtension: (row.name as NSString).pathExtension)?.localizedDescription ?? String(localized: "File")), row.isFolder ? nil : row.size.bytes].compactMap { $0 }.joined(separator: ", "))
     }

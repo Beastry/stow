@@ -11,7 +11,39 @@ nonisolated enum ExclusivePublication {
         case rollbackIncomplete([URL])
     }
 
+    struct DirectoryIdentity: Sendable, Equatable {
+        private let device: dev_t
+        private let inode: ino_t
+
+        static var changed: EngineError {
+            EngineError(.failed, String(localized: "The destination folder moved or was replaced. Choose it again."))
+        }
+
+        init(_ url: URL) throws(EngineError) {
+            var info = stat()
+            guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else {
+                throw Self.changed
+            }
+            self.init(info)
+        }
+
+        private init(_ info: stat) {
+            device = info.st_dev
+            inode = info.st_ino
+        }
+
+        func matches(_ fd: Int32) -> Bool {
+            var info = stat()
+            return fstat(fd, &info) == 0 && self == Self(info)
+        }
+
+        func verify(_ url: URL) throws(EngineError) {
+            guard (try? Self(url)) == self else { throw Self.changed }
+        }
+    }
+
     struct Options: Sendable {
+        var destinationIdentity: DirectoryIdentity?
         var forceCopy = false
         /// Exercise the native companion protocol on a filesystem without AppleDouble storage.
         var forceMetadataCompanions = false
@@ -170,9 +202,16 @@ nonisolated enum ExclusivePublication {
     static func publishSynchronously(source: URL, to target: URL, options: Options = .init(), checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws -> Receipt {
         try options.checkCancellation(); try checkCancellation()
         let parent = open(target.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard parent >= 0 else { throw system("open destination", target) }
+        guard parent >= 0 else {
+            let code = errno
+            try options.destinationIdentity?.verify(target.deletingLastPathComponent())
+            throw system("open destination", target, code)
+        }
         var transferred = false
         defer { if !transferred { close(parent) } }
+        if let expected = options.destinationIdentity, !expected.matches(parent) {
+            throw DirectoryIdentity.changed
+        }
         let sourceParent = open(source.deletingLastPathComponent().path, O_SEARCH | O_NOFOLLOW | O_CLOEXEC)
         guard sourceParent >= 0 else { throw system("open source parent", source) }
         defer { close(sourceParent) }

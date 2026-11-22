@@ -121,7 +121,8 @@ final class SystemActions {
                         if Task.isCancelled { throw EngineError(.cancelled) }
                         source = ArchiveAftercare.Source.capture(url)
                         return try await Extraction.run(archive, selection: nil, to: folder,
-                                                        options: options, onProgress: report)
+                                                        options: options, passwords: passwords,
+                                                        candidates: session.successful, onProgress: report)
                     }
                 }
                 placed += result.placed
@@ -129,7 +130,7 @@ final class SystemActions {
                 if !result.isComplete {
                     _ = await Prompts.explain(Failure(
                         String(localized: "Some items were not extracted."),
-                        advice: String(localized: "The original archive was kept. Review the extracted files before trying again."),
+                        advice: Extraction.partialAdvice(result),
                         code: ErrorCode(.extract, .unknown)))
                 }
             } catch {

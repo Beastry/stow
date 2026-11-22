@@ -20,8 +20,8 @@ struct SettingsTests {
                 "install.afterInstall", "install.removeQuarantine", "PackAudience", "PackVerify",
                 "PackCPUCores", "FinderMenuOnExternalDrives",
                 "general.appearance", "browse.defaultView", "PackVolumeSize",
-                "browse.hoverPreviews", "password.showByDefault", "password.rememberInKeychain",
-                "glance.openFromFinder", "browse.archiveWindowMode", "browse.lastArchiveWindow", "glance.pinned", "glance.colourfulControls", "glance.material",
+                "browse.hoverPreviews", "password.showByDefault", "password.rememberInKeychain", "password.automaticallyUnlockArchives",
+                "glance.openFromFinder", "browse.archiveWindowMode", "browse.lastArchiveWindow", "glance.pinned", "glance.colourfulControls", "glance.material", "glance.defaultView",
                 "tray.enabled", "tray.menuBarIcon", "tray.showWhileDragging", "tray.border", "tray.pinned",
                 "nextSteps.shown", "nextSteps.hidden", "SUEnableAutomaticChecks", "SUAutomaticallyUpdate",
                 "PackLevel.general", "PackLevel.windows", "PackLevel.mac", "PackLevel.linux", "PackLevel.web",
@@ -218,18 +218,20 @@ struct SettingsTests {
     /// Glance's choices moved from General to their own page (#162): each reset follows its controls.
     @Test func glancePageResetLeavesGeneral() throws {
         let glanceKeys: Set<String> = [SettingsKeys.openInGlance, SettingsKeys.archiveWindowMode, SettingsKeys.lastArchiveWindow, SettingsKeys.glancePinned,
-                                       SettingsKeys.glanceColourfulControls, SettingsKeys.glanceMaterial]
+                                       SettingsKeys.glanceColourfulControls, SettingsKeys.glanceMaterial, SettingsKeys.glanceDefaultView]
         #expect(Set(SettingsKeys.resettableEntries(for: .glance).map(\.key)) == glanceKeys)
         #expect(glanceKeys.isDisjoint(with: SettingsKeys.resettableEntries(for: .general).map(\.key)))
         try withStore { store in
             store.set(true, forKey: SettingsKeys.openInGlance)
             store.set(true, forKey: SettingsKeys.glanceColourfulControls)
             store.set(SettingsKeys.GlanceMaterialPreference.classic.rawValue, forKey: SettingsKeys.glanceMaterial)
+            store.set("icons", forKey: SettingsKeys.glanceDefaultView)
             store.set("dark", forKey: SettingsKeys.appearance)
 
             SettingsKeys.reset(.pane(.general), in: store)
             #expect(SettingsKeys.flag(SettingsKeys.openInGlance, in: store))
             #expect(SettingsKeys.glanceMaterialPreference(in: store) == .classic)
+            #expect(SettingsKeys.glanceView(in: store) == .icons)
             #expect(SettingsKeys.appearance(in: store) == .system)
 
             store.set("dark", forKey: SettingsKeys.appearance)
@@ -238,6 +240,7 @@ struct SettingsTests {
             #expect(!SettingsKeys.flag(SettingsKeys.openInGlance, in: store))
             #expect(!SettingsKeys.flag(SettingsKeys.glanceColourfulControls, in: store))
             #expect(SettingsKeys.glanceMaterialPreference(in: store) == .liquidGlass)
+            #expect(SettingsKeys.glanceView(in: store) == .list)
             #expect(SettingsKeys.appearance(in: store) == .dark)
         }
     }

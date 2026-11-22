@@ -9,6 +9,7 @@ nonisolated struct ArchivePreviewModel: Sendable {
         let name: String
         let depth: Int
         let isFolder: Bool
+        let hasChildren: Bool
         let size: Int64
     }
 
@@ -21,9 +22,14 @@ nonisolated struct ArchivePreviewModel: Sendable {
     var isEncrypted: Bool
     var headline: CheckupFinding?
     var cautionCount: Int
-    /// Folders first, then files, depth-first — capped so a huge archive still opens instantly.
-    var rows: [Row]
-    var hiddenRowCount: Int
+    private let children: [String: [ArchiveEntry]]
+    private let limit: Int
+
+    struct Visible {
+        var rows: [Row] = []
+        /// Expanded entries beyond the display budget. Collapsed descendants do not count.
+        var hiddenRowCount = 0
+    }
 
     static let rowLimit = 1_500
 
@@ -47,23 +53,40 @@ nonisolated struct ArchivePreviewModel: Sendable {
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
         }
-        var rows: [Row] = []
-        var hidden = 0
-        // Iterative depth-first walk: archives can nest deeper than the stack likes.
-        var stack: [(ArchiveEntry, Int)] = (children[""] ?? []).reversed().map { ($0, 0) }
-        while let (entry, depth) = stack.popLast() {
-            if rows.count < rowLimit {
-                rows.append(Row(id: entry.path, name: entry.name, depth: depth,
-                                isFolder: entry.isFolder, size: entry.size))
-            } else {
-                hidden += 1
-            }
-            if entry.isFolder {
-                stack += (children[entry.path] ?? []).reversed().map { ($0, depth + 1) }
+        self.children = children
+        self.limit = max(0, rowLimit)
+    }
+
+    func visible(expanded: Set<String>) -> Visible {
+        var result = Visible()
+        // Stack frames refer to sibling arrays without copying the whole subtree.
+        var stack: [(entries: [ArchiveEntry], index: Int)] = [(children[""] ?? [], 0)]
+        var total = children[""]?.count ?? 0
+        var visibleFolders: Set<String> = [""]
+        // Parents sort before their descendants. Count whole sibling arrays without walking
+        // every file when a very wide folder exceeds Quick Look's budget.
+        for path in expanded.sorted() {
+            let parent = (path as NSString).deletingLastPathComponent
+            if visibleFolders.contains(parent), let entries = children[path] {
+                visibleFolders.insert(path)
+                total += entries.count
             }
         }
-        self.rows = rows
-        hiddenRowCount = hidden
+        while result.rows.count < limit, let frame = stack.last {
+            guard frame.index < frame.entries.count else {
+                stack.removeLast()
+                continue
+            }
+            let entry = frame.entries[frame.index]
+            let depth = stack.count - 1
+            stack[depth].index += 1
+            let descendants = entry.isFolder ? children[entry.path] : nil
+            result.rows.append(Row(id: entry.path, name: entry.name, depth: depth,
+                                   isFolder: entry.isFolder, hasChildren: descendants != nil, size: entry.size))
+            if expanded.contains(entry.path), let descendants { stack.append((descendants, 0)) }
+        }
+        result.hiddenRowCount = total - result.rows.count
+        return result
     }
 
     /// The finding that matters most: a caution, then anything Stow handled, then the rest.
@@ -151,16 +174,20 @@ nonisolated enum ArchivePreviewLoader {
         let listing = Task { () -> Result<ArchiveListing, EngineError> in
             do { return .success(try await list(url)) } catch { return .failure(EngineError(error)) }
         }
-        let result = await withCheckedContinuation { (continuation: CheckedContinuation<Result<ArchiveListing, EngineError>?, Never>) in
-            let once = ContinuationBox(continuation)
-            Task {
-                let value = await listing.value
-                once.resume(returning: value)
+        let result = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Result<ArchiveListing, EngineError>?, Never>) in
+                let once = ContinuationBox(continuation)
+                Task {
+                    let value = await listing.value
+                    once.resume(returning: value)
+                }
+                Task {
+                    try? await Task.sleep(for: timeout)
+                    once.resume(returning: nil)
+                }
             }
-            Task {
-                try? await Task.sleep(for: timeout)
-                once.resume(returning: nil)
-            }
+        } onCancel: {
+            listing.cancel()
         }
         if result == nil { listing.cancel() }
         switch result {

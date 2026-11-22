@@ -9,6 +9,7 @@ nonisolated enum SettingsKeys {
     static let showPassword = "password.showByDefault"
     /// Opt-in Keychain vault for archive passwords (#76). Off by default.
     static let rememberPasswords = "password.rememberInKeychain"
+    static let automaticallyUnlockArchives = "password.automaticallyUnlockArchives"
     static let openInGlance = "glance.openFromFinder" // Legacy fixed-mode preference.
     static let archiveWindowMode = "browse.archiveWindowMode"
     static let lastArchiveWindow = "browse.lastArchiveWindow"
@@ -50,6 +51,24 @@ nonisolated enum SettingsKeys {
     }
     static let glancePinned = "glance.pinned"
     static let glanceColourfulControls = "glance.colourfulControls"
+    static let glanceDefaultView = "glance.defaultView"
+
+    enum GlanceViewMode: String, CaseIterable, Identifiable, Sendable {
+        case list, icons
+
+        var id: Self { self }
+        var title: String {
+            switch self {
+            case .list: String(localized: "List")
+            case .icons: String(localized: "Icons")
+            }
+        }
+    }
+
+    static func glanceView(in store: UserDefaults = .standard) -> GlanceViewMode {
+        GlanceViewMode(rawValue: store.string(forKey: glanceDefaultView) ?? "") ?? .list
+    }
+
     /// Liquid Glass vs classic frosted Glance background (#158). Default preserves Liquid Glass.
     static let glanceMaterial = "glance.material"
     static let trayEnabled = "tray.enabled"
@@ -116,9 +135,11 @@ nonisolated enum SettingsKeys {
         .init(key: hoverPreviews, defaultValue: .bool(true)),
         .init(key: showPassword, defaultValue: .bool(false)),
         .init(key: rememberPasswords, defaultValue: .bool(false)),
+        .init(key: automaticallyUnlockArchives, defaultValue: .bool(false)),
         .init(key: openInGlance, defaultValue: .bool(false)),
         .init(key: archiveWindowMode, defaultValue: .string(ArchiveWindowMode.lastUsed.rawValue)),
         .init(key: lastArchiveWindow, defaultValue: .string(ArchiveWindow.browser.rawValue)),
+        .init(key: glanceDefaultView, defaultValue: .string(GlanceViewMode.list.rawValue)),
         .init(key: glancePinned, defaultValue: .bool(false)),
         .init(key: glanceColourfulControls, defaultValue: .bool(false)),
         .init(key: glanceMaterial, defaultValue: .string(GlanceMaterialPreference.liquidGlass.rawValue)),
@@ -159,7 +180,7 @@ nonisolated enum SettingsKeys {
         case .glance:
             // Pin on Top is set from Glance itself (and Window › Keep Glance on Top), not shown here,
             // but it is Glance's preference, so it resets with this page.
-            keys = [openInGlance, archiveWindowMode, lastArchiveWindow, glancePinned, glanceColourfulControls, glanceMaterial]
+            keys = [openInGlance, archiveWindowMode, lastArchiveWindow, glancePinned, glanceColourfulControls, glanceMaterial, glanceDefaultView]
         case .extraction:
             keys = [
                 Preferences.Key.extractAllFolder, Preferences.Key.afterExtractAll,
@@ -177,7 +198,7 @@ nonisolated enum SettingsKeys {
         case .previews:
             keys = [hoverPreviews]
         case .passwords:
-            keys = [showPassword, rememberPasswords]
+            keys = [showPassword, rememberPasswords, automaticallyUnlockArchives]
         case .integration:
             keys = ["FinderMenuOnExternalDrives"]
         case .fileTypes, .advanced, .licenses:
@@ -203,6 +224,18 @@ nonisolated enum SettingsKeys {
     static func defaultValue(for key: String) -> DefaultValue {
         resettable.first { $0.key == key }!.defaultValue
     }
+    /// Previous versions used the save preference for both behaviors.
+    static func automaticallyUnlocks(in store: UserDefaults = .standard) -> Bool {
+        store.object(forKey: automaticallyUnlockArchives) as? Bool ?? flag(rememberPasswords, in: store)
+    }
+
+    static func setRememberPasswords(_ enabled: Bool, in store: UserDefaults = .standard) {
+        if store.object(forKey: automaticallyUnlockArchives) == nil {
+            store.set(automaticallyUnlocks(in: store), forKey: automaticallyUnlockArchives)
+        }
+        store.set(enabled, forKey: rememberPasswords)
+    }
+
     static func appearance(in store: UserDefaults = .standard) -> Appearance {
         Appearance(rawValue: store.string(forKey: appearance) ?? "") ?? .system
     }

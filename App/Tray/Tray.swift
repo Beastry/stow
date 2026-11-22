@@ -621,11 +621,16 @@ final class TrayController {
     /// restores the row when the folder is still present.
     private func takeOff(_ ids: Set<UUID>, actionName: String) {
         guard !isSavingTemporaryResult else { return }
-        let removed = items.enumerated().filter { ids.contains($0.element.id) }.map { (index: $0.offset, item: $0.element) }
+        let removed = items.enumerated().filter { entry in
+            guard ids.contains(entry.element.id) else { return false }
+            guard entry.element.isTemporaryGroup, let url = entry.element.url else { return true }
+            return !packProtects(url)
+        }.map { (index: $0.offset, item: $0.element) }
         guard !removed.isEmpty else { return }
         let selected = selection
-        items.removeAll { ids.contains($0.id) }
-        selection.subtract(ids)
+        let removedIDs = Set(removed.map { $0.item.id })
+        items.removeAll { removedIDs.contains($0.id) }
+        selection.subtract(removedIDs)
         collected = nil
         for entry in removed where entry.item.isTemporaryGroup {
             if let url = entry.item.url, TrayTemporaryGroups.isOwned(url) {
@@ -633,7 +638,7 @@ final class TrayController {
             }
         }
         registerUndo(actionName) { tray in
-            tray.putBack(removed, selection: selected.intersection(ids), actionName: actionName)
+            tray.putBack(removed, selection: selected.intersection(removedIDs), actionName: actionName)
         }
     }
 
@@ -853,6 +858,11 @@ final class TrayController {
             parent, for: .explained(String(localized: "Stow needs access to this folder to collect the Tray’s items into it.")))
         endRelatedInteraction(interaction)
         guard let folder = authorizedFolder else { collectingName = typed; return }
+        if chosen.contains(where: { $0.isTemporaryGroup && ($0.url.map(packProtects) ?? false) }) {
+            collectingName = typed
+            collectProblem = String(localized: "A temporary item is still needed for packing.")
+            return
+        }
         let destination = folder.appending(path: name, directoryHint: .isDirectory)
         do {
             // Only knowable once the folder is readable: ask again, with what was typed.
@@ -899,13 +909,24 @@ final class TrayController {
         mark([made.id], announcing: Self.collectedTitle(destination, temporary: temporary))
     }
 
+    private func packProtects(_ folder: URL) -> Bool {
+        let path = folder.resolvingSymlinksInPath().standardizedFileURL.path
+        return app?.archiveSessions.contains { session in
+            session.pendingCommands > 0 || session.packing.separate.protects(folder)
+                || (session.packRequest?.origins.contains {
+                    let source = $0.standardizedFileURL.path
+                    return source == path || source.hasPrefix(path + "/")
+                } ?? false)
+        } ?? false
+    }
+
     /// Save To acts on one complete owned result, never on a folder's children or unrelated inputs.
     var temporaryResultToSave: TrayItem? {
         // An existing Pack sheet, gather or retryable job may own this group's cleanup. Wait
         // for packing to finish/dismiss instead of racing its source removal with export.
         // Read the concrete states, not AppState.isBusy (which itself includes Tray saving).
         let hasPackingWork = app?.archiveSessions.contains {
-            $0.pendingCommands > 0 || $0.packRequest != nil || $0.packing.activity != nil
+            $0.pendingCommands > 0 || $0.packRequest != nil || $0.packing.hasActivity
                 || $0.archiveDraft?.packRequest != nil || $0.archiveDraft?.isSaving == true
         } ?? false
         guard !hasPackingWork, path.isEmpty, targets.count == 1, let item = targets.first,

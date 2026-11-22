@@ -41,11 +41,12 @@ final class BrowserModel {
         var password: String?
         let edits: EditSession
         /// Where this archive sits in the level above; nil for the archive that was opened.
-        let entryPath: String?
+        fileprivate(set) var entryPath: String?
         fileprivate(set) var search: SearchIndex
         fileprivate(set) var indexed = 0
         /// The archives inside this one, read the first time someone searches (#21).
         fileprivate(set) var nested: NestedSearch?
+        fileprivate var nestedTask: Task<Void, Never>?
 
         init(archive: Archive, password: String? = nil, entryPath: String? = nil) {
             self.archive = archive
@@ -58,13 +59,17 @@ final class BrowserModel {
         }
     }
 
-    /// A place in the history: which chain of archives, and which folder in the innermost.
-    struct Location: Equatable {
+    /// A place in the history and the Browser state to resume there.
+    struct Location {
         let levels: [Level]
-        let folder: String
+        var folder: String
+        var query = ""
+        // Folder visits without an explicit selection retain the Finder-style child fallback.
+        var selection: Set<ArchiveEntry.ID>?
+        var scrollAnchor: ArchiveEntry.ID?
 
-        static func == (lhs: Location, rhs: Location) -> Bool {
-            lhs.folder == rhs.folder && lhs.levels.map(\.id) == rhs.levels.map(\.id)
+        func isSamePlace(as other: Location) -> Bool {
+            folder == other.folder && levels.map(\.id) == other.levels.map(\.id)
         }
     }
 
@@ -75,11 +80,31 @@ final class BrowserModel {
         didSet { updateRepresentedURL() }
     }
     var folder = "" { didSet { if folder != oldValue { refresh() } } }
-    var selection: Set<ArchiveEntry.ID> = []
-    var viewMode: ViewMode = SettingsKeys.browserView() {
+    var selection: Set<ArchiveEntry.ID> = [] {
+        didSet {
+            if isSearching, !selection.isEmpty, selection != oldValue { pendingSearchRestore = nil }
+        }
+    }
+    var viewMode: ViewMode {
         didSet { if viewMode != oldValue { refresh() } }
     }
-    var query = "" { didSet { if query != oldValue { runSearch() } } }
+    /// Per archive window, retained when switching between the Browser and Glance.
+    var glanceViewMode: SettingsKeys.GlanceViewMode {
+        didSet {
+            guard glanceViewMode != oldValue else { return }
+            scrollTarget = cursor.flatMap { selection.contains($0) ? $0 : nil }
+                ?? selection.min { (positions[$0] ?? .max) < (positions[$1] ?? .max) }
+        }
+    }
+    var query = "" {
+        didSet {
+            guard query != oldValue else { return }
+            pendingSearchRestore = nil
+            searchScrollAnchor = nil
+            historyScrollTarget = nil
+            runSearch()
+        }
+    }
     /// Edit › Find… (⌘F) asks the Browser's search field for the keyboard; it counts, so each
     /// press is a new request.
     private(set) var searchFocusRequest = 0
@@ -119,6 +144,10 @@ final class BrowserModel {
     private(set) var cursor: ArchiveEntry.ID?
     /// Set when the keyboard moved somewhere off screen; views scroll to it without animating.
     var scrollTarget: ArchiveEntry.ID?
+    /// The first visible match from a prior visit, aligned at the top when the view returns.
+    var historyScrollTarget: ArchiveEntry.ID?
+    private var searchScrollAnchor: ArchiveEntry.ID?
+    private var pendingSearchRestore: Location?
     /// Columns in the icon grid right now, for Up and Down.
     var gridColumns = 1
 
@@ -138,6 +167,7 @@ final class BrowserModel {
     isolated deinit {
         unlockTask?.cancel()
         installerCanvasTask?.cancel()
+        searchTask?.cancel()
     }
 
     /// A disk image's own window (#344), once read: nil while it's read, for other archives, and
@@ -172,6 +202,8 @@ final class BrowserModel {
     func cancelTransfers() {
         isClosed = true
         installerCanvasTask?.cancel()
+        searchTask?.cancel()
+        for level in levels + history.flatMap(\.levels) { level.nestedTask?.cancel() }
         for task in transferTasks.values { task.cancel() }
     }
 
@@ -212,7 +244,9 @@ final class BrowserModel {
     private(set) var listedCount = 0
 
     init(archive: Archive, previews: PreviewService = PreviewService(), isListing: Bool = false,
-         installerCanvas start: InstallerCanvasStart = .load) {
+         installerCanvas start: InstallerCanvasStart = .load, settings: UserDefaults = .standard) {
+        viewMode = SettingsKeys.browserView(in: settings)
+        glanceViewMode = SettingsKeys.glanceView(in: settings)
         self.isListing = isListing
         listedCount = archive.source?.listing?.entries.count ?? archive.entries.count
         let root = Level(archive: archive, password: archive.source?.password)
@@ -387,8 +421,22 @@ final class BrowserModel {
                 self.folder = EditSession.map(path: self.folder, through: moves)
                 self.selection = Set(self.selection.map { EditSession.map(path: $0, through: moves) })
             }
+            func mapped(_ path: String) -> String { EditSession.map(path: path, through: moves) }
+            let chains = self.history.map(\.levels) + [self.levels]
+            var updatedChildren: Set<UUID> = []
+            for chain in chains {
+                guard let parent = chain.firstIndex(where: { $0 === target }),
+                      let child = chain.dropFirst(parent + 1).first,
+                      let path = child.entryPath, updatedChildren.insert(child.id).inserted else { continue }
+                child.entryPath = mapped(path)
+            }
             self.history = self.history.map { location in
-                Location(levels: location.levels, folder: location.levels.last === target ? EditSession.map(path: location.folder, through: moves) : location.folder)
+                guard location.levels.last === target else { return location }
+                var location = location
+                location.folder = mapped(location.folder)
+                location.selection = location.selection.map { Set($0.map(mapped)) }
+                location.scrollAnchor = location.scrollAnchor.map(mapped)
+                return location
             }
             if let url = old.source?.url {
                 var updated = Archive(listing: target.edits.pending, url: url, name: old.name,
@@ -402,6 +450,8 @@ final class BrowserModel {
                     ArchiveEntry(path: $0.path, isFolder: $0.isFolder, size: $0.size, packedSize: $0.packedSize, modified: $0.modified ?? .distantPast)
                 })
             }
+            target.nestedTask?.cancel()
+            target.nested = nil
             target.search = SearchIndex(total: target.archive.index.visible.count + target.archive.index.helpers.count)
             target.indexed = 0
             if self.level === target {
@@ -425,9 +475,56 @@ final class BrowserModel {
     }
 
     func chooseAddFiles() {
-        guard !isListing else { return }
-        guard editSession.requireEditable() else { return }
-        Task { editSession.add(await PackDestination.chooseSources(forAdding: true), into: folder) }
+        guard !isListing, editSession.requireEditable() else { return }
+        let target = level, destination = folder
+        Task {
+            let urls = await PackDestination.chooseSources(forAdding: true)
+            await importFiles(urls, into: destination, level: target)
+        }
+    }
+
+    private(set) var resolvingImport = false
+
+    @discardableResult
+    func importFiles(_ urls: [URL], into folder: String, level target: Level,
+                     present: (Prompt, NSWindow?) async -> Prompt.Answer = Prompts.present) async -> Bool {
+        guard !isClosed, level === target, !Task.isCancelled, !urls.isEmpty,
+              !resolvingImport, target.edits.requireEditable() else { return false }
+        let edits = target.edits
+        var resolution = EditSession.ImportResolution.keepBoth
+        if edits.importHasConflicts(urls, into: folder) {
+            let archiveID = target.archive.id
+            resolvingImport = true
+            defer { resolvingImport = false }
+            let prompt = Prompt(symbol: "doc.on.doc.fill",
+                                title: String(localized: "Some items have the same name"),
+                                message: String(localized: "Keep Both gives incoming items unique names. Replace swaps in the last incoming item with each name, removing all contents of any folder it replaces."),
+                                choices: [.init(title: String(localized: "Cancel"), role: .cancel),
+                                          .init(title: String(localized: "Replace")),
+                                          .init(title: String(localized: "Keep Both"), role: .primary)])
+            let answer = await present(prompt, editingWindow)
+            guard !isClosed, level === target, target.archive.id == archiveID else { return false }
+            resolution = switch answer.choice {
+            case 1: .replace
+            case 2: .keepBoth
+            default: .cancel
+            }
+        }
+
+        return stageImport(urls, into: folder, level: target, resolution: resolution)
+    }
+
+    @discardableResult
+    func stageImport(_ urls: [URL], into folder: String, level target: Level, resolution: EditSession.ImportResolution) -> Bool {
+        let previousFolder = self.folder
+        let previousSelection = selection
+        return target.edits.add(urls, into: folder, resolving: resolution, select: { [weak self, weak target] paths in
+            guard let self, let target, self.level === target, self.folder == folder else { return }
+            self.selection = paths.filter { target.archive.entry(at: $0) != nil }
+        }, undoSelection: { [weak self, weak target] in
+            guard let self, let target, self.level === target, self.folder == previousFolder else { return }
+            self.selection = previousSelection.filter { target.archive.entry(at: $0) != nil }
+        })
     }
 
     func beginRename(_ entry: ArchiveEntry) {
@@ -459,12 +556,33 @@ final class BrowserModel {
         }
     }
 
-    @discardableResult func saveEdits() async -> Bool {
+    private var confirmingJARSave = false
+
+    private func confirmJARSave(for target: Level, title: String,
+                                present: (Prompt, NSWindow?) async -> Prompt.Answer) async -> Bool {
+        guard target.edits.hasJARSignature else { return true }
+        guard !confirmingJARSave else { return false }
+        confirmingJARSave = true
+        defer { confirmingJARSave = false }
+        let archiveID = target.archive.id
+        let prompt = Prompt(symbol: "exclamationmark.shield.fill",
+                            title: String(localized: "Save changes to a signed JAR?"),
+                            message: String(localized: "Editing a signed JAR can invalidate its signature. Java may reject the edited archive."),
+                            choices: [.init(title: title),
+                                      .init(title: String(localized: "Cancel"), role: .cancel)])
+        let answer = await present(prompt, editingWindow)
+        return answer.choice == 0 && !Task.isCancelled && !isClosed
+            && level === target && target.archive.id == archiveID
+    }
+
+    @discardableResult func saveEdits(present: (Prompt, NSWindow?) async -> Prompt.Answer = Prompts.present) async -> Bool {
         if renamingPath != nil {
             commitRename()
             guard renamingPath == nil else { return false }
         }
         let target = level
+        if target.edits.canSave,
+           !(await confirmJARSave(for: target, title: String(localized: "Save"), present: present)) { return false }
         if target.savedArchive.isEncrypted, target.password == nil {
             guard let password = await passwords.ask(archive.name, .extract, false) else { return false }
             target.password = password
@@ -478,7 +596,9 @@ final class BrowserModel {
         folder = EditSession.nearestExistingParent(oldFolder, in: target.edits.base)
         selection = Set(oldSelection.filter { target.archive.entry(at: $0) != nil })
         history = oldHistory.map { location in
-            Location(levels: location.levels, folder: location.levels.last === target ? mapped(location.folder) : location.folder)
+            var location = location
+            if location.levels.last === target { location.folder = mapped(location.folder) }
+            return location
         }
         refresh()
         return true
@@ -511,10 +631,11 @@ final class BrowserModel {
         folder = EditSession.nearestExistingParent(folderBefore, in: target.edits.base)
         selection = Set(selectionBefore.filter { target.archive.entry(at: $0) != nil })
         history = historyBefore.map { location in
-            Location(levels: location.levels,
-                     folder: location.levels.last === target
-                        ? EditSession.nearestExistingParent(location.folder, in: target.edits.base)
-                        : location.folder)
+            var location = location
+            if location.levels.last === target {
+                location.folder = EditSession.nearestExistingParent(location.folder, in: target.edits.base)
+            }
+            return location
         }
         refresh()
         runSearch()
@@ -537,13 +658,15 @@ final class BrowserModel {
     }
 
     /// Saves pending edits to a new file chosen by the user; the original stays byte-identical.
-    @discardableResult func saveCopyOfArchive() async -> Bool {
+    @discardableResult func saveCopyOfArchive(present: (Prompt, NSWindow?) async -> Prompt.Answer = Prompts.present) async -> Bool {
         guard editSession.isEdited, let source = archive.source?.url else { return false }
         if renamingPath != nil {
             commitRename()
             guard renamingPath == nil else { return false }
         }
         let target = level
+        guard target.edits.canSaveCopy,
+              await confirmJARSave(for: target, title: String(localized: "Save a Copy"), present: present) else { return false }
         if target.savedArchive.isEncrypted, target.password == nil {
             guard let password = await passwords.ask(archive.name, .extract, false) else { return false }
             target.password = password
@@ -563,10 +686,11 @@ final class BrowserModel {
         folder = EditSession.nearestExistingParent(oldFolder, in: target.edits.base)
         selection = Set(oldSelection.filter { target.archive.entry(at: $0) != nil })
         history = oldHistory.map { location in
-            Location(levels: location.levels,
-                     folder: location.levels.last === target
-                        ? EditSession.nearestExistingParent(location.folder, in: target.edits.base)
-                        : location.folder)
+            var location = location
+            if location.levels.last === target {
+                location.folder = EditSession.nearestExistingParent(location.folder, in: target.edits.base)
+            }
+            return location
         }
         refresh()
         return true
@@ -791,14 +915,32 @@ final class BrowserModel {
             return
         }
         let level = level, query = query, helpers = showHelperItems
+        let index = level.search
         startNestedSearch(level)
-        searchTask = Task {
-            let results = await level.search.search(query, includingHelpers: helpers)
-            let hits = await level.nested?.search(query, includingHelpers: helpers) ?? []
-            guard !Task.isCancelled, level === self.level else { return }
-            nestedHits = Dictionary(hits.map { ($0.entry.id, $0) }, uniquingKeysWith: { first, _ in first })
-            searchResults = results + hits.map(\.entry)
-            refresh()
+        let nested = level.nested
+        searchTask = Task { [weak self] in
+            let complete = index.isComplete && nested?.isLoading != true
+            let results = await index.search(query, includingHelpers: helpers)
+            guard !Task.isCancelled else { return }
+            let hits = await nested?.search(query, includingHelpers: helpers) ?? []
+            guard let self, !Task.isCancelled, !self.isClosed, level === self.level,
+                  index === level.search, nested === level.nested, query == self.query else { return }
+            self.nestedHits = Dictionary(hits.map { ($0.entry.id, $0) }, uniquingKeysWith: { first, _ in first })
+            self.searchResults = results + hits.map(\.entry)
+            self.refresh()
+            if let restore = self.pendingSearchRestore {
+                // A restored target may be missing from a partial index. Resolve the whole
+                // snapshot once indexing and nested inspection finish.
+                if complete {
+                    self.pendingSearchRestore = nil
+                    self.select((restore.selection ?? []).filter { self.positions[$0] != nil })
+                    self.historyScrollTarget = restore.scrollAnchor.flatMap { self.positions[$0] != nil ? $0 : nil }
+                    self.searchScrollAnchor = self.historyScrollTarget
+                }
+            } else {
+                let valid = self.selection.filter { self.positions[$0] != nil }
+                if valid != self.selection { self.select(valid) }
+            }
         }
     }
 
@@ -809,7 +951,7 @@ final class BrowserModel {
         level.nested = nested
         guard !nested.isEmpty else { return }
         let archive = level.archive
-        Task { [weak self, weak level] in
+        level.nestedTask = Task { [weak self, weak level] in
             await nested.load(in: archive, with: loader) {
                 guard let self, let level, level.nested === nested, self.level === level, self.isSearching else { return }
                 self.runSearch()
@@ -851,46 +993,95 @@ final class BrowserModel {
 
     private var location: Location { Location(levels: levels, folder: folder) }
 
+    func recordSearchScrollAnchor(_ id: ArchiveEntry.ID) {
+        guard isSearching, pendingSearchRestore == nil, historyScrollTarget == nil, positions[id] != nil else { return }
+        searchScrollAnchor = id
+    }
+
+    private func rememberLocation() {
+        var current = pendingSearchRestore ?? location
+        if pendingSearchRestore == nil {
+            current.query = query
+            current.selection = isSearching || !selection.isEmpty ? selection : nil
+            current.scrollAnchor = searchScrollAnchor
+        }
+        history[historyIndex] = current
+    }
+
     /// Shows `folder` (in `levels`, default the current chain), selecting `selecting`.
     func navigate(to folder: String, levels newLevels: [Level]? = nil, selecting: Set<ArchiveEntry.ID> = [],
                   record: Bool = true) {
-        let target = Location(levels: newLevels ?? levels, folder: folder)
-        if record, target != location {
+        let from = location
+        let target = Location(levels: newLevels ?? levels, folder: folder,
+                              selection: selecting.isEmpty ? nil : selecting)
+        // Revealing a result in the current folder is still a distinct history visit.
+        if record, !target.isSamePlace(as: from) || isSearching {
+            rememberLocation()
             history = Array(history.prefix(historyIndex + 1)) + [target]
             if history.count > 200 { history.removeFirst(history.count - 200) }
             historyIndex = history.count - 1
         }
-        apply(target, selecting: selecting)
+        apply(target)
     }
 
-    private func apply(_ target: Location, selecting: Set<ArchiveEntry.ID>) {
+    private func apply(_ target: Location, fallbackSelection: Set<ArchiveEntry.ID> = [], restoringHistory: Bool = false) {
         searchTask?.cancel()
+        pendingSearchRestore = nil
+        searchScrollAnchor = nil
+        historyScrollTarget = nil
+        scrollTarget = nil
         query = ""
         searchResults = []
-        let levelChanged = target.levels.map(\.id) != levels.map(\.id)
-        levels = target.levels
-        editingWindow?.isDocumentEdited = levels.contains { $0.edits.isEdited }
-        if folder != target.folder {
-            folder = target.folder
-        } else if levelChanged {
-            refresh()
+        nestedHits = [:]
+
+        // A saved inner level is only reachable while its container remains in its parent.
+        var reachable = [target.levels[0]]
+        for child in target.levels.dropFirst() {
+            if restoringHistory {
+                guard let path = child.entryPath, reachable.last?.archive.entry(at: path) != nil else { break }
+            }
+            reachable.append(child)
         }
+        let levelChanged = reachable.map(\.id) != levels.map(\.id)
+        levels = reachable
+        editingWindow?.isDocumentEdited = levels.contains { $0.edits.isEdited }
+        let reachesTarget = reachable.count == target.levels.count
+        if !reachesTarget {
+            folder = ""
+        } else if target.folder.isEmpty || archive.entry(at: target.folder)?.isNavigable == true {
+            folder = target.folder
+        } else {
+            folder = EditSession.nearestExistingParent(target.folder, in: level.edits.pending)
+        }
+        refresh()
         if levelChanged { quickLook.close() }
-        select(selecting.isEmpty ? [] : selecting, scroll: true)
+
+        if reachesTarget, !target.query.isEmpty {
+            select([])
+            query = target.query
+            if isSearching { pendingSearchRestore = target }
+        } else {
+            let ids = reachesTarget ? target.selection ?? fallbackSelection : []
+            select(ids.filter { positions[$0] != nil }, scroll: true)
+        }
+    }
+
+    private func visitHistory(_ index: Int) {
+        let from = location
+        rememberLocation()
+        historyIndex = index
+        let target = history[index]
+        apply(target, fallbackSelection: cameFrom(from, to: target), restoringHistory: true)
     }
 
     func goBack() {
         guard canGoBack else { return }
-        let from = location
-        historyIndex -= 1
-        apply(history[historyIndex], selecting: cameFrom(from, to: history[historyIndex]))
+        visitHistory(historyIndex - 1)
     }
 
     func goForward() {
         guard canGoForward else { return }
-        let from = location
-        historyIndex += 1
-        apply(history[historyIndex], selecting: cameFrom(from, to: history[historyIndex]))
+        visitHistory(historyIndex + 1)
     }
 
     /// Up One Level: the enclosing folder, or out of a nested archive to where it sits.
@@ -903,9 +1094,7 @@ final class BrowserModel {
             if let idx = history[..<historyIndex].lastIndex(where: {
                 $0.folder == parent && $0.levels.map(\.id) == levelIDs
             }) {
-                let from = location
-                historyIndex = idx
-                apply(history[historyIndex], selecting: cameFrom(from, to: history[historyIndex]))
+                visitHistory(idx)
                 return
             }
             navigate(to: parent, selecting: [folder])
@@ -1014,8 +1203,9 @@ final class BrowserModel {
     }
 
     /// Arrow keys: in the grid by rows and columns, in the list by rows. ⇧ extends.
-    func move(_ direction: Direction, extending: Bool = false) {
+    func move(_ direction: Direction, extending: Bool = false, in presentation: ViewMode? = nil) {
         guard !visibleEntries.isEmpty else { return }
+        let viewMode = presentation ?? self.viewMode
         if viewMode == .columns {
             moveInColumns(direction)
             return
@@ -1087,7 +1277,8 @@ final class BrowserModel {
     }
 
     /// Typing a name's first letters selects it.
-    func typeSelect(_ text: String) {
+    func typeSelect(_ text: String, in presentation: ViewMode? = nil) {
+        let viewMode = presentation ?? self.viewMode
         let now = Date.now
         typeahead.text = now.timeIntervalSince(typeahead.at) > 1 ? text : typeahead.text + text
         typeahead.at = now
@@ -1176,6 +1367,7 @@ final class BrowserModel {
             return
         }
         let archive = archive, parentLevels = levels
+        let origin = location, originQuery = query, originHistoryIndex = historyIndex
         activityTask?.cancel()
         activityTask = Task { [weak self] in
             guard let self else { return }
@@ -1190,6 +1382,11 @@ final class BrowserModel {
                 }
                 let inner = await Self.makeArchive(listing, url: url, name: entry.name, password: password)
                 guard !Task.isCancelled else { return }
+                guard !isClosed, location.isSamePlace(as: origin), query == originQuery,
+                      historyIndex == originHistoryIndex, self.archive.id == archive.id else {
+                    activity = nil
+                    return
+                }
                 let level = Level(archive: inner, password: password, entryPath: entry.path)
                 connectEdits(level)
                 activity = nil
@@ -1247,6 +1444,7 @@ final class BrowserModel {
         level.archive = reread
         level.search = SearchIndex(total: reread.index.visible.count + reread.index.helpers.count)
         level.indexed = 0
+        level.nestedTask?.cancel()
         level.nested = nil
         startIndexing(level)
         selection = []
@@ -1378,15 +1576,26 @@ final class BrowserModel {
             guard let destination else { throw EngineError(.cancelled) }
             let options = Extraction.Options.current(resolve: ConflictPolicy().resolver)
             // Encrypted contents only need the password now; one that worked before is tried first.
-            let (result, password) = try await passwords.retrying(archive.name, for: .extract,
-                                                                  known: archive.source?.password,
-                                                                  vaultURL: archive.source?.url) { password in
+            let result: Extraction.Result
+            if archive.format == .zip, archive.isEncrypted, passwords.isWired {
                 var attempt = archive
-                attempt.source?.password = password
-                return try await Extraction.run(attempt, selection: selection, to: destination, options: options,
-                                                onProgress: progress)
+                if attempt.source?.password == nil, let url = attempt.source?.url {
+                    attempt.source?.password = ArchivePasswordVault.recalled(for: url)
+                }
+                result = try await Extraction.run(attempt, selection: selection, to: destination, options: options,
+                                                  passwords: passwords, onProgress: progress)
+            } else {
+                let (extracted, password) = try await passwords.retrying(archive.name, for: .extract,
+                                                                      known: archive.source?.password,
+                                                                      vaultURL: archive.source?.url) { password in
+                    var attempt = archive
+                    attempt.source?.password = password
+                    return try await Extraction.run(attempt, selection: selection, to: destination, options: options,
+                                                    onProgress: progress)
+                }
+                if let password { self?.rememberPassword(password) }
+                result = extracted
             }
-            if let password { self?.rememberPassword(password) }
             var finished = Finished(placed: result.placed, findings: result.findings)
             if !result.isComplete { finished.title = String(localized: "Some items were not extracted.") }
             else if result.placed.isEmpty { finished.title = String(localized: "Nothing new — everything was already there") }

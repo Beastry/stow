@@ -205,6 +205,23 @@ struct PublicationIntegrationTests {
         if cancel { #expect(try Data(contentsOf: second) == secondBytes) }
     }
 
+    @Test func normalizedVolumePreservesOtherNumberedOutputs() async throws {
+        let folder = try TemporaryFolder()
+        defer { folder.cleanUp() }
+        let source = try directory(folder.url, "Source")
+        let destination = try directory(folder.url, "Destination")
+        let other = try file(destination, "Archive.zip.001", Data([9]))
+        let first = try file(source, "first", Data([1]))
+        let kept = try await ArchiveCreation.place([(first, ".zip")], named: "Archive", format: .zip,
+                                                   in: destination, conflict: .keepBoth, ordinarySizeSplit: true)
+        #expect(kept.map(\.lastPathComponent) == ["Archive 2.zip"])
+        let second = try file(source, "second", Data([2]))
+        let replaced = try await ArchiveCreation.place([(second, ".zip")], named: "Archive", format: .zip,
+                                                       in: destination, conflict: .replace, ordinarySizeSplit: true)
+        #expect(replaced.map(\.lastPathComponent) == ["Archive.zip"])
+        #expect(try Data(contentsOf: other) == Data([9]))
+    }
+
     @Test func cancelledSplitReplacementRestoresEveryOldVolume() async throws {
         let folder = try TemporaryFolder()
         defer { folder.cleanUp() }

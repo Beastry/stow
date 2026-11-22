@@ -280,11 +280,12 @@ struct PackOutcomeTests {
         #expect(note.detail.contains("10 MB"))
     }
 
-    @Test func onePartNamesTheFirstPart() throws {
+    @Test func oneSizeLimitedZipUsesTheOrdinaryName() throws {
         var options = PackOptions()
         options.split = .mb100
         let note = try #require(Compatibility.partsNote(for: options, parts: 1, archiveName: "Harbor"))
-        #expect(note.detail.contains("Harbor.zip.001"))
+        #expect(note.detail.contains("Harbor.zip"))
+        #expect(!note.detail.contains(".001"))
         #expect(!note.detail.contains(" – "))
     }
 

@@ -385,10 +385,16 @@ private struct ArchiveDropDelegate: DropDelegate {
                         continuation.resume(returning: data.flatMap { URL(dataRepresentation: $0, relativeTo: nil) })
                     }
                 }
-                if let url { urls.append(url) }
+                guard let url, url.isFileURL else {
+                    if !model.isClosed, model.level === destination {
+                        destination.edits.message = String(localized: "Some dropped files couldn’t be read. Drag the files again.")
+                    }
+                    return
+                }
+                urls.append(url)
             }
             guard !model.isClosed, model.level === destination else { return }
-            destination.edits.add(urls, into: folder)
+            await model.importFiles(urls, into: folder, level: destination)
         }
         return true
     }
@@ -422,8 +428,12 @@ extension BrowserModel {
         guard pasteboard.availableType(from: [NSPasteboard.PasteboardType(ArchiveTransfer.typeIdentifier)]) == nil,
               let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
               !urls.isEmpty else { return false }
-        destination.edits.add(urls, into: folder)
-        return true
+        guard !isClosed, !resolvingImport else { return false }
+        if destination.edits.importHasConflicts(urls, into: folder) {
+            Task { await importFiles(urls, into: folder, level: destination) }
+            return true
+        }
+        return stageImport(urls, into: folder, level: destination, resolution: .keepBoth)
     }
 }
 

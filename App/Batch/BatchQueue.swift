@@ -228,7 +228,8 @@ final class BatchQueue {
                 // not afterward: replaced archives must never be mistaken for the extracted input.
                 source = ArchiveAftercare.Source.capture(job.url)
                 return try await Extraction.run(archive, selection: nil, to: destination,
-                                                options: .current(resolve: policy.resolver)) { fraction in
+                                                options: .current(resolve: policy.resolver), passwords: passwords,
+                                                candidates: session.successful) { fraction in
                     Task { @MainActor in self?.advance(job.id, to: fraction) }
                 }
             }
@@ -241,7 +242,7 @@ final class BatchQueue {
                 $0.placed = result.placed
                 $0.phase = result.isComplete ? .done : .failed(Failure(
                     String(localized: "Some items were not extracted."),
-                    advice: String(localized: "The original archive was kept. Review the extracted files before trying again."),
+                    advice: Extraction.partialAdvice(result),
                     action: .tryAgain, code: ErrorCode(.extract, .unknown)))
             }
             return result.isComplete ? source : nil

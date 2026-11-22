@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Collapse %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "折叠 %@"
+          }
+        }
+      }
+    },
+    "Expand %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展开 %@"
+          }
+        }
+      }
+    },
     "Move the app in Finder": {
       "localizations": {
         "zh-Hans": {
@@ -6650,6 +6670,16 @@
         }
       }
     },
+    "Open Glance in": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glance 默认视图"
+          }
+        }
+      }
+    },
     "Open Inside": {
       "localizations": {
         "zh-Hans": {
@@ -8305,6 +8335,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "此构建版本中无法显示许可证文本。发行版本的内嵌 Stow 引擎服务中包含 7-Zip 许可证。"
+          }
+        }
+      }
+    },
+    "The destination folder moved or was replaced. Choose it again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标文件夹已移动或被替换。请重新选择。"
           }
         }
       }
@@ -10077,6 +10117,56 @@
         }
       }
     },
+    "Save changes to a signed JAR?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要保存对已签名 JAR 的更改吗？"
+          }
+        }
+      }
+    },
+    "Editing a signed JAR can invalidate its signature. Java may reject the edited archive.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑已签名的 JAR 可能会使签名失效。Java 可能会拒绝编辑后的归档。"
+          }
+        }
+      }
+    },
+    "Some items have the same name": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有些项目重名"
+          }
+        }
+      }
+    },
+    "Keep Both gives incoming items unique names. Replace swaps in the last incoming item with each name, removing all contents of any folder it replaces.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留两者会为导入项目分配不同的名称。替换会使用每个名称对应的最后一个导入项目，并移除被替换文件夹中的所有内容。"
+          }
+        }
+      }
+    },
+    "Some dropped files couldn’t be read. Drag the files again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取部分拖入的文件。请重新拖入这些文件。"
+          }
+        }
+      }
+    },
     "“%@” couldn’t be read. Choose the file again.": {
       "localizations": {
         "zh-Hans": {
@@ -10549,12 +10639,42 @@
         }
       }
     },
-    "When on, a password that unlocks an archive is saved in your Keychain — nowhere else, and only this app can read it. When off, Stow keeps passwords only while the archive is open.": {
+    "Unlock archives automatically": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开启后，成功解锁压缩包的密码会存进你的钥匙串——只存在那里，也只有本 App 能读。关闭后，密码仅在压缩包打开期间保留在内存中。"
+            "value": "自动解锁归档"
+          }
+        }
+      }
+    },
+    "Remembering saves passwords that unlock archives. Automatic unlock uses passwords already saved in Keychain.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "记住密码会将成功解锁归档的密码存入钥匙串。自动解锁会使用钥匙串中已有的密码。"
+          }
+        }
+      }
+    },
+    "Use Saved Password": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用已保存的密码"
+          }
+        }
+      }
+    },
+    "Couldn’t read that password from Keychain.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法从钥匙串读取该密码。"
           }
         }
       }
@@ -11345,6 +11465,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "将生成约 %lld 个分卷"
+          }
+        }
+      }
+    },
+    "If the finished archive fits in one part, it’s saved as %@.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果一个分卷就能装下整个压缩包，将存为 %@。"
           }
         }
       }
@@ -14185,12 +14315,12 @@
         }
       }
     },
-    "An archive you open in Finder is extracted next to itself, without a window. To look inside first, hold Shift as you open it, or choose Open in Stow. Disk images and installer packages always open, and the archive stays where it is unless Afterwards is set to Moves to the Trash.": {
+    "Hold Shift while opening an archive in Finder to extract it beside the original when this setting is off, or browse it when this setting is on. Disk images and installer packages always open. Quick extraction keeps the archive unless Afterwards is set to Moves to the Trash.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在访达中打开的压缩包会直接解压缩到它所在的位置，不打开窗口。若想先查看内容，请在打开时按住 Shift 键，或选择“在 Stow 中打开”。磁盘映像和安装器软件包总是会打开；除非“解压缩后，压缩包”设为“移到废纸篓”，否则压缩包会留在原处。"
+            "value": "在访达中打开压缩包时按住 Shift 键，可临时切换操作。此设置关闭时，压缩包会就地解压；开启时，则会打开以供浏览。磁盘映像和安装器软件包始终会打开。除非将“解压缩后，压缩包”设为“移到废纸篓”，否则快速解压会保留原件。"
           }
         }
       }
@@ -14361,6 +14491,236 @@
           "stringUnit": {
             "state": "translated",
             "value": "个分卷"
+          }
+        }
+      }
+    },
+    "Separate Archives": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独立归档"
+          }
+        }
+      }
+    },
+    "Cancel “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消“%@”"
+          }
+        }
+      }
+    },
+    "A temporary item is still needed for packing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包仍需使用一个临时项目。"
+          }
+        }
+      }
+    },
+    "Cancelled": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消"
+          }
+        }
+      }
+    },
+    "There are no files to pack for this item.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此项目中没有可打包的文件。"
+          }
+        }
+      }
+    },
+    "Create one archive per item": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为每个项目单独创建归档"
+          }
+        }
+      }
+    },
+    "Completed and verified": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已完成并验证"
+          }
+        }
+      }
+    },
+    "Show “%@” in Finder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示“%@”"
+          }
+        }
+      }
+    },
+    "Try packing “%@” again": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新打包“%@”"
+          }
+        }
+      }
+    },
+    "Completed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已完成"
+          }
+        }
+      }
+    },
+    "%lld separate archives": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个独立归档"
+          }
+        }
+      }
+    },
+    "Cancel All": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部取消"
+          }
+        }
+      }
+    },
+    "The temporary source is removed after packing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包完成后会删除临时源文件夹。"
+          }
+        }
+      }
+    },
+    "Splitting applies to each archive.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个归档都会单独分卷。"
+          }
+        }
+      }
+    },
+    "Choose a folder outside the temporary source.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请选择临时源文件夹以外的位置。"
+          }
+        }
+      }
+    },
+    "Choose where to save the separate archives.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择各个归档的保存位置。"
+          }
+        }
+      }
+    },
+    "Stow reuses it during this extraction, then forgets it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stow 会在本次解压过程中重复使用此密码，结束后清除。"
+          }
+        }
+      }
+    },
+    "The ZIP contains conflicting paths.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 ZIP 归档中的路径有冲突。"
+          }
+        }
+      }
+    },
+    "Enter this ZIP item’s password, or skip the item and continue.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入这个 ZIP 项目的密码，或跳过该项目并继续。"
+          }
+        }
+      }
+    },
+    "Skipped encrypted items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已跳过的加密项目"
+          }
+        }
+      }
+    },
+    "Skip Item": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跳过项目"
+          }
+        }
+      }
+    },
+    "Extracted items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已解压的项目"
+          }
+        }
+      }
+    },
+    "Items left out of the extraction": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未解压的项目"
           }
         }
       }

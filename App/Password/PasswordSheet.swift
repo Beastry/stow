@@ -41,7 +41,7 @@ struct PasswordSheet: View {
             }
             .padding(.leading, 32 + Space.m)
         } buttons: {
-            Button(question.purpose == .batchExtract ? String(localized: "Skip Archive") : String(localized: "Cancel"), role: .cancel) { answer(nil) }
+            Button(cancelTitle, role: .cancel) { answer(nil) }
                 .keyboardShortcut(.cancelAction)
             Button(submitTitle, action: submit)
                 .keyboardShortcut(.defaultAction)
@@ -58,11 +58,20 @@ struct PasswordSheet: View {
         }
     }
 
+    private var cancelTitle: String {
+        switch question.purpose {
+        case .batchExtract: String(localized: "Skip Archive")
+        case .zipEntry: String(localized: "Skip Item")
+        default: String(localized: "Cancel")
+        }
+    }
+
     private var explanation: String {
         switch question.purpose {
         case .open: String(localized: "Its list of files is encrypted. Enter the password to see what’s inside.")
         case .extract: String(localized: "Its files are encrypted. Enter the password to extract them.")
         case .batchExtract: String(localized: "Enter its password, or skip it and continue with the others.")
+        case .zipEntry: String(localized: "Enter this ZIP item’s password, or skip the item and continue.")
         // Asked from an archive whose file names are already showing: say they stay browsable.
         case .unlock: String(localized: "You can browse its file names. Enter the password to preview or extract the files.")
         }
@@ -71,12 +80,13 @@ struct PasswordSheet: View {
     private var submitTitle: String {
         switch question.purpose {
         case .open: String(localized: "Open")
-        case .extract, .batchExtract: String(localized: "Extract")
+        case .extract, .batchExtract, .zipEntry: String(localized: "Extract")
         case .unlock: String(localized: "Unlock")
         }
     }
 
     private var footnote: String {
+        if question.purpose == .zipEntry { return String(localized: "Stow reuses it during this extraction, then forgets it.") }
         if question.purpose == .batchExtract {
             return ArchivePasswordVault.isEnabled
                 ? String(localized: "Stow reuses it for this batch and saves it in your Keychain.")

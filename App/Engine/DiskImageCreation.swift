@@ -61,7 +61,7 @@ enum DiskImageCreation {
     }
 
     static func run(_ items: [TreeStream.Item], request: CreateRequest, named name: String, in destination: URL,
-                    conflict: ArchiveCreation.Conflict,
+                    conflict: ArchiveCreation.Conflict, portableNames: Bool = false,
                     onProgress: @escaping @Sendable (Double) -> Void) async throws(EngineError) -> ArchiveCreation.Result {
         let staging: URL
         do {
@@ -78,7 +78,8 @@ enum DiskImageCreation {
         let wantAPFS = request.diskImageFilesystem == .apfs
 
         onProgress(0.02)
-        try await stage(items, in: volume, applicationsLink: request.diskImageApplicationsLink)
+        try await stage(items, in: volume, applicationsLink: request.diskImageApplicationsLink,
+                        preserveRoot: portableNames)
         if Task.isCancelled { throw EngineError(.cancelled) }
         if request.diskImageFinderChrome { try DiskImageChrome.apply(to: volume) }
         onProgress(0.3)
@@ -112,7 +113,7 @@ enum DiskImageCreation {
         }
         let size = (try? image.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
         let placed = try await ArchiveCreation.place([(image, ".dmg")], named: name, format: .dmg, in: destination,
-                                               conflict: conflict)
+                                               conflict: conflict, portableNames: portableNames)
         onProgress(1)
         return ArchiveCreation.Result(placed: placed,
                                       report: CreateReport(files: placed.map(\.lastPathComponent), size: size, verified: verified))
@@ -122,11 +123,11 @@ enum DiskImageCreation {
     /// folders keep their permissions, files their attributes. Optional Applications shortcut last.
     @concurrent
     nonisolated static func stage(_ items: [TreeStream.Item], in folder: URL,
-                                  applicationsLink: Bool = false) async throws(EngineError) {
+                                  applicationsLink: Bool = false, preserveRoot: Bool = false) async throws(EngineError) {
         let manager = FileManager.default
         do {
             try manager.createDirectory(at: folder, withIntermediateDirectories: true)
-            let placed = layout(items)
+            let placed = preserveRoot ? items.map { ($0, $0.path) } : layout(items)
             for (item, path) in placed {
                 if Task.isCancelled { throw EngineError(.cancelled) }
                 let target = folder.appending(path: path)

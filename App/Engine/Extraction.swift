@@ -27,16 +27,32 @@ enum Extraction {
         var report: ExtractReport
         var placement = Placement.Result()
         var restoredMetadata = AppleDouble.Restored()
+        var passwordCompleted: [String] = []
+        var passwordSkipped: [String] = []
+        var unplacedZIPEntries: [String] = []
 
         /// Skipped conflicts or safety-filtered payloads are incomplete extraction. In particular,
         /// a successful engine return is not permission to dispose of the only original (#313).
         var isComplete: Bool {
-            placement.skipped == 0 && report.removedItems.isEmpty && report.removedLinks.isEmpty
+            passwordSkipped.isEmpty && unplacedZIPEntries.isEmpty && placement.skipped == 0 && report.removedItems.isEmpty && report.removedLinks.isEmpty
         }
 
         /// Checkup lines for what the audit removed and what Mac details came back.
         var findings: [CheckupFinding] {
-            Checkup.findings(for: report) + Checkup.findings(for: restoredMetadata)
+            var findings = Checkup.findings(for: report) + Checkup.findings(for: restoredMetadata)
+            if !passwordSkipped.isEmpty {
+                findings.append(.init(severity: .caution, title: String(localized: "Skipped encrypted items"),
+                                      detail: passwordSkipped.joined(separator: "\n")))
+            }
+            if !unplacedZIPEntries.isEmpty {
+                findings.append(.init(severity: .caution, title: String(localized: "Items left out of the extraction"),
+                                      detail: unplacedZIPEntries.joined(separator: "\n")))
+            }
+            if !isComplete, !passwordCompleted.isEmpty {
+                findings.append(.init(severity: .info, title: String(localized: "Extracted items"),
+                                      detail: passwordCompleted.joined(separator: "\n")))
+            }
+            return findings
         }
     }
 
@@ -47,13 +63,158 @@ enum Extraction {
         let staged = try await stage(archive, selection: selection, near: destination,
                                      skipSystemFiles: options.skipSystemFiles, onProgress: onProgress)
         defer { staged.discard() }
+        return try await publish(staged, archive: archive, to: destination, options: options)
+    }
+
+    private static func publish(_ staged: Staged, archive: Archive, to destination: URL,
+                                options: Options) async throws(EngineError) -> Result {
         let items = staged.items(allFolder: options.allFolder, folderName: folderName(for: archive))
         guard !items.isEmpty else { throw EngineError(.failed, String(localized: "Nothing was extracted.")) }
         let placement = try await Placement.place(items, in: destination, resolve: options.resolve)
-        // Downloaded archive → downloaded contents, so Gatekeeper checks apps and scripts from it.
         if let source = archive.source?.url { Quarantine.propagate(from: source, to: placement.added) }
         return Result(placed: placement.placed, report: staged.report, placement: placement,
                       restoredMetadata: staged.restoredMetadata)
+    }
+
+    static func partialAdvice(_ result: Result) -> String {
+        let retained = String(localized: "The original archive was kept. Review the extracted files before trying again.")
+        guard !result.passwordSkipped.isEmpty || !result.unplacedZIPEntries.isEmpty else { return retained }
+        return ([retained] + result.findings.filter { $0.severity == .caution || $0.severity == .info }
+            .map { $0.title + "\n" + $0.detail }).joined(separator: "\n\n")
+    }
+
+    /// Use the fast, transactional path first. An encrypted ZIP can fall back to independent
+    /// entries on a password error. Publication still happens once, after every choice is resolved.
+    static func run(_ archive: Archive, selection: [ArchiveEntry]?, to destination: URL, options: Options,
+                    passwords: PasswordHook, candidates: [String] = [],
+                    onProgress: @escaping @Sendable (Double) -> Void) async throws(EngineError) -> Result {
+        guard archive.format == .zip, archive.isEncrypted, passwords.isWired else {
+            return try await run(archive, selection: selection, to: destination, options: options, onProgress: onProgress)
+        }
+        do {
+            return try await run(archive, selection: selection, to: destination, options: options, onProgress: onProgress)
+        } catch let error where error.needsPassword {
+            return try await extractZIPEntries(archive, selection: selection, to: destination, options: options,
+                                               passwords: passwords, candidates: candidates, onProgress: onProgress)
+        }
+    }
+
+    private static func extractZIPEntries(_ archive: Archive, selection: [ArchiveEntry]?, to destination: URL,
+                                          options: Options, passwords: PasswordHook, candidates: [String],
+                                          onProgress: @escaping @Sendable (Double) -> Void) async throws(EngineError) -> Result {
+        let selected = selection.flatMap { $0.isEmpty ? nil : topmost($0) }
+        let entries = archive.entries + archive.index.helpers.filter { helper in
+            !options.skipSystemFiles || (selection ?? []).contains { $0.path == helper.path }
+        }
+        let parents = Set(entries.map(\.parent))
+        let targets = entries.sorted { $0.path < $1.path }.filter { entry in
+            (!entry.isFolder || !parents.contains(entry.path)) && (selected?.contains {
+                $0.path == entry.path || ($0.isFolder && entry.path.hasPrefix($0.path + "/"))
+            } ?? true)
+        }
+        let stageFolder = try makeStaging(for: destination)
+        defer { try? FileManager.default.removeItem(at: stageFolder) }
+        let root = stageFolder.appending(path: "Contents", directoryHint: .isDirectory)
+        var accepted: [String] = []
+        var skipped: [String] = []
+        var report = ExtractReport()
+        var restored = AppleDouble.Restored()
+        var folderAttributes: [URL: [FileAttributeKey: Any]] = [:]
+        var remembered = candidates
+        if let known = archive.source?.password, !remembered.contains(known) { remembered.insert(known, at: 0) }
+        do {
+            let manager = FileManager.default
+            try manager.createDirectory(at: root, withIntermediateDirectories: false)
+            for (index, entry) in targets.enumerated() {
+                if Task.isCancelled { throw EngineError(.cancelled) }
+                var available = [nil] as [String?]
+                available += remembered.map(Optional.some)
+                var rejectedManual = false
+                while true {
+                    let password: String?
+                    if available.isEmpty {
+                        while passwords.isAsking { try await Task.sleep(for: .milliseconds(40)) }
+                        if Task.isCancelled { throw EngineError(.cancelled) }
+                        password = await passwords.ask(entry.path, .zipEntry, rejectedManual)
+                        if Task.isCancelled { throw EngineError(.cancelled) }
+                        guard password != nil else { skipped.append(entry.path); break }
+                        rejectedManual = true
+                    } else {
+                        password = available.removeFirst()
+                    }
+                    var attempt = archive
+                    attempt.source?.password = password
+                    do {
+                        let part = try await stage(attempt, selection: [entry], near: stageFolder,
+                                                   skipSystemFiles: options.skipSystemFiles) { _ in }
+                        defer { part.discard() }
+                        report.removedLinks += part.report.removedLinks
+                        report.removedItems += part.report.removedItems
+                        restored.files += part.restoredMetadata.files
+                        restored.attributes += part.restoredMetadata.attributes
+                        let source = part.url(for: entry)
+                        if exists(source) {
+                            let target = root.appending(path: entry.path)
+                            var parent = root
+                            for component in entry.path.split(separator: "/").dropLast() {
+                                parent.append(path: String(component))
+                                if exists(parent) {
+                                    let values = try parent.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                                    guard values.isDirectory == true, values.isSymbolicLink != true else {
+                                        throw EngineError(.failed, String(localized: "The ZIP contains conflicting paths."))
+                                    }
+                                } else {
+                                    try manager.createDirectory(at: parent, withIntermediateDirectories: false)
+                                    let relative = String(parent.path.dropFirst(root.path.count + 1))
+                                    let original = part.root.appending(path: relative)
+                                    if let sourceAttributes = try? manager.attributesOfItem(atPath: original.path) {
+                                        folderAttributes[parent] = sourceAttributes.filter {
+                                            $0.key == .modificationDate || $0.key == .creationDate
+                                        }
+                                    }
+                                }
+                            }
+                            try manager.moveItem(at: source, to: target)
+                            accepted.append(entry.path)
+                        }
+                        if let password {
+                            remembered.removeAll { $0 == password }
+                            remembered.insert(password, at: 0)
+                        }
+                        break
+                    } catch let error as EngineError where error.needsPassword {
+                        continue
+                    }
+                }
+                onProgress(Double(index + 1) / Double(targets.count))
+            }
+            if Task.isCancelled { throw EngineError(.cancelled) }
+            let audited = try await audit(root)
+            report.removedLinks += audited.removedLinks
+            report.removedItems += audited.removedItems
+            let surviving = accepted.filter { exists(root.appending(path: $0)) }
+            let staged = Staged(folder: stageFolder, root: root, selection: selected,
+                                report: report, restoredMetadata: restored)
+            var result = Result(placed: [], report: report)
+            if !surviving.isEmpty {
+                for (folder, attributes) in folderAttributes where exists(folder) {
+                    try? manager.setAttributes(attributes, ofItemAtPath: folder.path)
+                }
+                result = try await publish(staged, archive: archive, to: destination, options: options)
+            }
+            let skippedSources = result.placement.skippedSources.map(\.path)
+            result.passwordCompleted = surviving.filter { entry in
+                let path = root.appending(path: entry).path
+                return !skippedSources.contains { path == $0 || path.hasPrefix($0 + "/") }
+            }
+            result.passwordSkipped = skipped
+            let accountedFor = Set(result.passwordCompleted + skipped)
+            result.unplacedZIPEntries = targets.map(\.path).filter { !accountedFor.contains($0) }
+            return result
+        } catch {
+            if Task.isCancelled { throw EngineError(.cancelled) }
+            throw EngineError(error)
+        }
     }
 
     /// Extracted and audited, waiting next to `destination` (same volume) to be moved into place.

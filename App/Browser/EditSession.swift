@@ -101,6 +101,22 @@ final class EditSession {
         return listing
     }
 
+    /// Recognizes the conventional JAR signature metadata without asserting it is valid.
+    var hasJARSignature: Bool {
+        guard format == .zip, (name as NSString).pathExtension.lowercased() == "jar" else { return false }
+        let names = Set(base.entries.compactMap { entry -> String? in
+            guard !entry.isFolder, !entry.isSymlink else { return nil }
+            let components = entry.path.uppercased().split(separator: "/")
+            guard components.count == 2, components[0] == "META-INF" else { return nil }
+            return String(components[1])
+        })
+        return names.contains { name in
+            let file = name as NSString
+            return ["RSA", "DSA", "EC"].contains(file.pathExtension)
+                && names.contains(file.deletingPathExtension + ".SF")
+        }
+    }
+
     var readOnlyReason: String {
         let lower = name.lowercased()
         if lower.range(of: #"\.(\d{3,}|z\d+|r\d+)$|(^|\.)part\d+\."#, options: .regularExpression) != nil {
@@ -167,56 +183,142 @@ final class EditSession {
         } catch { message = error.message }
     }
 
-    private func restore(_ next: [EditOperation], action: String) {
+    private func restore(_ next: [EditOperation], action: String,
+                         select: (() -> Void)? = nil, undoSelection: (() -> Void)? = nil) {
         let previous = operations
         let manager = undoManager
         let grouping = manager != nil && manager?.isUndoing == false && manager?.isRedoing == false
         if grouping { manager?.beginUndoGrouping() }
         manager?.registerUndo(withTarget: self) { session in
-            MainActor.assumeIsolated { session.restore(previous, action: action) }
+            MainActor.assumeIsolated { session.restore(previous, action: action, select: undoSelection, undoSelection: select) }
         }
         manager?.setActionName(action)
         cachedPending = nil
         operations = next
         onChange?()
+        select?()
         if grouping { manager?.endUndoGrouping() }
     }
 
-    func add(_ urls: [URL], into folder: String) {
-        guard requireEditable(), !urls.isEmpty else { return }
-        var taken = Set(pending.entries.map { $0.path.lowercased() })
-        var items: [String] = []
-        for url in urls {
-            let original = url.lastPathComponent
-            var name = original, number = 1
-            while taken.contains((folder.isEmpty ? name : folder + "/" + name).lowercased()) || staged[name] != nil {
-                number += 1
-                name = Compatibility.numbered(original, number)
-            }
-            taken.insert((folder.isEmpty ? name : folder + "/" + name).lowercased())
-            guard stage(url, named: name) else { return }
-            items.append(name)
+    enum ImportResolution { case keepBoth, replace, cancel }
+
+    private struct StagedSource {
+        let url: URL
+        let files: [PackFile]
+        let scoped: Bool
+
+        func releaseScope() {
+            if scoped { url.stopAccessingSecurityScopedResource() }
         }
-        accept(.add(destinationFolder: folder, items: items), action: String(localized: "Add \(items.count) Items"))
     }
 
-    @discardableResult private func stage(_ url: URL, named name: String) -> Bool {
-        if url.startAccessingSecurityScopedResource() { scoped.append(url) }
-        cachedPending = nil
-        staged[name] = url
-        let files = PackRequest.collect([url]).files
-        sourceFiles[name] = files.map { file in
-            var file = file
-            file.path = name + file.path.dropFirst(url.lastPathComponent.count)
-            return file
+    private static func nameKey(_ name: String) -> String {
+        name.precomposedStringWithCanonicalMapping.folding(options: .caseInsensitive, locale: nil)
+    }
+
+    private func importRoots(in folder: String) -> [String: Set<String>] {
+        let prefix = folder.isEmpty ? "" : folder + "/"
+        var roots: [String: Set<String>] = [:]
+        for entry in pending.entries where entry.path.hasPrefix(prefix) {
+            guard let name = entry.path.dropFirst(prefix.count).split(separator: "/").first else { continue }
+            roots[Self.nameKey(String(name)), default: []].insert(prefix + name)
         }
-        for file in sourceFiles[name] ?? [] {
-            sourceDates[file.path] = try? file.source?.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        return roots
+    }
+
+    func importHasConflicts(_ urls: [URL], into folder: String) -> Bool {
+        var names = Set(importRoots(in: folder).keys)
+        return urls.map { Self.nameKey($0.lastPathComponent) }.filter { !names.insert($0).inserted }.count > 0
+    }
+
+    /// A batch uses the supplied order. Explicitly selected ancestor and descendant sources
+    /// each get a top-level entry; Replace keeps the last source for each equivalent name.
+    @discardableResult
+    func add(_ urls: [URL], into folder: String, resolving resolution: ImportResolution = .keepBoth,
+             select: ((Set<String>) -> Void)? = nil, undoSelection: (() -> Void)? = nil) -> Bool {
+        guard resolution != .cancel, !Task.isCancelled, requireEditable(), !urls.isEmpty else { return false }
+        let prefix = folder.isEmpty ? "" : folder + "/"
+        guard folder.isEmpty || pending.entries.contains(where: {
+            $0.path.hasPrefix(prefix) || ($0.path == folder && $0.isFolder && !$0.isSymlink)
+        }) else { return false }
+
+        let roots = importRoots(in: folder)
+        var taking = Set(roots.keys)
+        let incomingNames = urls.map { Self.nameKey($0.lastPathComponent) }
+        let reserved = Set(incomingNames)
+        let lastIndex = Dictionary(zip(incomingNames, urls.indices), uniquingKeysWith: { _, later in later })
+        var replaced = Set<String>()
+        var items: [EditOperation.ImportItem] = []
+        var prepared: [String: StagedSource] = [:]
+        defer { prepared.values.forEach { $0.releaseScope() } }
+
+        for (index, url) in urls.enumerated() {
+            guard !Task.isCancelled else { return false }
+            let original = url.lastPathComponent
+            var name = original
+            let source = UUID().uuidString
+            guard let candidate = prepare(url, named: source) else { return false }
+            if resolution == .replace {
+                guard index == lastIndex[incomingNames[index]] else {
+                    candidate.releaseScope()
+                    continue
+                }
+                replaced.formUnion(roots[incomingNames[index]] ?? [])
+            } else if taking.contains(incomingNames[index]) {
+                var attempt = 2
+                name = Compatibility.numbered(original, attempt)
+                while taking.contains(Self.nameKey(name)) || reserved.contains(Self.nameKey(name)) {
+                    attempt += 1
+                    name = Compatibility.numbered(original, attempt)
+                }
+            }
+            taking.insert(Self.nameKey(name))
+            items.append(.init(name: name, source: source))
+            prepared[source] = candidate
         }
-        if files.isEmpty {
-            if self.url == nil { sourceFiles[name] = [PackFile(path: name, size: 0)] }
-            else { message = String(localized: "“\(url.lastPathComponent)” couldn’t be read. Choose the file again."); return false }
+
+        let paths = Set(items.map { prefix + $0.name })
+        let operation = EditOperation.importItems(destinationFolder: folder, items: items, replacing: replaced.sorted())
+        guard commit(operation, sources: prepared, action: String(localized: "Add \(items.count) Items"),
+                     select: { select?(paths) }, undoSelection: undoSelection) else { return false }
+        prepared.removeAll()
+        return true
+    }
+
+    private func prepare(_ url: URL, named name: String) -> StagedSource? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        if let files = PackRequest.collectForEditing(url, named: name) {
+            return StagedSource(url: url, files: files, scoped: scoped)
         }
+        if scoped { url.stopAccessingSecurityScopedResource() }
+        message = String(localized: "“\(url.lastPathComponent)” couldn’t be read. Choose the file again.")
+        return nil
+    }
+
+    /// Transfers ownership of the prepared scopes only after the complete plan validates.
+    private func commit(_ operation: EditOperation, sources: [String: StagedSource], action: String,
+                        select: (() -> Void)? = nil, undoSelection: (() -> Void)? = nil) -> Bool {
+        guard !Task.isCancelled, let format else { return false }
+        var dates: [String: Date] = [:]
+        let entries = sources.values.flatMap(\.files).map { file in
+            let modified = try? file.source?.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            dates[file.path] = modified
+            return ListedEntry(path: file.path, isFolder: file.isFolder, isSymlink: file.isLink, size: file.size, modified: modified)
+        }
+        do {
+            _ = try EditPlan.steps(for: operations + [operation], listing: base, format: format,
+                                   sources: sourceEntries + entries)
+        } catch {
+            message = error.message
+            return false
+        }
+        for (name, source) in sources {
+            staged[name] = source.url
+            sourceFiles[name] = source.files
+            if source.scoped { scoped.append(source.url) }
+        }
+        sourceDates.merge(dates) { _, new in new }
+        restore(operations + [operation], action: action, select: select, undoSelection: undoSelection)
         return true
     }
 
@@ -245,9 +347,11 @@ final class EditSession {
 
     func replace(_ path: String, with url: URL) {
         guard requireEditable() else { return }
-        let item = UUID().uuidString + "-" + url.lastPathComponent
-        guard stage(url, named: item) else { return }
-        accept(.replace(path: path, item: item), action: String(localized: "Replace"))
+        let item = UUID().uuidString
+        guard let source = prepare(url, named: item) else { return }
+        if !commit(.replace(path: path, item: item), sources: [item: source], action: String(localized: "Replace")) {
+            source.releaseScope()
+        }
     }
 
     func revert() {
@@ -260,7 +364,7 @@ final class EditSession {
         cachedPending = nil
         operations = []
         undoManager?.removeAllActions(withTarget: self)
-        staged = [:]; sourceFiles = [:]
+        staged = [:]; sourceFiles = [:]; sourceDates = [:]
         removeTransferDirectories()
         for url in scoped { url.stopAccessingSecurityScopedResource() }
         scoped = []
@@ -271,6 +375,7 @@ final class EditSession {
         let referenced = Set(operations.flatMap { operation -> [String] in
             switch operation {
             case let .add(_, items): items
+            case let .importItems(_, items, _): items.map(\.source)
             case let .replace(_, item): [item]
             default: []
             }
@@ -289,7 +394,7 @@ final class EditSession {
         cachedPending = nil
         operations = []
         undoManager?.removeAllActions(withTarget: self)
-        staged = [:]; sourceFiles = [:]
+        staged = [:]; sourceFiles = [:]; sourceDates = [:]
         removeTransferDirectories()
         for scopedURL in scoped { scopedURL.stopAccessingSecurityScopedResource() }
         scoped = []
@@ -355,7 +460,7 @@ final class EditSession {
             cachedPending = nil
             operations = []
             undoManager?.removeAllActions(withTarget: self)
-            staged = [:]; sourceFiles = [:]
+            staged = [:]; sourceFiles = [:]; sourceDates = [:]
         removeTransferDirectories()
             for scopedURL in scoped { scopedURL.stopAccessingSecurityScopedResource() }
             scoped = []
@@ -421,6 +526,13 @@ final class EditSession {
             switch operation {
             case let .add(folder, items):
                 if items.contains(where: { Self.contains(path, in: Self.map(path: folder.isEmpty ? $0 : folder + "/" + $0, through: tail)) }) { state = String(localized: "New") }
+            case let .importItems(folder, items, replacing):
+                for item in items {
+                    let root = folder.isEmpty ? item.name : folder + "/" + item.name
+                    guard Self.contains(path, in: Self.map(path: root, through: tail)) else { continue }
+                    let replaced = replacing.contains { Self.nameKey($0) == Self.nameKey(root) }
+                    state = replaced ? String(localized: "Replaced") : String(localized: "New")
+                }
             case let .rename(_, to):
                 if Self.contains(path, in: Self.map(path: to, through: tail)) { state = String(localized: "Renamed") }
             case let .replace(target, _):
@@ -437,6 +549,17 @@ final class EditSession {
             switch operation {
             case let .rename(from, to): if Self.contains(current, in: to) { current = from + current.dropFirst(to.count) }
             case let .replace(target, item): if current == target { return staged[item] }
+            case let .importItems(folder, items, replacing):
+                for item in items {
+                    let root = folder.isEmpty ? item.name : folder + "/" + item.name
+                    if Self.contains(current, in: root), let source = staged[item.source] {
+                        let suffix = current.dropFirst(root.count)
+                        return suffix.isEmpty ? source : source.appending(path: String(suffix.dropFirst()))
+                    }
+                }
+                if replacing.contains(where: { Self.contains(current, in: $0) }) { return nil }
+            case let .delete(paths):
+                if paths.contains(where: { Self.contains(current, in: $0) }) { return nil }
             case let .add(folder, items):
                 for item in items {
                     let root = folder.isEmpty ? item : folder + "/" + item

@@ -146,9 +146,13 @@ struct EditSessionTests {
         #expect(session.operations == operations[4])
     }
 
-    @Test func deduplicatesAndValidatesNames() {
+    @Test func deduplicatesAndValidatesNames() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appending(path: "a.txt")
+        try Data("new".utf8).write(to: source)
         let session = makeSession()
-        session.add([URL(filePath: "/Stow-Sample/a.txt"), URL(filePath: "/Stow-Sample/a.txt")], into: "")
+        session.add([source, source], into: "")
         #expect(Set(session.pending.entries.map(\.path)).isSuperset(of: ["a 2.txt", "a 3.txt"]))
         let operations = session.operations
         for name in ["", "a/b", ".", "..", "a 2.txt"] {
@@ -157,6 +161,110 @@ struct EditSessionTests {
             #expect(session.operations == operations)
             session.message = nil
         }
+    }
+
+    @Test func importConflictsRespectPendingEditsAndKeepBothReservesIncomingNames() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let composed = directory.appending(path: "CAFÉ.txt")
+        let numbered = directory.appending(path: "café 2.txt")
+        let decomposed = directory.appending(path: "cafe\u{301}.txt")
+        try Data("first".utf8).write(to: composed)
+        try Data("third".utf8).write(to: decomposed)
+        try Data("second".utf8).write(to: numbered)
+        let session = makeSession()
+        session.rename("a.txt", to: "Café.txt")
+        #expect(session.importHasConflicts([composed, numbered], into: ""))
+        let previous = session.operations
+        #expect(!session.add([composed, numbered], into: "", resolving: .cancel))
+        #expect(session.operations == previous)
+        #expect(session.staged.isEmpty)
+        #expect(session.add([decomposed, numbered], into: ""))
+        #expect(Set(session.pending.entries.map { $0.path.lowercased() }).isSuperset(of: ["café.txt", "café 2.txt", "café 3.txt"]))
+    }
+
+    @Test func importRollsBackWhenAnySourceIsUnreadable() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let valid = directory.appending(path: "a.txt")
+        let missing = directory.appending(path: "missing")
+        try Data("new".utf8).write(to: valid)
+        let session = makeSession(), undo = UndoManager()
+        session.undoManager = undo
+        #expect(!session.add([valid, missing], into: "", resolving: .replace))
+        #expect(session.pending.entries == base.entries)
+        #expect(session.staged.isEmpty)
+        #expect(!undo.canUndo)
+        #expect(session.message != nil)
+
+        let folder = directory.appending(path: "Folder")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        let unsupported = folder.appending(path: "pipe")
+        try #require(mkfifo(unsupported.path, 0o600) == 0)
+        #expect(!session.add([valid, folder], into: ""))
+        #expect(session.staged.isEmpty)
+        #expect(!session.isEdited)
+    }
+
+    @Test func replacementBatchRestoresWholeSubtreeAndSelectionOnUndoAndRedo() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let folder = directory.appending(path: "Folder")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        let child = folder.appending(path: "fresh.txt")
+        try Data("new".utf8).write(to: child)
+        let duplicateContainer = directory.appending(path: "Earlier")
+        try FileManager.default.createDirectory(at: duplicateContainer, withIntermediateDirectories: false)
+        let duplicate = duplicateContainer.appending(path: "folder")
+        try Data("earlier".utf8).write(to: duplicate)
+        let session = makeSession(), undo = UndoManager()
+        undo.groupsByEvent = false
+        session.undoManager = undo
+        var selection: Set<String> = ["a.txt"]
+        #expect(session.add([duplicate, folder, child], into: "", resolving: .replace,
+                            select: { selection = $0 }, undoSelection: { selection = ["a.txt"] }))
+        #expect(session.operations.count == 1)
+        #expect(Set(session.pending.entries.map(\.path)) == ["a.txt", "Folder", "Folder/fresh.txt", "fresh.txt"])
+        #expect(session.source(for: "Folder/fresh.txt")?.path == child.path)
+        #expect(session.source(for: "fresh.txt")?.path == child.path)
+        #expect(session.state(for: "Folder/fresh.txt") == String(localized: "Replaced"))
+        #expect(selection == ["Folder", "fresh.txt"])
+        undo.undo()
+        #expect(session.pending.entries == base.entries)
+        #expect(session.source(for: "Folder/fresh.txt") == nil)
+        #expect(selection == ["a.txt"])
+        undo.redo()
+        #expect(session.operations.count == 1)
+        #expect(session.source(for: "Folder/fresh.txt")?.path == child.path)
+        #expect(selection == ["Folder", "fresh.txt"])
+    }
+
+    @Test func saveImportReplacesSubtreesAndHandlesFileFolderMismatches() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "Tree.zip")
+        try ZipFixture(entries: [
+            .folder("OldFolder"), .file("OldFolder/stale.txt", "stale"),
+            .file("ToFolder", "old file"), .file("unrelated", "keep"),
+            .file("Implicit/stale.txt", "stale")
+        ]).write(to: url)
+        let before = try Data(contentsOf: url)
+        let flat = directory.appending(path: "oldfolder")
+        try Data("new file".utf8).write(to: flat)
+        let folder = directory.appending(path: "ToFolder")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        try Data("new child".utf8).write(to: folder.appending(path: "child"))
+        let implicit = directory.appending(path: "Implicit")
+        try FileManager.default.createDirectory(at: implicit, withIntermediateDirectories: false)
+        try Data("new child".utf8).write(to: implicit.appending(path: "child"))
+        let session = EditSession(base: try await ArchiveEngine.shared.list(url), url: url)
+        #expect(session.add([flat, folder, implicit], into: "", resolving: .replace))
+        #expect(try Data(contentsOf: url) == before)
+        #expect(await session.save(password: nil))
+        let saved = try await ArchiveEngine.shared.list(url)
+        #expect(Set(saved.entries.map(\.path)) == ["oldfolder", "ToFolder", "ToFolder/child", "Implicit", "Implicit/child", "unrelated"])
+        #expect(saved.entries.first { $0.path == "oldfolder" }?.isFolder == false)
+        #expect(saved.entries.first { $0.path == "ToFolder" }?.isFolder == true)
     }
 
     @Test func refusesUnknownEncodingWithVisibleReason() {
