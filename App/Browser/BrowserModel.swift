@@ -1545,15 +1545,26 @@ final class BrowserModel {
             guard let destination else { throw EngineError(.cancelled) }
             let options = Extraction.Options.current(resolve: ConflictPolicy().resolver)
             // Encrypted contents only need the password now; one that worked before is tried first.
-            let (result, password) = try await passwords.retrying(archive.name, for: .extract,
-                                                                  known: archive.source?.password,
-                                                                  vaultURL: archive.source?.url) { password in
+            let result: Extraction.Result
+            if archive.format == .zip, archive.isEncrypted, passwords.isWired {
                 var attempt = archive
-                attempt.source?.password = password
-                return try await Extraction.run(attempt, selection: selection, to: destination, options: options,
-                                                onProgress: progress)
+                if attempt.source?.password == nil, let url = attempt.source?.url {
+                    attempt.source?.password = ArchivePasswordVault.recalled(for: url)
+                }
+                result = try await Extraction.run(attempt, selection: selection, to: destination, options: options,
+                                                  passwords: passwords, onProgress: progress)
+            } else {
+                let (extracted, password) = try await passwords.retrying(archive.name, for: .extract,
+                                                                      known: archive.source?.password,
+                                                                      vaultURL: archive.source?.url) { password in
+                    var attempt = archive
+                    attempt.source?.password = password
+                    return try await Extraction.run(attempt, selection: selection, to: destination, options: options,
+                                                    onProgress: progress)
+                }
+                if let password { self?.rememberPassword(password) }
+                result = extracted
             }
-            if let password { self?.rememberPassword(password) }
             var finished = Finished(placed: result.placed, findings: result.findings)
             if !result.isComplete { finished.title = String(localized: "Some items were not extracted.") }
             else if result.placed.isEmpty { finished.title = String(localized: "Nothing new — everything was already there") }

@@ -808,3 +808,45 @@ struct SeparatePackingTests {
         try #require(!queue.isRunning)
     }
 }
+
+@MainActor
+@Suite("ZIP entry passwords")
+struct ZIPEntryPasswordTests {
+    @Test func independentlyEncryptedEntriesCanBeSkippedAndReuseAcceptedPasswords() async throws {
+        let temp = try TemporaryFolder()
+        defer { temp.cleanUp() }
+        let archiveURL = temp.url.appending(path: "mixed.zip")
+        for (name, password) in [("a.txt", "fixture-one"), ("b.txt", "fixture-two"), ("c.txt", "fixture-one")] {
+            try Data(name.utf8).write(to: temp.url.appending(path: name))
+            let zip = Process()
+            zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+            zip.currentDirectoryURL = temp.url
+            // Fixed public test fixture values, supplied only to the archive-building tool.
+            zip.arguments = ["-q", "-P", password, archiveURL.lastPathComponent, name]
+            try zip.run()
+            zip.waitUntilExit()
+            try #require(zip.terminationStatus == 0)
+        }
+        let original = try Data(contentsOf: archiveURL)
+        let listing = try await ArchiveEngine.shared.list(archiveURL)
+        let archive = Archive(listing: listing, url: archiveURL)
+        let out = temp.url.appending(path: "extracted", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: false)
+        var questions: [String] = []
+        let passwords = PasswordHook { name, _ in
+            questions.append(name)
+            return name == "a.txt" ? "fixture-one" : nil
+        }
+        let result = try await Extraction.run(archive, selection: nil, to: out, options: .init(),
+                                              passwords: passwords) { _ in }
+        #expect(questions == ["a.txt", "b.txt"])
+        #expect(result.passwordCompleted == ["a.txt", "c.txt"])
+        #expect(result.passwordSkipped == ["b.txt"])
+        #expect(!result.isComplete)
+        let root = try #require(result.placed.first)
+        #expect(try Data(contentsOf: root.appending(path: "a.txt")) == Data("a.txt".utf8))
+        #expect(try Data(contentsOf: root.appending(path: "c.txt")) == Data("c.txt".utf8))
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: "b.txt").path))
+        #expect(try Data(contentsOf: archiveURL) == original)
+    }
+}

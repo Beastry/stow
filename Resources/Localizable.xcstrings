@@ -14624,6 +14624,66 @@
           }
         }
       }
+    },
+    "Stow reuses it during this extraction, then forgets it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stow 会在本次解压过程中重复使用此密码，结束后清除。"
+          }
+        }
+      }
+    },
+    "The ZIP contains conflicting paths.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 ZIP 归档中的路径有冲突。"
+          }
+        }
+      }
+    },
+    "Enter this ZIP item’s password, or skip the item and continue.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入这个 ZIP 项目的密码，或跳过该项目并继续。"
+          }
+        }
+      }
+    },
+    "Skipped encrypted items": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已跳过的加密项目"
+          }
+        }
+      }
+    },
+    "Skip Item": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跳过项目"
+          }
+        }
+      }
+    },
+    "Items unlocked for extraction": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已解锁、准备解压的项目"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
