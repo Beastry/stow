@@ -125,6 +125,10 @@ final class ArchiveEngine {
 
         switch reply {
         case .success(let data):
+            if case .failure(let error) = sent {
+                discard(operation: id)
+                throw EngineError(error)
+            }
             return Creation(operationID: id, report: try decode(CreateReport.self, from: data))
         case .failure(let error):
             // A file Stow couldn't read explains more than the engine's view of a cut-off stream.

@@ -722,7 +722,7 @@ struct SeparatePackingTests {
         let photo = folder.appending(path: "photo.txt")
         let source = temp.url.appending(path: "Café.tar.GZ")
         let existing = temp.url.appending(path: "CAFE\u{301}.7Z.002")
-        let bytes = Data("photos and archives".utf8)
+        let bytes = Data(repeating: 0xA3, count: 4096)
         try bytes.write(to: photo)
         try bytes.write(to: source)
         try Data("existing".utf8).write(to: existing)
@@ -736,6 +736,7 @@ struct SeparatePackingTests {
         let jobs = planned.map { name, report in
             var job = job(name, items: report.items, in: temp.url)
             job.request.format = .sevenZip
+            job.request.level = .store
             job.request.threads = 1
             job.request.verify = true
             job.request.password = password
@@ -745,7 +746,11 @@ struct SeparatePackingTests {
         }
         queue.start(jobs, cleanupDirectory: nil, cleanupOnlyOnSuccess: false, cleaned: { _ in }, completion: { _ in })
         try await wait(for: queue)
-        #expect(queue.rows.allSatisfy { $0.phase == .completed && $0.verified && $0.placed.count == 2 })
+        for row in queue.rows {
+            #expect(row.phase == .completed)
+            #expect(row.verified)
+            #expect(row.placed.count == 2)
+        }
         let first = try #require(queue.rows[0].placed.first)
         let second = try #require(queue.rows[1].placed.first)
         #expect(first.lastPathComponent == "Photos.v1.7z.001")
@@ -776,7 +781,7 @@ struct SeparatePackingTests {
                     cleanupDirectory: owned, cleanupOnlyOnSuccess: true, cleaned: { _ in }, completion: { _ in })
         queue.cancel(queue.rows[2].id)
         try await wait(for: queue)
-        if case .failed = queue.rows[0].phase {} else { Issue.record("Missing input should fail independently") }
+        if case .failed = queue.rows[0].phase {} else { Issue.record("Missing input should fail independently: \(queue.rows[0].phase)") }
         #expect(queue.rows[1].phase == .completed)
         #expect(queue.rows[2].phase == .cancelled)
         #expect(queue.protects(owned))
