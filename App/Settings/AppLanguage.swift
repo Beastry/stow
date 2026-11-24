@@ -63,8 +63,9 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     private static var bundleIdentifier: String { Bundle.main.bundleIdentifier ?? "app.stow.Stow" }
 }
 
-/// Restart Stow to show another language. Quitting goes through the usual checks, so running tasks
-/// and unsaved edits hold the restart (and a cancelled quit cancels it).
+/// Restart Stow to show another language. Quitting goes through the usual checks: a running task
+/// refuses the quit, and unsaved edits ask first. A refused quit cancels the restart rather than
+/// queueing it, so the user restarts again once the task is done.
 @MainActor
 enum AppRestart {
     private(set) static var isRequested = false

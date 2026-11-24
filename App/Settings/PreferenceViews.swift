@@ -26,7 +26,7 @@ struct GeneralSettingsView: View {
 
 /// Stow's own language (#331), the same per-app choice as System Settings › Language & Region ›
 /// Applications. macOS applies it at launch, so a change offers a restart; the restart is an
-/// ordinary quit first, which waits for running tasks and unsaved changes.
+/// ordinary quit first: a running task refuses it, and unsaved changes ask first.
 private struct AppLanguageSection: View {
     @State private var choice = AppLanguage.saved()
 
@@ -55,7 +55,7 @@ private struct AppLanguageSection: View {
             }
         } footer: {
             if waiting != nil {
-                Text("Stow waits for running tasks and asks about unsaved changes before it restarts.")
+                Text("Finish or cancel running tasks before restarting. Stow asks about unsaved changes first.")
             } else {
                 Text("System Settings → General → Language & Region → Applications sets the same choice.")
             }
