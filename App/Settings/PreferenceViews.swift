@@ -17,28 +17,49 @@ struct GeneralSettingsView: View {
                     Text("Columns").tag("columns")
                 }
             }
-            // macOS chooses an app's language: say which one is in use and keep the how-to folded
-            // away until someone wants it (#162). No in-app picker, since Stow can't switch itself.
-            Section {
-                LabeledContent("App Language", value: Self.languageName)
-                DisclosureGroup("How to change the language") {
-                    Text("To use English or Simplified Chinese just for Stow, open System Settings → General → Language & Region → Applications. Add Stow and choose its language. Quit and reopen Stow after your current tasks and unsaved changes are finished.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                // Round the row: the disclosure's own ring sat over the chevron and cut through "How".
-                .focusRing(in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
+            AppLanguageSection()
             UpdateSettingsSection(updater: AppUpdater.shared)
         }
         .formStyle(.grouped)
     }
+}
 
-    /// The language Stow is showing, named the way macOS lists it in the current language.
-    private static var languageName: String {
-        let code = Bundle.main.preferredLocalizations.first ?? "en"
-        return Locale.current.localizedString(forIdentifier: code) ?? code
+/// Stow's own language (#331), the same per-app choice as System Settings › Language & Region ›
+/// Applications. macOS applies it at launch, so a change offers a restart; the restart is an
+/// ordinary quit first: a running task refuses it, and unsaved changes ask first.
+private struct AppLanguageSection: View {
+    @State private var choice = AppLanguage.saved()
+
+    /// Saved, but not what this launch shows.
+    private var waiting: AppLanguage? {
+        let effective = AppLanguage.effective(choice)
+        return effective == AppLanguage.running ? nil : effective
+    }
+
+    var body: some View {
+        Section {
+            Picker("App Language", selection: $choice) {
+                Text("System").tag(AppLanguage.system)
+                Divider()
+                ForEach([AppLanguage.english, .simplifiedChinese]) { language in
+                    Text(verbatim: language.endonym ?? language.rawValue).tag(language)
+                }
+            }
+            .onChange(of: choice) { _, choice in AppLanguage.save(choice) }
+            if let waiting {
+                LabeledContent {
+                    Button("Restart Stow") { AppRestart.request() }
+                } label: {
+                    Text("Stow shows \(waiting.endonym ?? "") after it restarts.")
+                }
+            }
+        } footer: {
+            if waiting != nil {
+                Text("Finish or cancel running tasks before restarting. Stow asks about unsaved changes first.")
+            } else {
+                Text("System Settings → General → Language & Region → Applications sets the same choice.")
+            }
+        }
     }
 }
 

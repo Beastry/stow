@@ -37,7 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let app else { return }
             ApplicationLifecycle.shared.install(app: app, backgroundLaunch: !isDefault || receivedExternalRequest)
             DemoScene.apply(to: app)
-            if app.usesBrowserWindow || app.glance.isShown {
+            if AppRestart.wasRelaunched() && !receivedExternalRequest {
+                // Back from a language restart: show where the language was chosen, now in it.
+                SettingsRouter.shared.show(.general)
+            } else if app.usesBrowserWindow || app.glance.isShown {
                 if !app.glance.isShown { app.showMainWindow() }
             } else if isDefault && !receivedExternalRequest {
                 app.showMainWindow()
@@ -57,6 +60,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var checkingTermination = false
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let reply = terminationReply(sender)
+        // A refused quit also refuses a language restart (AppRestart); a later ⌘Q only quits.
+        if reply == .terminateCancel { AppRestart.cancel() }
+        return reply
+    }
+
+    /// After Stow's own quit checks, with a language restart (Settings › General) waiting for them.
+    func applicationWillTerminate(_ notification: Notification) {
+        AppRestart.relaunchIfRequested()
+    }
+
+    private func terminationReply(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !checkingTermination else { return .terminateLater }
         if app?.isBusy == true {
             if app?.archiveDraft?.isSaving == true || app?.archiveDraft?.isImporting == true {
@@ -91,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             checkingTermination = false
+            if !allowed { AppRestart.cancel() }
             sender.reply(toApplicationShouldTerminate: allowed)
         }
         return .terminateLater
